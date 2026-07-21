@@ -86,6 +86,7 @@ impl Location {
 pub(crate) struct ConcreteTokenAndLoc {
     pub token: ConcreteToken,
     pub loc: Location,
+    pub starts_a_line: bool,
 }
 
 pub(crate) struct LexedTokensAndLocs(pub Vec<ConcreteTokenAndLoc>);

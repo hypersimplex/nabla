@@ -47,22 +47,6 @@ f2 x y = x + y
 //
 "###;
 
-#[test]
-fn test_lex_tokens() {
-    let lexed_output =
-        parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), TEST_CONTENT_1)
-            .expect("lexing test fixture should succeed");
-    // basic sanity checks instead of dumping the entire token stream to stdout
-    assert!(lexed_output.0.len() > 0, "lexer should produce tokens");
-    assert!(
-        matches!(
-            lexed_output.0.last().map(|t| &t.token),
-            Some(ConcreteToken::EndOfFile)
-        ),
-        "lexer should terminate with EOF token"
-    );
-}
-
 pub(crate) fn parse_content_to_concrete_tokens(
     file_path: &std::path::Path,
     file_content: &str,
@@ -71,7 +55,41 @@ pub(crate) fn parse_content_to_concrete_tokens(
     let mut cur = Cur::new(file_content.as_bytes());
     let mut out = vec![];
     lex_root(&mut cur, &mut loc, &mut out)?;
+    let out = assign_line_start(out.as_slice());
     Ok(LexedTokensAndLocs(out))
+}
+
+fn assign_line_start(inputs: &[ConcreteTokenAndLoc]) -> Vec<ConcreteTokenAndLoc> {
+    let mut ret = vec![];
+    // state used to set the relevant field for each output token
+    let mut start_next_line = true;
+    for i in inputs {
+        match &i.token {
+            ConcreteToken::LineDelimiter => {
+                // discard this token and set the relevant state for next token
+                start_next_line = true;
+            }
+            ConcreteToken::Space(_) | ConcreteToken::CommentSlashes | ConcreteToken::Comment(_) => {
+                // discard token and preserve current state
+            }
+            ConcreteToken::EndOfFile => {
+                ret.push(ConcreteTokenAndLoc {
+                    token: i.token.clone(),
+                    loc: i.loc.clone(),
+                    starts_a_line: false,
+                });
+            }
+            other => {
+                ret.push(ConcreteTokenAndLoc {
+                    token: i.token.clone(),
+                    loc: i.loc.clone(),
+                    starts_a_line: start_next_line,
+                });
+                start_next_line = false;
+            }
+        }
+    }
+    ret
 }
 
 fn try_match_single_token(c: Option<char>, token: ConcreteToken) -> bool {
@@ -128,6 +146,7 @@ fn consume_string_literal(cur: &mut Cur, loc: &mut Location, out: &mut Vec<Concr
             span_start: span_literal_start,
             span_end: span_literal_end,
         },
+        starts_a_line: false,
     });
 
     // consume ending literal
@@ -161,6 +180,7 @@ fn consume_comments(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTok
             span_start,
             span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
         },
+        starts_a_line: false,
     });
 
     let span_comment_start = Span::new(cur.pos_linear(), cur.row(), cur.col());
@@ -183,10 +203,11 @@ fn consume_comments(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTok
             span_start: span_comment_start,
             span_end: span_comment_end,
         },
+        starts_a_line: false,
     });
 }
 
-fn consume_and_map_token(
+fn consume_fixed_token(
     cur: &mut Cur,
     loc: &mut Location,
     out: &mut Vec<ConcreteTokenAndLoc>,
@@ -202,32 +223,30 @@ fn consume_and_map_token(
             span_start,
             span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
         },
+        starts_a_line: false,
     });
+}
+
+fn classify_identifier_or_keyword(content: String) -> ConcreteToken {
+    match content.as_str() {
+        "_" => ConcreteToken::Underscore,
+        "data" => ConcreteToken::Data,
+        "case" => ConcreteToken::Case,
+        "of" => ConcreteToken::Of,
+        "where" => ConcreteToken::Where,
+        "let" => ConcreteToken::Let,
+        "in" => ConcreteToken::In,
+        "mut" => ConcreteToken::Mut,
+        _ => ConcreteToken::Iden(content),
+    }
 }
 
 fn consume_identifier(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTokenAndLoc>) {
     let span_start = Span::new(cur.pos_linear(), cur.row(), cur.col());
 
-    let mut content = vec![];
+    let mut content = String::new();
 
     content.push(cur.forward().unwrap());
-
-    // Special case: single underscore is a wildcard pattern
-    if content[0] == '_'
-        && cur
-            .peek_nth(1)
-            .map_or(true, |x| !x.is_alphanumeric() && x != '_')
-    {
-        out.push(ConcreteTokenAndLoc {
-            token: ConcreteToken::Underscore,
-            loc: Location {
-                file: loc.file.clone(),
-                span_start,
-                span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
-            },
-        });
-        return;
-    }
 
     while let Some(x) = cur.peek_nth(1) {
         if !(x.is_alphanumeric() || x == '_') {
@@ -237,12 +256,13 @@ fn consume_identifier(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteT
     }
 
     out.push(ConcreteTokenAndLoc {
-        token: ConcreteToken::Iden(content.into_iter().collect()),
+        token: classify_identifier_or_keyword(content),
         loc: Location {
             file: loc.file.clone(),
             span_start,
             span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
         },
+        starts_a_line: false,
     });
 }
 
@@ -266,23 +286,18 @@ fn consume_numeric(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteToke
             span_start,
             span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
         },
+        starts_a_line: false,
     });
 }
 
-fn try_match_keywords<'a>(
-    cur: &mut Cur,
-    dict: impl Iterator<Item = (&'a str, ConcreteToken)>,
+fn try_match_fixed_token(
+    cur: &Cur,
+    fixed_tokens: &[(&str, ConcreteToken)],
 ) -> Option<(ConcreteToken, usize)> {
-    for (k, v) in dict {
-        let l = k.chars().count();
-        if cur
-            .peek_n(l as i64)
-            .into_iter()
-            .collect::<String>()
-            .as_str()
-            == k
-        {
-            return Some((v, l));
+    for (spelling, token) in fixed_tokens {
+        let len = spelling.chars().count();
+        if cur.peek_n(len as i64).into_iter().eq(spelling.chars()) {
+            return Some((token.clone(), len));
         }
     }
     None
@@ -293,14 +308,7 @@ fn lex_root(
     loc: &mut Location,
     out: &mut Vec<ConcreteTokenAndLoc>,
 ) -> Result<(), ParseError> {
-    let dict_keywords = [
-        ("data", ConcreteToken::Data),
-        ("case", ConcreteToken::Case),
-        ("of", ConcreteToken::Of),
-        ("where", ConcreteToken::Where),
-        ("let", ConcreteToken::Let),
-        ("in", ConcreteToken::In),
-        ("mut", ConcreteToken::Mut),
+    let fixed_tokens = [
         ("//", ConcreteToken::CommentSlashes),
         ("<-", ConcreteToken::ArrowLeft),
         ("->", ConcreteToken::ArrowRight),
@@ -316,7 +324,6 @@ fn lex_root(
         ("\\", ConcreteToken::BackSlash),
         ("{", ConcreteToken::BraceL),
         ("}", ConcreteToken::BraceR),
-        ("|", ConcreteToken::VertBar),
         ("(", ConcreteToken::ParenL),
         (")", ConcreteToken::ParenR),
         (",", ConcreteToken::Comma),
@@ -332,12 +339,11 @@ fn lex_root(
         ("!", ConcreteToken::Exclamation),
         ("&&", ConcreteToken::And),
         ("||", ConcreteToken::Or),
-    ]
-    .into_iter();
+        ("|", ConcreteToken::VertBar),
+    ];
 
     loop {
-        // println!("lex_root");
-        match try_match_keywords(cur, dict_keywords.clone()) {
+        match try_match_fixed_token(cur, &fixed_tokens) {
             Some((token, len_chars)) => {
                 if token == ConcreteToken::CommentSlashes {
                     // handle comments
@@ -345,10 +351,10 @@ fn lex_root(
                 } else if token == ConcreteToken::DoubleQuote {
                     consume_string_literal(cur, loc, out);
                 } else {
-                    consume_and_map_token(cur, loc, out, len_chars, token);
+                    consume_fixed_token(cur, loc, out, len_chars, token);
                 }
             }
-            _ => match cur.peek_forward() {
+            None => match cur.peek_forward() {
                 Some(x) => {
                     if x.is_alphabetic() || x == '_' {
                         consume_identifier(cur, loc, out);
@@ -366,14 +372,15 @@ fn lex_root(
                         ));
                     }
                 }
-                _ => {
+                None => {
                     out.push(ConcreteTokenAndLoc {
                         token: ConcreteToken::EndOfFile,
                         loc: Location {
                             file: loc.file.clone(),
                             span_start: Span::new(cur.pos_linear(), cur.row(), cur.col()),
-                            span_end: Span::new(cur.pos_linear(), cur.row(), cur.col() + 1),
+                            span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
                         },
+                        starts_a_line: false,
                     });
                     break;
                 }
@@ -382,4 +389,61 @@ fn lex_root(
     }
 
     Ok(())
+}
+
+#[test]
+fn test_lex_tokens() {
+    let lexed_output =
+        parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), TEST_CONTENT_1)
+            .expect("lexing test fixture should succeed");
+    // basic sanity checks instead of dumping the entire token stream to stdout
+    assert!(lexed_output.0.len() > 0, "lexer should produce tokens");
+    assert!(
+        matches!(
+            lexed_output.0.last().map(|t| &t.token),
+            Some(ConcreteToken::EndOfFile)
+        ),
+        "lexer should terminate with EOF token"
+    );
+}
+
+#[test]
+fn test_keywords_are_classified() {
+    let lexed_output = parse_content_to_concrete_tokens(
+        std::path::Path::new("dummy_path"),
+        "data dataValue case casey of offset where whereabouts let letter let2 let_value in input mut mutable Data _ _value",
+    )
+    .expect("lexing identifiers and keywords should succeed");
+
+    let tokens: Vec<_> = lexed_output
+        .0
+        .into_iter()
+        .map(|token_and_loc| token_and_loc.token)
+        .collect();
+
+    assert_eq!(
+        tokens,
+        vec![
+            ConcreteToken::Data,
+            ConcreteToken::Iden("dataValue".into()),
+            ConcreteToken::Case,
+            ConcreteToken::Iden("casey".into()),
+            ConcreteToken::Of,
+            ConcreteToken::Iden("offset".into()),
+            ConcreteToken::Where,
+            ConcreteToken::Iden("whereabouts".into()),
+            ConcreteToken::Let,
+            ConcreteToken::Iden("letter".into()),
+            ConcreteToken::Iden("let2".into()),
+            ConcreteToken::Iden("let_value".into()),
+            ConcreteToken::In,
+            ConcreteToken::Iden("input".into()),
+            ConcreteToken::Mut,
+            ConcreteToken::Iden("mutable".into()),
+            ConcreteToken::Iden("Data".into()),
+            ConcreteToken::Underscore,
+            ConcreteToken::Iden("_value".into()),
+            ConcreteToken::EndOfFile,
+        ]
+    );
 }
