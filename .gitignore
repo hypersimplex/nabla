@@ -27,3 +27,5 @@ target
 
 # folder for temporary docs
 .docs/
+
+**/*~
