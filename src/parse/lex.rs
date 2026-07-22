@@ -102,71 +102,61 @@ fn try_match_single_token(c: Option<char>, token: ConcreteToken) -> bool {
     }
 }
 
-fn consume_string_literal(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTokenAndLoc>) {
-    let span_start_starting_quotes = Span::new(cur.pos_linear(), cur.row(), cur.col());
-    //consume "
-    let t = try_map_single_char_to_token(&cur.forward().unwrap()).unwrap();
-    assert_eq!(t, ConcreteToken::DoubleQuote);
+fn consume_string_literal(
+    cur: &mut Cur,
+    loc: &Location,
+) -> Result<ConcreteTokenAndLoc, ParseError> {
+    let span_start = Span::new(cur.pos_linear(), cur.row(), cur.col());
+    if cur.forward() != Some('"') {
+        return Err(ParseError::message(
+            "expected string literal opening quote",
+            None,
+        ));
+    }
 
-    // ommit quote
-    // out.push(ConcreteTokenAndLoc {
-    //     token: t,
-    //     loc: Location {
-    //         file: loc.file.clone(),
-    //         span_start: span_start_starting_quotes,
-    //         span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
-    //     },
-    // });
-
-    let span_literal_start = Span::new(cur.pos_linear(), cur.row(), cur.col());
-    //consume rest of string literal
-    let mut literal = vec![];
+    let mut literal = String::new();
     let mut escape_next = false;
-    while let Some(x) = cur.peek_nth(1) {
-        if !escape_next {
-            if try_match_single_token(Some(x), ConcreteToken::BackSlash) {
+    loop {
+        let Some(ch) = cur.forward() else {
+            return Err(ParseError::message(
+                "unterminated string literal",
+                Some(ConcreteTokenAndLoc {
+                    token: ConcreteToken::LiteralString(literal),
+                    loc: Location {
+                        file: loc.file.clone(),
+                        span_start,
+                        span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
+                    },
+                    starts_a_line: false,
+                }),
+            ));
+        };
+
+        if escape_next {
+            literal.push(ch);
+            escape_next = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => {
+                literal.push(ch);
                 escape_next = true;
             }
-            if try_match_single_token(Some(x), ConcreteToken::DoubleQuote) {
-                break;
-            }
-            literal.push(cur.forward().unwrap());
-        } else {
-            escape_next = false;
-            literal.push(cur.forward().unwrap());
+            '"' => break,
+            _ => literal.push(ch),
         }
     }
 
-    let span_literal_end = Span::new(cur.pos_linear(), cur.row(), cur.col());
-
-    out.push(ConcreteTokenAndLoc {
-        token: ConcreteToken::LiteralString(literal.into_iter().collect()),
+    Ok(ConcreteTokenAndLoc {
+        token: ConcreteToken::LiteralString(literal),
         loc: Location {
             file: loc.file.clone(),
-            span_start: span_literal_start,
-            span_end: span_literal_end,
+            span_start,
+            span_end: Span::new(cur.pos_linear(), cur.row(), cur.col()),
         },
         starts_a_line: false,
-    });
-
-    // consume ending literal
-    // let _span_start_ending_quotes = Span::new(cur.pos_linear(), cur.row(), cur.col());
-    let t = try_map_single_char_to_token(&cur.forward().unwrap()).unwrap();
-    assert_eq!(t, ConcreteToken::DoubleQuote);
-    let span_end_ending_quotes = Span::new(cur.pos_linear(), cur.row(), cur.col());
-    // ommit quote
-    // out.push(ConcreteTokenAndLoc {
-    //     token: t,
-    //     loc: Location {
-    //         file: loc.file.clone(),
-    //         span_start: span_start_ending_quotes,
-    //         span_end: span_end_ending_quotes,
-    //     },
-    // });
-
-    //adjust literal string span indices to include double quotes, later used for space formatting checks
-    out.last_mut().unwrap().loc.span_start = span_start_starting_quotes;
-    out.last_mut().unwrap().loc.span_end = span_end_ending_quotes;
+    })
 }
 
 fn consume_comments(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTokenAndLoc>) {
@@ -349,7 +339,7 @@ fn lex_root(
                     // handle comments
                     consume_comments(cur, loc, out);
                 } else if token == ConcreteToken::DoubleQuote {
-                    consume_string_literal(cur, loc, out);
+                    out.push(consume_string_literal(cur, loc)?);
                 } else {
                     consume_fixed_token(cur, loc, out, len_chars, token);
                 }
@@ -405,6 +395,67 @@ fn test_lex_tokens() {
         ),
         "lexer should terminate with EOF token"
     );
+}
+
+#[test]
+fn test_string_literals() {
+    let cases = [
+        ("\"\"", ""),
+        ("\"abc\"", "abc"),
+        (r#""a\"b""#, r#"a\"b"#),
+        (r#""a\\b""#, r#"a\\b"#),
+    ];
+
+    for (source, expected) in cases {
+        let lexed = parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), source)
+            .expect("lexing a terminated string literal should succeed");
+
+        assert_eq!(lexed.0.len(), 2, "source: {source}");
+        assert_eq!(
+            lexed.0[0].token,
+            ConcreteToken::LiteralString(expected.into()),
+            "source: {source}"
+        );
+        assert_eq!(
+            (
+                lexed.0[0].loc.span_start.linear,
+                lexed.0[0].loc.span_end.linear,
+            ),
+            (0, source.chars().count()),
+            "source: {source}"
+        );
+        assert_eq!(lexed.0[1].token, ConcreteToken::EndOfFile);
+    }
+}
+
+#[test]
+fn test_unterminated_string_literals() {
+    let cases = [("\"", ""), ("\"abc", "abc"), ("\"abc\\", "abc\\")];
+
+    for (source, expected) in cases {
+        let error = parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), source)
+            .expect_err("lexing an unterminated string literal should fail");
+
+        let ParseError::Message {
+            message,
+            token: Some(token),
+        } = error
+        else {
+            panic!("unexpected error for {source:?}: {error:?}");
+        };
+
+        assert_eq!(message, "unterminated string literal");
+        assert_eq!(
+            token.token,
+            ConcreteToken::LiteralString(expected.into()),
+            "source: {source}"
+        );
+        assert_eq!(
+            (token.loc.span_start.linear, token.loc.span_end.linear),
+            (0, source.chars().count()),
+            "source: {source}"
+        );
+    }
 }
 
 #[test]
