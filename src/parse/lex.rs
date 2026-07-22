@@ -259,18 +259,26 @@ fn consume_identifier(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteT
 fn consume_numeric(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTokenAndLoc>) {
     let span_start = Span::new(cur.pos_linear(), cur.row(), cur.col());
 
-    let mut content = vec![];
+    let mut content = String::new();
+    let mut has_decimal_point = false;
 
-    //defer checking validity of this numeric string later
     while let Some(x) = cur.peek_nth(1) {
-        if !(x.is_numeric() || x == '_' || x == '.') {
-            break;
+        match x {
+            x if x.is_numeric() || x == '_' => {
+                content.push(cur.forward().unwrap());
+            }
+            // - a dot belongs to this literal only when it starts its one decimal fraction
+            // - otherwise leave it for fixed-token scanning, including the `..` range token
+            '.' if !has_decimal_point && cur.peek_nth(2).is_some_and(|next| next.is_numeric()) => {
+                has_decimal_point = true;
+                content.push(cur.forward().unwrap());
+            }
+            _ => break,
         }
-        content.push(cur.forward().unwrap());
     }
 
     out.push(ConcreteTokenAndLoc {
-        token: ConcreteToken::LiteralNumeric(content.into_iter().collect()),
+        token: ConcreteToken::LiteralNumeric(content),
         loc: Location {
             file: loc.file.clone(),
             span_start,
@@ -497,4 +505,66 @@ fn test_keywords_are_classified() {
             ConcreteToken::EndOfFile,
         ]
     );
+}
+
+#[test]
+fn test_numeric_boundaries() {
+    let lex_token_types = |source| {
+        parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), source)
+            .expect("lexing numeric and range boundaries should succeed")
+            .0
+            .into_iter()
+            .map(|token_and_loc| token_and_loc.token)
+            .collect::<Vec<_>>()
+    };
+    let numeric = |content: &str| ConcreteToken::LiteralNumeric(content.into());
+
+    let cases = [
+        (
+            "1..2",
+            vec![
+                numeric("1"),
+                ConcreteToken::Ellipse,
+                numeric("2"),
+                ConcreteToken::EndOfFile,
+            ],
+        ),
+        (
+            "1.5..2.5",
+            vec![
+                numeric("1.5"),
+                ConcreteToken::Ellipse,
+                numeric("2.5"),
+                ConcreteToken::EndOfFile,
+            ],
+        ),
+        (
+            "1_000 0.000_001 _1000",
+            vec![
+                numeric("1_000"),
+                numeric("0.000_001"),
+                ConcreteToken::Iden("_1000".into()),
+                ConcreteToken::EndOfFile,
+            ],
+        ),
+    ];
+
+    for (source, expected) in cases {
+        assert_eq!(lex_token_types(source), expected, "source: {source}");
+    }
+
+    let range = parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), "1..2")
+        .expect("lexing a numeric range should succeed");
+    let spans: Vec<_> = range
+        .0
+        .iter()
+        .take(3)
+        .map(|token_and_loc| {
+            (
+                token_and_loc.loc.span_start.linear,
+                token_and_loc.loc.span_end.linear,
+            )
+        })
+        .collect();
+    assert_eq!(spans, vec![(0, 1), (1, 3), (3, 4)]);
 }
