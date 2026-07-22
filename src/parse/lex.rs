@@ -322,6 +322,8 @@ fn lex_root(
         ("\\", ConcreteToken::BackSlash),
         ("{", ConcreteToken::BraceL),
         ("}", ConcreteToken::BraceR),
+        ("[", ConcreteToken::BracketL),
+        ("]", ConcreteToken::BracketR),
         ("(", ConcreteToken::ParenL),
         (")", ConcreteToken::ParenR),
         (",", ConcreteToken::Comma),
@@ -567,4 +569,23 @@ fn test_numeric_boundaries() {
         })
         .collect();
     assert_eq!(spans, vec![(0, 1), (1, 3), (3, 4)]);
+}
+
+#[test]
+fn test_brackets_are_lexed() {
+    let tokens = parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), "[]")
+        .expect("lexing bracket tokens should succeed")
+        .0
+        .into_iter()
+        .map(|token_and_loc| token_and_loc.token)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        tokens,
+        vec![
+            ConcreteToken::BracketL,
+            ConcreteToken::BracketR,
+            ConcreteToken::EndOfFile,
+        ]
+    );
 }
