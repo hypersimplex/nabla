@@ -4,4 +4,6 @@
 
 <h1 align="center">$\nabla$</h1>
 
-experimenting with lazy functional language
+Experimenting and learning about lazy functional language implementation from
+first principles, with inspiration from Miranda, Haskell, Rust, and various
+literatures from SPJ, Wolfe, and Banerjee.
