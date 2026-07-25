@@ -1,13 +1,12 @@
 // Tests for parsing algebraic data type constructors and pattern matches
 #[cfg(test)]
 mod test_adt {
-    use crate::parse::abstr::{parse_concrete_top_level, space_and_delimiter_and_comment_filter};
+    use crate::parse::abstr::parse_concrete_top_level;
     use crate::parse::abstr_structures::{
         AExpr, AbstractionExpr, PatternConstructorArgs, PatternExpr, TopLevelItem,
     };
     use crate::parse::concrete_token::ConcreteToken;
     use crate::parse::lex::parse_content_to_concrete_tokens;
-    use crate::parse::loc::LexedTokensAndLocs;
     use std::path::Path;
 
     const CONSTRUCTOR_FIXTURE: &str = r#"
@@ -35,12 +34,7 @@ nested x = case x of
     fn parse_top_level(content: &str) -> Vec<TopLevelItem> {
         let lexed = parse_content_to_concrete_tokens(Path::new("<memory>"), content)
             .expect("lexing should succeed");
-        let filtered = LexedTokensAndLocs(
-            space_and_delimiter_and_comment_filter(lexed.0.iter())
-                .cloned()
-                .collect(),
-        );
-        parse_concrete_top_level(filtered).expect("parsing should succeed")
+        parse_concrete_top_level(lexed).expect("parsing should succeed")
     }
 
     fn find_function<'a>(items: &'a [TopLevelItem], name: &str) -> &'a AbstractionExpr {

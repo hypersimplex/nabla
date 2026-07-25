@@ -5,8 +5,6 @@ use std::sync::*;
 // data
 // function signature
 // function definition
-// comment
-// whitespace
 
 use super::loc::*;
 

@@ -1,11 +1,10 @@
 // Streaming pattern parser that constructs `PatternExpr` values directly from token
 // streams, avoiding repeated slicing or backtracking
-use std::marker::PhantomData;
-
 use super::abstr_structures::*;
 use super::concrete_token::*;
+use super::layout::{ParserToken, ParserTokenType};
 use super::loc::*;
-use super::parser::{Parser, TokenStreamExt};
+use super::parser::{LayoutFeedback, LayoutItemParser, ParseError, Parser};
 
 #[derive(Debug)]
 pub enum PatternParseError {
@@ -14,6 +13,7 @@ pub enum PatternParseError {
     UnexpectedToken { expected: String, got: String },
 }
 
+/// constructor need to start with an uppercase
 pub fn is_constructor_name(name: &str) -> bool {
     name.chars().next().map_or(false, char::is_uppercase)
 }
@@ -30,11 +30,95 @@ pub(crate) fn is_pattern_start_token(token: &ConcreteToken) -> bool {
     )
 }
 
+fn pattern_parser_error(error: ParseError) -> PatternParseError {
+    PatternParseError::InvalidPattern(format!("token stream error: {error}"))
+}
+
+pub(crate) trait PatternTokenStream {
+    fn peek_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError>;
+
+    fn next_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError>;
+}
+
+fn peek_concrete(parser: &mut Parser) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+    match parser.peek().map_err(pattern_parser_error)? {
+        Some(ParserToken {
+            ty: ParserTokenType::Concrete(token),
+            loc,
+        }) => Ok(Some(ConcreteTokenAndLoc {
+            token: token.clone(),
+            loc: loc.clone(),
+            starts_a_line: false,
+        })),
+        Some(ParserToken {
+            ty: ParserTokenType::LayoutSeparator(_) | ParserTokenType::LayoutEnd(_),
+            ..
+        })
+        | None => Ok(None),
+        Some(ParserToken {
+            ty: ParserTokenType::LayoutStart(_),
+            ..
+        }) => Err(PatternParseError::InvalidPattern(
+            "unexpected layout start inside pattern".to_string(),
+        )),
+    }
+}
+
+fn next_concrete(parser: &mut Parser) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+    match parser.peek().map_err(pattern_parser_error)? {
+        Some(ParserToken {
+            ty: ParserTokenType::Concrete(_),
+            ..
+        }) => parser
+            .next()
+            .map_err(pattern_parser_error)
+            .map(|token| token.and_then(|token| token.tok_concrete_and_loc())),
+        Some(ParserToken {
+            ty: ParserTokenType::LayoutSeparator(_) | ParserTokenType::LayoutEnd(_),
+            ..
+        })
+        | None => Ok(None),
+        Some(ParserToken {
+            ty: ParserTokenType::LayoutStart(_),
+            ..
+        }) => Err(PatternParseError::InvalidPattern(
+            "unexpected layout start inside pattern".to_string(),
+        )),
+    }
+}
+
+impl PatternTokenStream for Parser {
+    fn peek_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+        peek_concrete(self)
+    }
+
+    fn next_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+        next_concrete(self)
+    }
+}
+
+impl PatternTokenStream for LayoutItemParser<'_> {
+    fn peek_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+        self.peek_concrete().map_err(pattern_parser_error)
+    }
+
+    fn next_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+        if self
+            .peek_concrete()
+            .map_err(pattern_parser_error)?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        self.next_concrete().map(Some).map_err(pattern_parser_error)
+    }
+}
+
 pub fn parse_pattern(tokens: &[ConcreteTokenAndLoc]) -> Result<PatternExpr, PatternParseError> {
-    let mut parser = Parser::new(tokens.iter());
+    let mut parser = Parser::new(LexedTokensAndLocs(tokens.to_vec()));
     let pattern = PatternParser::new(&mut parser).parse_pattern()?;
 
-    if TokenStreamExt::peek_non_trivial(&mut parser).is_some() {
+    if peek_concrete(&mut parser)?.is_some() {
         return Err(PatternParseError::InvalidPattern(
             "unexpected tokens after pattern".to_string(),
         ));
@@ -43,40 +127,47 @@ pub fn parse_pattern(tokens: &[ConcreteTokenAndLoc]) -> Result<PatternExpr, Patt
     Ok(pattern)
 }
 
-pub fn parse_pattern_stream<'a, S>(stream: &mut S) -> Result<PatternExpr, PatternParseError>
-where
-    S: TokenStreamExt<'a>,
-{
+pub fn parse_pattern_stream(stream: &mut Parser) -> Result<PatternExpr, PatternParseError> {
+    parse_pattern_source(stream)
+}
+
+pub(crate) fn parse_pattern_item_stream(
+    stream: &mut LayoutItemParser<'_>,
+) -> Result<PatternExpr, PatternParseError> {
+    parse_pattern_source(stream)
+}
+
+pub(crate) fn parse_pattern_source<S: PatternTokenStream + ?Sized>(
+    stream: &mut S,
+) -> Result<PatternExpr, PatternParseError> {
     PatternParser::new(stream).parse_pattern()
 }
 
-struct PatternParser<'stream, 'a, S>
-where
-    S: TokenStreamExt<'a>,
-{
+struct PatternParser<'stream, S: PatternTokenStream + ?Sized> {
     stream: &'stream mut S,
-    _marker: PhantomData<&'a ()>,
 }
 
-impl<'stream, 'a, S> PatternParser<'stream, 'a, S>
-where
-    S: TokenStreamExt<'a>,
-{
+impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
     fn new(stream: &'stream mut S) -> Self {
-        Self {
-            stream,
-            _marker: PhantomData,
-        }
+        Self { stream }
+    }
+
+    fn peek(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+        self.stream.peek_pattern_concrete()
+    }
+
+    fn next(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError> {
+        self.stream.next_pattern_concrete()
     }
 
     fn parse_pattern(&mut self) -> Result<PatternExpr, PatternParseError> {
         let head = self.parse_atom_pattern()?;
 
         // optional range suffix: <literal> .. <literal>
-        if let Some(peek) = TokenStreamExt::peek_non_trivial(self.stream) {
+        if let Some(peek) = self.peek()? {
             if matches!(peek.token, ConcreteToken::Ellipse) {
                 // consume '..'
-                TokenStreamExt::next_non_trivial(self.stream);
+                self.next()?;
                 let tail = self.parse_atom_pattern()?;
                 match (head, tail) {
                     (PatternExpr::Literal(start), PatternExpr::Literal(end)) => {
@@ -105,27 +196,25 @@ where
     }
 
     fn parse_atom_pattern(&mut self) -> Result<PatternExpr, PatternParseError> {
-        let head = match TokenStreamExt::peek_non_trivial(self.stream) {
-            Some(token) => token.clone(),
+        let head = match self.peek()? {
+            Some(token) => token,
             None => return Err(PatternParseError::EmptyPattern),
         };
 
         match &head.token {
             ConcreteToken::Underscore => {
-                TokenStreamExt::next_non_trivial(self.stream);
+                self.next()?;
                 Ok(PatternExpr::Wild)
             }
             ConcreteToken::LiteralNumeric(_) => {
-                let token = TokenStreamExt::next_non_trivial(self.stream)
-                    .expect("peeked literal must be available");
+                let token = self.next()?.expect("peeked literal must be available");
                 Ok(PatternExpr::Literal(AExprAnnot {
                     expr: AExpr::NumericExpr(LiteralNumericExpr { literal: token }),
                     type_expr: None,
                 }))
             }
             ConcreteToken::LiteralString(_) => {
-                let token = TokenStreamExt::next_non_trivial(self.stream)
-                    .expect("peeked literal must be available");
+                let token = self.next()?.expect("peeked literal must be available");
                 Ok(PatternExpr::Literal(AExprAnnot {
                     expr: AExpr::StringExpr(LiteralStringExpr { literal: token }),
                     type_expr: None,
@@ -133,8 +222,7 @@ where
             }
             ConcreteToken::ParenL => self.parse_parenthesized(),
             ConcreteToken::Iden(name) => {
-                let token = TokenStreamExt::next_non_trivial(self.stream)
-                    .expect("peeked identifier must be available");
+                let token = self.next()?.expect("peeked identifier must be available");
                 if is_constructor_name(name) {
                     self.parse_constructor(token)
                 } else {
@@ -150,13 +238,13 @@ where
 
     fn parse_parenthesized(&mut self) -> Result<PatternExpr, PatternParseError> {
         // consume '('
-        TokenStreamExt::next_non_trivial(self.stream);
+        self.next()?;
 
-        // special-case unit pattern: ()
-        if let Some(peek) = TokenStreamExt::peek_non_trivial(self.stream) {
+        // special-case unit pattern: () and early return
+        if let Some(peek) = self.peek()? {
             if matches!(peek.token, ConcreteToken::ParenR) {
                 // consume ')'
-                TokenStreamExt::next_non_trivial(self.stream);
+                self.next()?;
                 return Ok(PatternExpr::Literal(AExprAnnot {
                     expr: AExpr::UnitExpr,
                     type_expr: None,
@@ -166,7 +254,8 @@ where
 
         let inner = self.parse_pattern()?;
 
-        match TokenStreamExt::next_non_trivial(self.stream) {
+        // expect closing `)`
+        match self.next()? {
             Some(token) if matches!(token.token, ConcreteToken::ParenR) => Ok(inner),
             Some(token) => Err(PatternParseError::UnexpectedToken {
                 expected: ")".to_string(),
@@ -185,16 +274,17 @@ where
         let mut qualified = None;
         let mut constructor = head.clone();
 
-        if let Some(next) = TokenStreamExt::peek_non_trivial(self.stream) {
+        if let Some(next) = self.peek()? {
             if matches!(next.token, ConcreteToken::Dot) {
-                TokenStreamExt::next_non_trivial(self.stream);
-                let ctor_token =
-                    TokenStreamExt::next_non_trivial(self.stream).ok_or_else(|| {
-                        PatternParseError::InvalidPattern(
-                            "expected constructor name after qualification".to_string(),
-                        )
-                    })?;
+                // qualified name detected
+                self.next()?;
+                let ctor_token = self.next()?.ok_or_else(|| {
+                    PatternParseError::InvalidPattern(
+                        "expected constructor name after qualification".to_string(),
+                    )
+                })?;
 
+                // get constructor name
                 match &ctor_token.token {
                     ConcreteToken::Iden(name) if is_constructor_name(name) => {
                         qualified = Some(head);
@@ -216,12 +306,14 @@ where
             }
         }
 
-        if let Some(next) = TokenStreamExt::peek_non_trivial(self.stream) {
+        if let Some(next) = self.peek()? {
             if matches!(next.token, ConcreteToken::BraceL) {
+                // record detected
                 return self.parse_record_pattern(qualified, constructor);
             }
         }
 
+        // non-record constructor
         let args = self.parse_constructor_args()?;
         Ok(PatternExpr::Constructor {
             qualified,
@@ -233,7 +325,7 @@ where
     fn parse_constructor_args(&mut self) -> Result<Vec<PatternExpr>, PatternParseError> {
         let mut args = Vec::new();
 
-        while let Some(next) = TokenStreamExt::peek_non_trivial(self.stream) {
+        while let Some(next) = self.peek()? {
             if !is_pattern_start_token(&next.token) {
                 break;
             }
@@ -251,7 +343,7 @@ where
         constructor: ConcreteTokenAndLoc,
     ) -> Result<PatternExpr, PatternParseError> {
         // consume '{'
-        TokenStreamExt::next_non_trivial(self.stream);
+        self.next()?;
         let (fields, rest) = self.parse_record_fields()?;
         Ok(PatternExpr::Constructor {
             qualified,
@@ -266,17 +358,18 @@ where
         let mut fields = Vec::new();
         let mut rest = false;
         loop {
-            let next = TokenStreamExt::peek_non_trivial(self.stream)
-                .ok_or_else(|| PatternParseError::InvalidPattern("unclosed record pattern".into()))?
-                .clone();
+            let next = self.peek()?.ok_or_else(|| {
+                PatternParseError::InvalidPattern("unclosed record pattern".into())
+            })?;
 
             match &next.token {
+                // closing `}` for record
                 ConcreteToken::BraceR => {
-                    TokenStreamExt::next_non_trivial(self.stream);
+                    self.next()?;
                     break;
                 }
                 ConcreteToken::Comma => {
-                    TokenStreamExt::next_non_trivial(self.stream);
+                    self.next()?;
                 }
                 ConcreteToken::Ellipse => {
                     if rest {
@@ -285,15 +378,15 @@ where
                         ));
                     }
                     rest = true;
-                    TokenStreamExt::next_non_trivial(self.stream);
+                    self.next()?;
 
-                    if let Some(after_rest) = TokenStreamExt::peek_non_trivial(self.stream) {
+                    if let Some(after_rest) = self.peek()? {
                         if matches!(after_rest.token, ConcreteToken::Comma) {
-                            TokenStreamExt::next_non_trivial(self.stream);
+                            self.next()?;
                         }
                     }
 
-                    match TokenStreamExt::next_non_trivial(self.stream) {
+                    match self.next()? {
                         Some(token) if matches!(token.token, ConcreteToken::BraceR) => break,
                         Some(token) => {
                             return Err(PatternParseError::UnexpectedToken {
@@ -309,20 +402,18 @@ where
                     }
                 }
                 ConcreteToken::Iden(_) => {
-                    let field_token = TokenStreamExt::next_non_trivial(self.stream)
-                        .expect("peeked identifier must be available");
+                    let field_token = self.next()?.expect("peeked identifier must be available");
 
-                    let field_pattern =
-                        if let Some(eq) = TokenStreamExt::peek_non_trivial(self.stream) {
-                            if matches!(eq.token, ConcreteToken::Equal) {
-                                TokenStreamExt::next_non_trivial(self.stream);
-                                self.parse_pattern()?
-                            } else {
-                                PatternExpr::Variable(field_token.clone())
-                            }
+                    let field_pattern = if let Some(eq) = self.peek()? {
+                        if matches!(eq.token, ConcreteToken::Equal) {
+                            self.next()?;
+                            self.parse_pattern()?
                         } else {
                             PatternExpr::Variable(field_token.clone())
-                        };
+                        }
+                    } else {
+                        PatternExpr::Variable(field_token.clone())
+                    };
 
                     fields.push((field_token, field_pattern));
                 }
@@ -342,11 +433,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parse::lex::parse_content_to_concrete_tokens;
+    use std::path::Path;
 
     fn make_token(token: ConcreteToken) -> ConcreteTokenAndLoc {
         ConcreteTokenAndLoc {
             token,
             loc: Location::dummy(),
+            starts_a_line: false,
         }
     }
 
@@ -362,6 +456,32 @@ mod tests {
         let tokens = vec![make_token(ConcreteToken::Iden("x".to_string()))];
         let pattern = parse_pattern(&tokens).unwrap();
         assert!(matches!(pattern, PatternExpr::Variable(_)));
+    }
+
+    #[test]
+    fn pattern_stream_leaves_layout_boundaries_for_block_parser() {
+        let lexed = parse_content_to_concrete_tokens(Path::new("dummy.path"), "  x\n  y")
+            .expect("lexing aligned patterns should succeed");
+        let mut parser = Parser::new(lexed);
+
+        let patterns = parser
+            .parse_layout_block(
+                Location::dummy(),
+                false,
+                |stream| {
+                    parse_pattern_item_stream(stream)
+                        .map_err(|error| ParseError::message(format!("{error:?}"), None))
+                },
+                LayoutFeedback::None,
+            )
+            .expect("layout block should retain ownership of pattern boundaries");
+
+        assert_eq!(patterns.len(), 2);
+        assert!(
+            patterns
+                .iter()
+                .all(|pattern| matches!(pattern, PatternExpr::Variable(_)))
+        );
     }
 
     #[test]
