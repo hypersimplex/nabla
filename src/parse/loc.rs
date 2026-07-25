@@ -80,15 +80,29 @@ impl Location {
     pub fn dummy() -> Self {
         Self::new(std::path::Path::new("test.sx"))
     }
+
+    /// helper to create a 0-width virtual location
+    pub fn to_zero_width_start(&self) -> Self {
+        let mut ret = self.clone();
+        ret.span_end = ret.span_start;
+        ret
+    }
+    /// helper to create a 0-width virtual location
+    pub fn to_zero_width_end(&self) -> Self {
+        let mut ret = self.clone();
+        ret.span_start = ret.span_end;
+        ret
+    }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct ConcreteTokenAndLoc {
     pub token: ConcreteToken,
     pub loc: Location,
-    pub starts_a_line: bool,
+    pub starts_a_line: bool, // TODO: factor out this field, and rid of many use sites
 }
 
+#[derive(Clone)]
 pub(crate) struct LexedTokensAndLocs(pub Vec<ConcreteTokenAndLoc>);
 
 #[derive(Clone, Copy, Debug)]
