@@ -245,7 +245,7 @@ pub(crate) struct LetExpr {
 #[derive(Clone, Debug)]
 pub(crate) struct AbstractionExpr {
     pub name: Option<ConcreteTokenAndLoc>,   // named or annonymous
-    pub pattern: Vec<ConcreteTokenAndLoc>,   // parameter tokens (verbatim)
+    pub pattern: Vec<ConcreteTokenAndLoc>,   // parameter tokens (verbatim); TODO: retire this?
     pub param_patterns: Vec<PatternExpr>,    // original parameter patterns
     pub expr: Box<AExprAnnot>,               // body of lambda
     pub type_expr: Option<ATypeExprComplex>, // optional type annotation
