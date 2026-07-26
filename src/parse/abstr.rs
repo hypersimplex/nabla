@@ -1957,8 +1957,7 @@ mod tests {
             "expected at least one top-level item"
         );
 
-        for i in top_level_items.0.iter() {
-            println!("{}", i);
-        }
+        // use crate::parse::printer::DocPrinter;
+        // println!("{}", top_level_items.to_doc());
     }
 }
