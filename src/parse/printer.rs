@@ -225,6 +225,7 @@ f_let a = a * 7
 
 f b = case b of
         2 -> 2
+        3..7 -> 99
         _ -> 100
 
 f_let a =
@@ -293,6 +294,32 @@ ff x =
              _           -> 2
            )*7
  in y
+
+data Option T
+  = None
+  | Some T
+
+get_optional x = Option.Some(x)
+
+data Custom {
+  y :: i32,
+  x :: i32,
+}
+
+f_nested_pattern_match_sum_type x =
+  case x of
+    Option.Some(Option.Some(y)) -> 0
+    _ -> 1
+
+f_nested_pattern_match_record x =
+  case x of
+    Option.Some(Custom { y, x }) -> 0
+    _ -> 1
+
+f_nested_pattern_match_record_rest x =
+  case x of
+    Option.Some(Custom { y, .. }) -> 0
+    _ -> 1
 "###;
 
 #[cfg(test)]

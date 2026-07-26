@@ -460,7 +460,45 @@ impl DocPrinter for PatternExpr {
             Variable(x) => x.to_doc(),
             Literal(x) => x.to_doc(), // 42, "hello" (literal value)
             Range { start, end } => {
-                cat_space(cat_space(start.to_doc(), mk_lit("..")), end.to_doc())
+                match (start, end) {
+                    // use shorthand syntax for inclusive start: start..end / start..=end
+                    (PatternRangeBound::Inclusive(_), PatternRangeBound::Inclusive(_)) => {
+                        cat_space(
+                            cat_space(start.to_doc(), mk_lit("..")),
+                            mk_cat(mk_lit("="), end.to_doc()),
+                        )
+                    }
+                    (PatternRangeBound::Inclusive(_), PatternRangeBound::Exclusive(_)) => {
+                        cat_space(cat_space(start.to_doc(), mk_lit("..")), end.to_doc())
+                    }
+                    // TODO: support explicit syntax during parsing
+                    (PatternRangeBound::Exclusive(_), PatternRangeBound::Inclusive(_)) => {
+                        let doc_start =
+                            mk_cat(mk_cat(mk_lit("Excluded("), start.to_doc()), mk_lit(")"));
+                        let doc_end =
+                            mk_cat(mk_cat(mk_lit("Included("), end.to_doc()), mk_lit(")"));
+                        mk_cat(
+                            mk_lit("("),
+                            mk_cat(
+                                mk_cat(mk_cat(doc_start, mk_lit(", ")), doc_end),
+                                mk_lit(")"),
+                            ),
+                        )
+                    }
+                    (PatternRangeBound::Exclusive(_), PatternRangeBound::Exclusive(_)) => {
+                        let doc_start =
+                            mk_cat(mk_cat(mk_lit("Excluded("), start.to_doc()), mk_lit(")"));
+                        let doc_end =
+                            mk_cat(mk_cat(mk_lit("Excluded("), end.to_doc()), mk_lit(")"));
+                        mk_cat(
+                            mk_lit("("),
+                            mk_cat(
+                                mk_cat(mk_cat(doc_start, mk_lit(", ")), doc_end),
+                                mk_lit(")"),
+                            ),
+                        )
+                    }
+                }
             }
             Constructor {
                 qualified,
@@ -470,9 +508,9 @@ impl DocPrinter for PatternExpr {
                 let mut doc = mk_nil();
                 if let Some(x) = &qualified {
                     doc = mk_cat(doc, x.to_doc());
+                    doc = mk_cat(doc, mk_lit("."));
                 }
-                doc = mk_cat(doc, mk_lit("."));
-                doc = cat_space(doc, constructor.to_doc());
+                doc = mk_cat(doc, constructor.to_doc());
                 doc = mk_cat(doc, args.to_doc());
                 doc
             }
@@ -490,8 +528,7 @@ impl DocPrinter for PatternRangeBound {
     fn to_doc(&self) -> Box<Doc> {
         use PatternRangeBound::*;
         match self {
-            Inclusive(x) => x.to_doc(),
-            Exclusive(x) => x.to_doc(),
+            Inclusive(x) | Exclusive(x) => x.to_doc(),
         }
     }
 }
@@ -514,9 +551,14 @@ impl DocPrinter for PatternConstructorArgs {
                     mk_nil()
                 } else {
                     let mut doc = mk_nil();
-                    for i in x.iter() {
-                        doc = cat_space(doc, i.to_doc());
+                    doc = mk_cat(doc, mk_lit("("));
+                    for (idx, pat_expr) in x.iter().enumerate() {
+                        if idx > 0 {
+                            doc = mk_cat(doc, mk_lit(" "));
+                        }
+                        doc = mk_cat(doc, pat_expr.to_doc());
                     }
+                    doc = mk_cat(doc, mk_lit(")"));
                     doc
                 }
             }
@@ -524,10 +566,13 @@ impl DocPrinter for PatternConstructorArgs {
                 let mut doc = mk_lit("{");
                 doc = mk_cat(doc, mk_line());
                 for (field, pat) in fields.iter() {
-                    let mut entry = cat_space(field.to_doc(), mk_lit(":"));
+                    let mut entry = mk_cat(field.to_doc(), mk_lit(":"));
                     entry = cat_space(entry, pat.to_doc());
                     entry = mk_cat(entry, mk_lit(","));
                     doc = mk_cat(mk_cat(doc, mk_line()), entry);
+                }
+                if *rest {
+                    doc = mk_cat(doc, mk_lit(" .."));
                 }
                 doc = mk_cat(doc, mk_line());
                 doc = mk_cat(doc, mk_lit("}"));
