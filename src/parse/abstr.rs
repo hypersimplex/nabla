@@ -166,12 +166,11 @@ use super::parser::{
     ConcreteTokenSource, LayoutFeedback, LayoutGrammarSource, LayoutItemParser, ParseError,
     ParseResult, Parser,
 };
+use super::printer::*;
 
 // top-level grammar ---
 
-pub(crate) fn parse_concrete_top_level(
-    input: LexedTokensAndLocs,
-) -> ParseResult<Vec<TopLevelItem>> {
+pub(crate) fn parse_concrete_top_level(input: LexedTokensAndLocs) -> ParseResult<TopLevelItems> {
     let mut result = vec![];
     let mut parser = Parser::new(input);
     match parser.peek()? {
@@ -196,7 +195,7 @@ pub(crate) fn parse_concrete_top_level(
         _ => {}
     }
     parser.expect_concrete(&ConcreteToken::EndOfFile)?;
-    Ok(result)
+    Ok(TopLevelItems(result))
 }
 
 fn parse_top_level_item(item: &mut LayoutItemParser<'_>) -> ParseResult<TopLevelItem> {
@@ -1954,11 +1953,11 @@ mod tests {
             .expect("abstract parser should succeed for test fixture");
 
         assert!(
-            top_level_items.len() > 0,
+            top_level_items.0.len() > 0,
             "expected at least one top-level item"
         );
 
-        for i in top_level_items {
+        for i in top_level_items.0.iter() {
             println!("{}", i);
         }
     }

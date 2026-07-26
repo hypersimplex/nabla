@@ -6,6 +6,8 @@ use std::sync::Mutex;
 
 use super::concrete_token::*;
 
+use super::printer::*;
+
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub(crate) struct Span {
     //wrt. utf8 char indices
@@ -100,6 +102,12 @@ pub(crate) struct ConcreteTokenAndLoc {
     pub token: ConcreteToken,
     pub loc: Location,
     pub starts_a_line: bool, // TODO: factor out this field, and rid of many use sites
+}
+
+impl DocPrinter for ConcreteTokenAndLoc {
+    fn to_doc(&self) -> Box<Doc> {
+        mk_lit(&format!("{}", self.token))
+    }
 }
 
 #[derive(Clone)]

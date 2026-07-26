@@ -7,6 +7,7 @@ pub(crate) mod layout;
 pub(crate) mod lex;
 pub(crate) mod loc;
 pub(crate) mod parser;
+pub(crate) mod printer;
 
 #[cfg(test)]
 mod test_adt_parsing;
