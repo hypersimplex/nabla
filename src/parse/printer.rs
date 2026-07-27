@@ -320,6 +320,19 @@ f_nested_pattern_match_record_rest x =
   case x of
     Option.Some(Custom { y, .. }) -> 0
     _ -> 1
+
+f_unit = ()
+
+f_inner_lambda a =
+  let h = (\x y -> x * y) a a
+  in h * a
+
+f = \b ff -> (ff
+              case b of
+                   2 -> 2
+                   3..7 -> 99
+                   _ -> 100
+              7)
 "###;
 
 #[cfg(test)]
