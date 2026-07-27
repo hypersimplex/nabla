@@ -417,11 +417,11 @@ impl DocPrinter for AbstractionExpr {
                 if let Some(type_expr) = &self.type_expr {
                     doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), type_expr.to_doc()));
                 }
-                cat_space(doc_name, mk_lit("="))
+                cat_space(doc_name, mk_lit("= "))
             }
             _ => mk_nil(),
         };
-        doc_abstr = cat_space(doc_abstr, mk_lit("\\"));
+        doc_abstr = mk_cat(doc_abstr, mk_lit("\\"));
         for (idx, pat_expr) in self.param_patterns.iter().enumerate() {
             if idx != 0 {
                 doc_abstr = cat_space(doc_abstr, pat_expr.to_doc());
@@ -431,7 +431,12 @@ impl DocPrinter for AbstractionExpr {
         }
         doc_abstr = cat_space(doc_abstr, mk_lit("->"));
         let doc_body = self.expr.to_doc();
-        cat_space(doc_abstr, mk_nest(4, doc_body))
+
+        doc_abstr = cat_space(doc_abstr, mk_nest(4, doc_body));
+        if self.name.is_none() {
+            doc_abstr = mk_cat(mk_cat(mk_lit("("), doc_abstr), mk_lit(")"));
+        }
+        doc_abstr
     }
 }
 
