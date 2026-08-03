@@ -29,3 +29,12 @@ pub(crate) enum TyVarNameBuiltin {
     Unit,
     Arrow, // internally maps to a type scheme
 }
+
+// helpers ---
+
+pub(crate) fn mk_ty_var_name_userdef(name: &str) -> TyVarName {
+    TyVarName::UserDefined(TyVarNameUserDefined {
+        token: concrete_token::ConcreteToken::Iden(name.to_string()),
+        loc: None,
+    })
+}

@@ -1,6 +1,8 @@
+pub(crate) mod adt;
 pub(crate) mod env_vvar_to_ty_scheme;
 pub(crate) mod subst;
 pub(crate) mod subst_persistent;
+pub(crate) mod ty_env;
 pub(crate) mod ty_err;
 pub(crate) mod ty_expr;
 pub(crate) mod ty_scheme;
