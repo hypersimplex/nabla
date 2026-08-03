@@ -717,7 +717,7 @@ impl DocPrinter for TopLevelItems {
 }
 
 #[derive(Clone, Debug)]
-pub enum TopLevelItem {
+pub(crate) enum TopLevelItem {
     DataRecord(DataRecord),
     DataSum(DataSum),
     FunctionSignature(FnSig),
