@@ -158,7 +158,7 @@ pub(crate) fn match_builtin_type(ty: &TyExpr, builtin: &TyVarNameBuiltin) -> boo
 }
 
 /// check if a type expression is an auto-generated type variable
-pub(crate) fn match_tvar_auto(ty: &TyExpr) -> bool {
+pub(crate) fn match_ty_var_auto(ty: &TyExpr) -> bool {
     match ty {
         TyExpr::TyVar(TyVarName::Auto(x)) => true,
         _ => {
@@ -249,7 +249,7 @@ fn fmt_texpr(expr: &TyExpr, f: &mut fmt::Formatter<'_>, prec: u8) -> fmt::Result
     }
 
     match expr {
-        TyExpr::TyVar(name) => write!(f, "{}", display_tvar_name(name)),
+        TyExpr::TyVar(name) => write!(f, "{}", display_ty_var_name(name)),
         TyExpr::TyApp(app) => {
             let app_prec: u8 = 1;
             let needs_paren: bool = prec > app_prec;
@@ -267,7 +267,7 @@ fn fmt_texpr(expr: &TyExpr, f: &mut fmt::Formatter<'_>, prec: u8) -> fmt::Result
     }
 }
 
-fn display_tvar_name(name: &TyVarName) -> String {
+fn display_ty_var_name(name: &TyVarName) -> String {
     match name {
         TyVarName::Builtin(b) => match b {
             TyVarNameBuiltin::I64 => "i64".to_string(),

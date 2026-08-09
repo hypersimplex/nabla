@@ -3,7 +3,7 @@ use crate::typecheck::ty_scheme::*;
 use crate::typecheck::ty_var_name::*;
 
 /// capability to query and mutate substitution map
-/// for type_var_name -> type_expr
+/// for ty_var_name -> ty_expr
 pub(crate) trait Subst {
     fn default() -> Self;
     fn new(key: TyVarName, val: TyExpr) -> Self;
@@ -33,16 +33,16 @@ pub(crate) fn subst_ty(subst: &impl Subst, ty_expr: &TyExpr) -> TyExpr {
 pub(crate) fn subst_ty_scheme(subst: &(impl Subst + Clone), ty_scheme: &TyScheme) -> TyScheme {
     // apply filter on substitution in order to not alter any schematic type variables,
     // before applying the substitution on the type scheme's type expression
-    let mut subst_exclude_schematic_type_vars = subst.clone();
+    let mut subst_exclude_schematic_ty_vars = subst.clone();
     for i in ty_scheme.ty_vars_schematic.iter() {
-        subst_exclude_schematic_type_vars =
-            subst_exclude_schematic_type_vars.insert(i.clone(), TyExpr::TyVar(i.clone()));
+        subst_exclude_schematic_ty_vars =
+            subst_exclude_schematic_ty_vars.insert(i.clone(), TyExpr::TyVar(i.clone()));
     }
     TyScheme {
         ty_vars_schematic: ty_scheme.ty_vars_schematic.clone(),
         // apply substitution
         ty_expr: Box::new(subst_ty(
-            &subst_exclude_schematic_type_vars,
+            &subst_exclude_schematic_ty_vars,
             &ty_scheme.ty_expr,
         )),
     }

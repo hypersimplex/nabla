@@ -8,7 +8,7 @@ use crate::parse::loc::*;
 use crate::parse::parser::*;
 use crate::parse::printer::DocPrinter;
 use crate::typecheck::adt::*;
-use crate::typecheck::env_vvar_to_ty_scheme::*;
+use crate::typecheck::env_v_var_to_ty_scheme::*;
 use crate::typecheck::subst::*;
 use crate::typecheck::subst_persistent::*;
 use crate::typecheck::ty_env::*;
@@ -19,6 +19,7 @@ use crate::typecheck::ty_var_name::*;
 use crate::typecheck::ty_var_name_supply::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_var_name::*;
+use crate::typecheck::v_var_name_supply::*;
 
 use std::collections::*;
 use std::path::Path;
@@ -54,16 +55,16 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     let ty_env = register_adt_into_type_env(top_level.0.as_slice())?;
 
     let mut ty_var_ns = TyVarNameSupply::new();
-    let mut env_vvar_to_ty_scheme = EnvVVarToTyScheme::new();
+    let mut env_v_var_to_ty_scheme = EnvVVarToTyScheme::new();
 
-    init_builtin_values(&mut env_vvar_to_ty_scheme, &mut ty_var_ns);
+    init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);
 
     // function name -> top-level type schemes
     let mut declared_function_type_schemes: BTreeMap<String, TyScheme> = BTreeMap::new();
     insert_declared_signatures(
         top_level.0.as_slice(),
         &ty_env,
-        &mut env_vvar_to_ty_scheme,
+        &mut env_v_var_to_ty_scheme,
         &mut declared_function_type_schemes,
         &mut ty_var_ns,
     );
@@ -88,12 +89,12 @@ fn insert_declared_signatures(
             if let ConcreteToken::Iden(name) = &sig.identifier.token {
                 let scheme = build_scheme_from_signature(sig, ty_env, ns);
                 declared_function_type_schemes.insert(name.clone(), scheme.clone());
-                let vvar = VVar::Named(VVarName {
+                let v_var = VVar::Named(VVarName {
                     token: sig.identifier.token.clone(),
                     loc: Some(sig.identifier.loc.clone()),
                     builtin: None,
                 });
-                env.insert(vvar, scheme);
+                env.insert(v_var, scheme);
             }
         }
     }
