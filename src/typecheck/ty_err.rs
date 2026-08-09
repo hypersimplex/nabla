@@ -21,6 +21,7 @@ pub(crate) enum TyError {
     },
     TypeConflict(String),
     AdtError(String),
+    PatBinderUniqueness(String), // TODO: move this else where
     InternalError(String),
 }
 

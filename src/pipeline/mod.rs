@@ -8,7 +8,9 @@ use crate::parse::loc::*;
 use crate::parse::parser::*;
 use crate::parse::printer::DocPrinter;
 use crate::typecheck::adt::*;
+use crate::typecheck::convert_v_expr_from_a_expr::*;
 use crate::typecheck::env_v_var_to_ty_scheme::*;
+use crate::typecheck::pat_binder_uniqueness::*;
 use crate::typecheck::subst::*;
 use crate::typecheck::subst_persistent::*;
 use crate::typecheck::ty_env::*;
@@ -24,6 +26,7 @@ use crate::typecheck::v_var_name_supply::*;
 use std::collections::*;
 use std::path::Path;
 
+#[derive(Clone, Debug)]
 pub(crate) enum CompileError {
     Parse(ParseError),
     Type(TyError),
@@ -69,12 +72,78 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &mut ty_var_ns,
     );
 
-    // TODO:
-    // collect bindings, insert monomorphic type variables for these
-    // dependency analysis and sort them
-    // typecheck each SCC group in dependency order
+    let mut v_var_supply: VVarNameSupply = VVarNameSupply::new();
 
-    todo!()
+    let mut funcs: BTreeMap<usize, VExpr> = BTreeMap::new();
+
+    for (idx, item) in top_level.0.iter().enumerate() {
+        let TopLevelItem::FunctionDefinition(def) = item else {
+            continue;
+        };
+        // convert to an abstraction expression
+        let (vexpr, _annot) = vexpr_and_ty_annot_from_aexpr(
+            &AExpr::AbstractionExpression(def.clone()),
+            &mut v_var_supply,
+        );
+        // reject duplicate pattern binders before type inference
+        validate_pattern_binder_uniqueness(&vexpr)?;
+        match &vexpr {
+            VExpr::Abstraction(_) => {
+                funcs.insert(idx, vexpr);
+            }
+            _ => {
+                unreachable!("function definitions expected to be in a lambda abstraction");
+            }
+        }
+    }
+
+    // collect bindings for functions, insert monomorphic type variables for these
+    let mut original_seeded_lhs_binders: BTreeSet<VVar> = BTreeSet::new();
+    let mut map_binding_to_def_group: BTreeMap<VVar, usize> = BTreeMap::new();
+
+    // environment accumulating info as typechecking progresses
+    let mut env_v_var_to_ty_scheme_binding_seed: EnvVVarToTyScheme = env_v_var_to_ty_scheme.clone();
+
+    for (idx, vexpr) in funcs.iter() {
+        match vexpr {
+            VExpr::Abstraction(VAbstrExpr {
+                name: v_var_binding_func,
+                ..
+            }) => {
+                match v_var_binding_func {
+                    VVar::Named(VVarName { .. }) => {}
+                    _ => {
+                        unreachable!();
+                    }
+                }
+                if let Some(first_def_idx) =
+                    map_binding_to_def_group.get(v_var_binding_func).copied()
+                {
+                    return Err(TyError::PatBinderUniqueness(format!(
+                        "duplicate top-level binder `{:?}` (internal info: top-level binder seeding pass; def indices = {}, {})",
+                        v_var_binding_func, first_def_idx, idx
+                    )))?;
+                }
+                original_seeded_lhs_binders.insert(v_var_binding_func.clone());
+                map_binding_to_def_group.insert(v_var_binding_func.clone(), *idx);
+                // recursion policy (top-level)
+                // - seed the env with monomorphic placeholder for each function in preparation for type inference/check
+                // - signatures are checked after inference; note: no polymorphic recursion support
+                env_v_var_to_ty_scheme_binding_seed.insert(
+                    v_var_binding_func.clone(),
+                    TyScheme {
+                        ty_vars_schematic: vec![],
+                        ty_expr: Box::new(TyExpr::TyVar(ty_var_ns.generate())),
+                    },
+                );
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+    }
+
+    todo!("analyze dependency and sort each SCC; then typecheck each SCC group in dependency order")
 }
 
 fn insert_declared_signatures(
@@ -149,14 +218,14 @@ fn build_scheme_from_signature(sig: &FnSig, ty_env: &TyEnv, ns: &mut TyVarNameSu
 static TEST_PIPELINE_CONTENT_0: &str = r###"
 f x y z = 9 / (-7*x+y+z)
 
-f_let a =
+f_let_0 a =
  let x :: u32 = 1
      y :: u32 = 2
      z :: u32 = 5
  in
    x + (y :: u32) + z + a
 
-f_let a =
+f_let_1 a =
  let x :: u32 = 1
      y :: u32 = 2
      z :: u32 = 5
@@ -165,7 +234,7 @@ f_let a =
        c = b * b
    in x + y + z + a + b * c
 
-f_let2 a =
+f_let_2 a =
  let x :: u32 = 1 + a
      y :: u32 = 2
      z :: u32 = 5
@@ -237,5 +306,10 @@ f3 x =
 
 #[test]
 fn test_pipeline() {
-    compile(TEST_PIPELINE_CONTENT_0);
+    match compile(TEST_PIPELINE_CONTENT_0) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
 }

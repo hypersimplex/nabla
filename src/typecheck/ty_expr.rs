@@ -1,3 +1,4 @@
+use crate::parse::abstr_structures;
 use crate::parse::concrete_token;
 use crate::typecheck::ty_var_name::*;
 use std::collections::*;
@@ -44,6 +45,28 @@ pub(crate) enum FnBuiltin {
     Arrow,
     String,
     MatchFail,
+}
+
+impl From<&abstr_structures::BuiltinExprType> for FnBuiltin {
+    fn from(expr_type: &abstr_structures::BuiltinExprType) -> Self {
+        use abstr_structures::BuiltinExprType::*;
+        match expr_type {
+            UnaryPlus => FnBuiltin::UnaryPlus,
+            UnaryNegate => FnBuiltin::UnaryNegate,
+            UnaryLogicalNot => FnBuiltin::UnaryLogicalNot,
+            BinaryAdd => FnBuiltin::BinaryAdd,
+            BinarySub => FnBuiltin::BinarySub,
+            BinaryMul => FnBuiltin::BinaryMul,
+            BinaryDiv => FnBuiltin::BinaryDiv,
+            BinaryLess => FnBuiltin::BinaryLess,
+            BinaryLessEqual => FnBuiltin::BinaryLessEqual,
+            BinaryGreater => FnBuiltin::BinaryGreater,
+            BinaryGreaterEqual => FnBuiltin::BinaryGreaterEqual,
+            BinaryEqual => FnBuiltin::BinaryEqual,
+            LogicalAnd => FnBuiltin::LogicalAnd,
+            LogicalOr => FnBuiltin::LogicalOr,
+        }
+    }
 }
 
 // utility helpers ---

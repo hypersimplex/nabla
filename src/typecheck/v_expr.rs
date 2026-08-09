@@ -38,7 +38,7 @@ pub(crate) struct VAppExpr {
     pub args: Vec<(VExpr, Option<TyExpr>)>,
 }
 
-// handles recursive let groups with pattern LHS bindings
+/// note: handles recursive let groups with pattern LHS bindings
 #[derive(Clone, Debug)]
 pub(crate) struct VLetExpr {
     // [(pattern, rhs, type annotation)]
@@ -126,7 +126,7 @@ pub(crate) enum RangeBound<T> {
     Exclusive(T),
 }
 
-// pattern expressions used across case clauses, lambda parameters, and let bindings
+/// pattern expressions used across case clauses, lambda parameters, and let bindings
 #[derive(Clone, Debug)]
 pub(crate) enum VPattern {
     // _ wildcard
@@ -170,4 +170,27 @@ pub(crate) enum VPatternLiteral {
     Unit,
 }
 
-pub type VExprAndTyAnnot = (VExpr, Option<TyExpr>);
+pub(crate) type VExprAndTyAnnot = (VExpr, Option<TyExpr>);
+
+pub(crate) fn classify_numeric_literal(
+    token: &concrete_token::ConcreteToken,
+) -> NumericLiteralValue {
+    let concrete_token::ConcreteToken::LiteralNumeric(raw) = token else {
+        panic!(
+            "classify_numeric_literal called on non-numeric token: {:?}",
+            token
+        );
+    };
+    // for simplicity, assume that parser checked validity of these
+    if raw.contains('.') || raw.contains('e') || raw.contains('E') {
+        NumericLiteralValue::Float {
+            raw: raw.clone(),
+            parsed: raw.parse::<f64>().ok(), // parse now to avoid repeated parsing downstream
+        }
+    } else {
+        NumericLiteralValue::Int {
+            raw: raw.clone(),
+            parsed: raw.parse::<i64>().ok(),
+        }
+    }
+}
