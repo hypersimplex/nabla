@@ -1,0 +1,17 @@
+use crate::typecheck::v_expr::*;
+
+/// supplies auto generated type variable names
+pub(crate) struct VVarNameSupply {
+    id: u64,
+}
+
+impl VVarNameSupply {
+    pub fn new() -> Self {
+        Self { id: 0 }
+    }
+    pub fn generate(&mut self) -> VVar {
+        let ret: u64 = self.id;
+        self.id += 1;
+        VVar::Anon(ret)
+    }
+}

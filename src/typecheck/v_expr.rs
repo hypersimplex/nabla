@@ -93,7 +93,7 @@ pub(crate) enum VVar {
     Named(VVarName),
 
     // unnamed lambda expression with auto generated id
-    Anon(usize),
+    Anon(u64),
 }
 
 #[derive(Clone, Debug)]

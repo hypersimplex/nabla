@@ -10,3 +10,4 @@ pub(crate) mod ty_var_name;
 pub(crate) mod ty_var_name_supply;
 pub(crate) mod v_expr;
 pub(crate) mod v_var_name;
+pub(crate) mod v_var_name_supply;
