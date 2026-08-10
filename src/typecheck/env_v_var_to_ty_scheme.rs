@@ -1,5 +1,7 @@
+use crate::typecheck::subst::*;
 use crate::typecheck::ty_scheme::TyScheme;
 use crate::typecheck::v_expr::VVar;
+
 use std::collections::BTreeMap;
 
 /// maps value level variable to a type scheme (possibly with type parameters)
@@ -15,5 +17,15 @@ impl EnvVVarToTyScheme {
     }
     pub fn get(&self, key: &VVar) -> Option<&TyScheme> {
         self.0.get(key)
+    }
+
+    /// apply substitution recursively and return a new env
+    pub fn apply_subst_to_env(&self, subst: &Subst) -> EnvVVarToTyScheme {
+        EnvVVarToTyScheme(
+            self.0
+                .iter()
+                .map(|(v_var, ty_scheme)| (v_var.clone(), subst_ty_scheme(subst, ty_scheme)))
+                .collect(),
+        )
     }
 }
