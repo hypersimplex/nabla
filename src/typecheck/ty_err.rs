@@ -9,7 +9,12 @@ pub(crate) enum TyError {
         candidates: Vec<String>,
         hint: String,
     },
+    UnexpectedSyntax(String),
+    UnexpectedPattern(String),
+    UnexpectedField(String),
+    UnexpectedExpr(String),
     UnknownType(String),
+    UnboundVariable(String),
     ArityMismatch {
         constructor: String,
         expected: usize,
