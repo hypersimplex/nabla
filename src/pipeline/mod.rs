@@ -4,9 +4,7 @@ use crate::parse::abstr::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
 use crate::parse::lex::*;
-use crate::parse::loc::*;
 use crate::parse::parser::*;
-use crate::parse::printer::DocPrinter;
 use crate::typecheck::adt::*;
 use crate::typecheck::convert_v_expr_from_a_expr::*;
 use crate::typecheck::env_v_var_to_ty_scheme::*;
@@ -22,6 +20,7 @@ use crate::typecheck::ty_var_name_supply::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_var_name::*;
 use crate::typecheck::v_var_name_supply::*;
+use crate::util::printer::*;
 
 use std::collections::*;
 use std::path::Path;

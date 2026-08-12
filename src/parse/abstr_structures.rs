@@ -10,7 +10,7 @@ use super::loc::*;
 
 use super::concrete_token::*;
 
-use super::printer::*;
+use crate::util::printer::*;
 
 // eg: T A B, where T is the identifier and A, B are type parameters
 #[derive(Clone, Debug)]

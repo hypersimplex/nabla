@@ -5,7 +5,6 @@ mod test_adt {
     use crate::parse::abstr_structures::*;
     use crate::parse::concrete_token::ConcreteToken;
     use crate::parse::lex::parse_content_to_concrete_tokens;
-    use crate::parse::printer::*;
     use std::path::Path;
 
     const CONSTRUCTOR_FIXTURE: &str = r#"

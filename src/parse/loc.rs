@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use super::concrete_token::*;
 
-use super::printer::*;
+use crate::util::printer::*;
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub(crate) struct Span {

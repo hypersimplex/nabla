@@ -166,7 +166,6 @@ use super::parser::{
     ConcreteTokenSource, LayoutFeedback, LayoutGrammarSource, LayoutItemParser, ParseError,
     ParseResult, Parser,
 };
-use super::printer::*;
 
 // top-level grammar ---
 
@@ -1957,7 +1956,7 @@ mod tests {
             "expected at least one top-level item"
         );
 
-        // use crate::parse::printer::DocPrinter;
+        // use crate::util::printer::DocPrinter;
         // println!("{}", top_level_items.to_doc());
     }
 }

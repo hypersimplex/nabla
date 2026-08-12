@@ -1,5 +1,4 @@
 /// printer using Wadler/Lindig's approach
-use std::collections::*;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -342,7 +341,7 @@ mod tests {
     use crate::parse::lex::parse_content_to_concrete_tokens;
     use std::path::Path;
 
-    use crate::parse::printer::*;
+    use crate::util::printer::*;
 
     #[test]
     fn test_printer() {
