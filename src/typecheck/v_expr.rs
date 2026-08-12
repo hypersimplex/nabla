@@ -77,7 +77,7 @@ pub(crate) enum VAtom {
 #[derive(Clone, Debug)]
 pub(crate) struct VConstructorExpr {
     // type name (resolved during type checking)
-    pub type_name: Option<String>,
+    pub ty_name: Option<String>,
 
     // constructor name
     pub constructor: String,
@@ -147,13 +147,13 @@ pub(crate) enum VPattern {
 
     Constructor {
         // filled during type checking
-        type_name: Option<String>,
+        ty_name: Option<String>,
         constructor: String,
         args: Vec<VPattern>,
     },
     Record {
         // filled during type checking
-        type_name: Option<String>,
+        ty_name: Option<String>,
 
         constructor: String,
 

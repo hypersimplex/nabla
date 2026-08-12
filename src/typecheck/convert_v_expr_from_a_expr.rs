@@ -310,7 +310,7 @@ fn v_expr_from_constructor_expr(
         args,
         record_fields,
     } = constructor_expr;
-    let (type_name, constructor_name) =
+    let (ty_name, constructor_name) =
         parse_constructor_ref(qualified, constructor, "constructor expression");
 
     let vargs: Vec<(VExpr, Option<TyExpr>)> = args
@@ -340,7 +340,7 @@ fn v_expr_from_constructor_expr(
 
     (
         VExpr::Constructor(VConstructorExpr {
-            type_name,
+            ty_name,
             constructor: constructor_name,
             args: vargs,
             record_fields: vrec,
@@ -392,17 +392,17 @@ fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
             args,
         } => match args {
             abstr_structures::PatternConstructorArgs::Positional(args) => {
-                let (type_name, constructor_name) =
+                let (ty_name, constructor_name) =
                     parse_constructor_ref(qualified, constructor, "pattern");
                 let vargs: Vec<VPattern> = args.iter().map(to_v_pattern).collect();
                 VPattern::Constructor {
-                    type_name,
+                    ty_name,
                     constructor: constructor_name,
                     args: vargs,
                 }
             }
             abstr_structures::PatternConstructorArgs::Record { fields, rest } => {
-                let (type_name, constructor_name) =
+                let (ty_name, constructor_name) =
                     parse_constructor_ref(qualified, constructor, "record pattern");
 
                 let vfields: Vec<(String, VPattern)> = fields
@@ -414,7 +414,7 @@ fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
                     .collect();
 
                 VPattern::Record {
-                    type_name,
+                    ty_name,
                     constructor: constructor_name,
                     fields: vfields,
                     rest: *rest,
@@ -449,12 +449,12 @@ pub(crate) fn parse_constructor_ref(
     constructor: &ConcreteTokenAndLoc,
     context: &str,
 ) -> (Option<String>, String) {
-    let type_name = qualified
+    let ty_name = qualified
         .as_ref()
         .map(|q| identifier_from_token(q, &format!("qualified {context} type name")));
     let constructor_name =
         identifier_from_token(constructor, &format!("{context} constructor name"));
-    (type_name, constructor_name)
+    (ty_name, constructor_name)
 }
 
 pub(crate) fn identifier_from_token(token: &ConcreteTokenAndLoc, what: &str) -> String {

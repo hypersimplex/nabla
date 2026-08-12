@@ -2,6 +2,7 @@
 //! checking/inference
 
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_var_name::*;
 use crate::typecheck::v_expr::{RangeBound, VAtom, VConstructorExpr, VPatternLiteral, VVar};
 
 #[derive(Clone, Debug)]
@@ -109,13 +110,13 @@ pub(crate) enum TypedVPattern {
         ty: TyExpr,
     },
     Constructor {
-        type_name: Option<String>,
+        ty_name: Option<String>,
         constructor: String,
         args: Vec<TypedVPattern>,
         ty: TyExpr,
     },
     Record {
-        type_name: Option<String>,
+        ty_name: Option<String>,
         constructor: String,
         fields: Vec<(String, TypedVPattern)>,
         rest: bool, // `..` presence

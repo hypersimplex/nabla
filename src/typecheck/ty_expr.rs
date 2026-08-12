@@ -7,7 +7,7 @@ use std::iter::IntoIterator;
 
 /// type expression, a type-level construct that contains type info
 #[derive(Clone, Debug)]
-pub enum TyExpr {
+pub(crate) enum TyExpr {
     // a type variable used for solving type equations
     TyVar(TyVarName),
 
