@@ -4,8 +4,7 @@ use crate::typecheck::ty_var_name::*;
 
 /// capability to query and mutate substitution map
 /// for ty_var_name -> ty_expr
-pub(crate) trait Subst {
-    fn default() -> Self;
+pub(crate) trait Subst: Clone {
     fn new(key: TyVarName, val: TyExpr) -> Self;
     fn new_with(f: impl Fn() -> Self) -> Self
     where
@@ -30,7 +29,7 @@ pub(crate) fn subst_ty(subst: &impl Subst, ty_expr: &TyExpr) -> TyExpr {
     }
 }
 
-pub(crate) fn subst_ty_scheme(subst: &(impl Subst + Clone), ty_scheme: &TyScheme) -> TyScheme {
+pub(crate) fn subst_ty_scheme(subst: &impl Subst, ty_scheme: &TyScheme) -> TyScheme {
     // apply filter on substitution in order to not alter any schematic type variables,
     // before applying the substitution on the type scheme's type expression
     let mut subst_exclude_schematic_ty_vars = subst.clone();

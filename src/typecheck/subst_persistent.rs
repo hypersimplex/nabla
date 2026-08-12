@@ -12,9 +12,6 @@ pub(crate) type SubstPersistent = PersistentMap<TyVarName, TyExpr>;
 pub(crate) struct SubstPersistentIdent(pub PersistentMap<TyVarName, TyExpr>);
 
 impl Subst for SubstPersistent {
-    fn default() -> Self {
-        Self::default()
-    }
     fn new(key: TyVarName, val: TyExpr) -> Self {
         Self::new(key, val)
     }
@@ -31,7 +28,7 @@ impl Subst for SubstPersistent {
         Self::insert(self, key, val)
     }
     // composition of substitutions, applied from right to left:
-    //   subst_composed = (subst2 . subst1) = subst1 x >>= subst2
+    //   subst_composed = (subst2 . subst1)
     fn compose(subst2: &Self, subst1: &Self) -> Self {
         let mut subst_new = Self::default();
         // make substitution using subst2 for existing items in subst1
@@ -49,10 +46,18 @@ impl Subst for SubstPersistent {
     }
 }
 
-impl Subst for SubstPersistentIdent {
+impl Default for SubstPersistent {
+    fn default() -> Self {
+        Self::default()
+    }
+}
+impl Default for SubstPersistentIdent {
     fn default() -> Self {
         SubstPersistent::default().into()
     }
+}
+
+impl Subst for SubstPersistentIdent {
     fn new(key: TyVarName, val: TyExpr) -> Self {
         Self(SubstPersistent::new(key, val))
     }
@@ -72,7 +77,7 @@ impl Subst for SubstPersistentIdent {
         Self(self.0.insert(key, val))
     }
     // composition of substitutions, applied from right to left:
-    //   subst_composed = (subst2 . subst1) = subst1 x >>= subst2
+    //   subst_composed = (subst2 . subst1)
     // note: equivalent to applying subst2 on top of subst1 using subst_ty helper
     fn compose(subst2: &Self, subst1: &Self) -> Self {
         let mut subst_new = Self::default();
