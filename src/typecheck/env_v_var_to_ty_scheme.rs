@@ -20,7 +20,7 @@ impl EnvVVarToTyScheme {
     }
 
     /// apply substitution recursively and return a new env
-    pub fn apply_subst_to_env(&self, subst: &Subst) -> EnvVVarToTyScheme {
+    pub fn apply_subst_to_env(&self, subst: &impl Subst) -> EnvVVarToTyScheme {
         EnvVVarToTyScheme(
             self.0
                 .iter()
