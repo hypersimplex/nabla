@@ -7,3 +7,8 @@
 Experimenting and learning about lazy functional language implementation from
 first principles, with inspiration from Miranda, Haskell, Rust, and various
 literatures from SPJ, Wolfe, and Banerjee.
+
+Planned features & non-features:
+- no support for type classes for now
+- GC'd backend
+- inferred types and optional user specified types
