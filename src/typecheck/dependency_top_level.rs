@@ -21,11 +21,13 @@ pub(crate) fn compute_mutually_dependent_top_level_groups(
     let mut stack: Vec<usize> = vec![];
     let mut generate_previsit: usize = 0;
 
-    // extract free value-level variables in each definition and retain only binders
-    // from this declaration group
+    // extract free value-level variables in each definition and retain only
+    // binders from this declaration group
     //
     // return definition indices that the current definition depends on
-    // definitions with no in-group recursive references yield an empty neighbor set
+    //
+    // definitions with no in-group recursive references yield an empty
+    // neighbor set
     let neighbours = |idx: usize| -> Vec<usize> {
         let lambda_abstraction: &VExpr = funcs.get(&idx).expect("index not found");
         let variables = lambda_abstraction.get_free_vars(&BTreeSet::new());

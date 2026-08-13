@@ -199,10 +199,10 @@ pub(crate) fn get_head(ty: &TyExpr) -> TyExpr {
     }
 }
 
-/// build ADT type with parameters, using type level application
+/// build ADT type with type parameters, using type level application
 /// eg: ("List", [I64]) -> TyApp(TyVar("List"), I64)
 ///
-/// TODO: fill in source location
+/// todo: fill in source location
 pub(crate) fn build_adt_type_no_loc(type_name: &str, params: &[TyExpr]) -> TyExpr {
     let mut ty = TyExpr::TyVar(TyVarName::UserDefined(TyVarNameUserDefined {
         token: concrete_token::ConcreteToken::Iden(type_name.to_string()),

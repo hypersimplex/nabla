@@ -7,7 +7,6 @@ pub(crate) enum TyError {
     AmbiguousConstructor {
         constructor: String,
         candidates: Vec<String>,
-        hint: String,
     },
     UnexpectedSyntax(String),
     UnexpectedPattern(String),

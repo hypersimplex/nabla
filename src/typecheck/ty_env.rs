@@ -85,16 +85,6 @@ impl TyEnv {
                     _ => Err(TyError::AmbiguousConstructor {
                         constructor: constructor.clone(),
                         candidates: matches.iter().map(|(t, _, _)| t.to_string()).collect(),
-                        hint: format!(
-                            "Use qualified name: {}",
-                            matches
-                                .iter()
-                                .map(|(t, _, _)| {
-                                    fmt_qualified_constructor(Some(t), constructor)
-                                })
-                                .collect::<Vec<_>>()
-                                .join(" or ")
-                        ),
                     }),
                 }
             }
@@ -115,7 +105,7 @@ impl TyEnv {
         self.adts.values()
     }
 
-    // Register an ADT skeleton (name + parameters) without constructors
+    // register an ADT skeleton (name + parameters) without constructors
     pub fn add_adt_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
         self.adts.insert(
             name.clone(),
@@ -127,7 +117,7 @@ impl TyEnv {
         );
     }
 
-    // Overwrite constructors for an existing ADT (used by the second pass)
+    // overwrite constructors for an existing ADT (used by the second pass)
     pub(crate) fn set_adt_constructors(
         &mut self,
         name: &str,

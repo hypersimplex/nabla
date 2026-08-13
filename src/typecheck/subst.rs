@@ -19,6 +19,8 @@ pub(crate) trait Subst: Clone {
     fn compose(subst2: &Self, subst1: &Self) -> Self;
 }
 
+/// apply substitution to the input type expression and return the result type
+/// expression
 pub(crate) fn subst_ty(subst: &impl Subst, ty_expr: &TyExpr) -> TyExpr {
     match ty_expr {
         TyExpr::TyVar(ty_var_name) => subst.get(ty_var_name).unwrap(),

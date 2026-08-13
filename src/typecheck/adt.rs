@@ -65,12 +65,6 @@ pub(crate) enum ConstructorRef {
     },
 }
 
-pub(crate) fn fmt_qualified_constructor(ty_name: Option<&str>, constructor: &str) -> String {
-    ty_name
-        .map(|ty| format!("{ty}.{constructor}"))
-        .unwrap_or_else(|| constructor.to_string())
-}
-
 #[derive(Clone, Debug)]
 struct DataParams {
     name: String,

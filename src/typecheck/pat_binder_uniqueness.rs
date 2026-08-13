@@ -38,19 +38,15 @@ fn validate_pattern_binders_unique(pattern: &VPattern) -> TyChkResult<()> {
     collect_pattern_binders_unique(pattern, &mut seen)
 }
 
-fn validate_abstraction_param_binders_unique(params: &[VAbstrParam]) -> TyChkResult<()> {
-    let mut seen = BTreeSet::new();
-    for param in params {
-        collect_pattern_binders_unique(&param.pattern, &mut seen)?;
-    }
-    Ok(())
-}
-
 /// for simplicity, don't allow duplicate pattern binders
 pub(crate) fn validate_pattern_binder_uniqueness(vexpr: &VExpr) -> TyChkResult<()> {
     match vexpr {
         VExpr::Abstraction(abstr) => {
-            validate_abstraction_param_binders_unique(&abstr.params)?;
+            let mut seen = BTreeSet::new();
+            for param in &abstr.params {
+                collect_pattern_binders_unique(&param.pattern, &mut seen)?;
+            }
+
             validate_pattern_binder_uniqueness(&abstr.body.0)
         }
         VExpr::Application(app) => {

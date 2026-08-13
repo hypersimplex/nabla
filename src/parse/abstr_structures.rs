@@ -649,8 +649,8 @@ impl DocPrinter for ConstructorExpr {
         let mut doc = mk_nil();
         if let Some(x) = &self.qualified {
             doc = mk_cat(doc, x.to_doc());
+            doc = mk_cat(doc, mk_lit("."));
         }
-        doc = mk_cat(doc, mk_lit("."));
         doc = mk_cat(doc, self.constructor.to_doc());
 
         if let Some(x) = &self.record_fields {

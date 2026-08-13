@@ -69,23 +69,32 @@ pub(crate) struct TypedVLetExpr {
 pub(crate) struct TypedVAtom {
     pub atom: VAtom,
     pub ty: TyExpr,
-    // explicit type args at this use site, for TyApp insertion
-    // where order matches the binding's `ty_vars_schematic`
-    // e.g. id @Int 3 where ty_args = [Int]
+    // explicit type args at this use site
+    //
+    // [todo]: for TyApp insertion, order shoudl match the binding's
+    // `ty_vars_schematic`
+    //
+    // e.g.: id @Int 3 where ty_args = [Int]
     pub ty_args: Vec<TyExpr>,
 }
 
 /// construct for product and record type
 #[derive(Clone, Debug)]
 pub(crate) struct TypedVConstructorExpr {
-    pub ty_name: String, // type name (resolved during type checking)
+    // type name (resolved during type checking)
+    pub ty_name: String,
+
     pub constructor_name: String,
-    // pub constructor: VConstructorExpr,
+
     pub args: Vec<TypedVExpr>,
+
     // for record, this associates field name to linear indexing
     pub record_fields: Option<Vec<(String, usize)>>,
+
     pub ty: TyExpr,
-    // explicit type args at this use site, ordered by the constructor's type parameters
+
+    // explicit type args at this use site, ordered by the constructor's type
+    // parameters
     pub ty_args: Vec<TyExpr>,
 }
 
@@ -97,9 +106,6 @@ pub(crate) enum TypedVPattern {
     Variable {
         binder: VVar,
         ty: TyExpr,
-        // this introduces schematic type vars for type abstraction, eg:
-        // let id = \x -> x where `ty_vars_schematic` = [a] for forall a. a -> a
-        //
         // note: order matters
         ty_vars_schematic: Vec<TyVarName>,
     },
@@ -113,7 +119,7 @@ pub(crate) enum TypedVPattern {
         ty: TyExpr,
     },
     Constructor {
-        ty_name: Option<String>,
+        ty_name: String,
         constructor: String,
         args: Vec<TypedVPattern>,
         ty: TyExpr,
@@ -357,9 +363,7 @@ impl DocPrinter for TypedVPattern {
                 ty,
             } => {
                 let mut doc = mk_nil();
-                if let Some(qualified_type) = ty_name {
-                    doc = mk_cat(doc, mk_lit(&format!("{}.", qualified_type)));
-                }
+                doc = mk_cat(doc, mk_lit(&format!("{}.", ty_name)));
                 doc = mk_cat(doc, mk_lit(&format!("{}", constructor)));
                 for i in args.iter() {
                     doc = cat_space(doc, i.to_doc());
