@@ -162,7 +162,7 @@ fn can_fit(width_max: i32, width_remain: i32, mut stack: Vec<StackItem>) -> bool
         return false; // terminal case
     }
     let StackItem { indent, mode, doc } = match stack.pop() {
-        None => return true, // termial case
+        None => return true, // terminal case
         Some(x) => x,
     };
     match *doc {

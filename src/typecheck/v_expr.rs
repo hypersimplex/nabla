@@ -2,6 +2,7 @@ use crate::parse::concrete_token;
 use crate::parse::loc;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::v_var_name::*;
+use crate::util::printer::*;
 
 use std::collections::*;
 
@@ -325,3 +326,75 @@ impl VConstructorExpr {
         out
     }
 }
+
+// helper impl. for doc printer trait --->>
+
+impl DocPrinter for VAtom {
+    fn to_doc(&self) -> Box<Doc> {
+        use VAtom::*;
+        match self {
+            Numeric(lit_num) => lit_num.to_doc(),
+            String(lit_string) => lit_string.to_doc(),
+            Unit => mk_lit("()"),
+            Variable(var) => var.to_doc(),
+        }
+    }
+}
+
+impl DocPrinter for VLitNumeric {
+    fn to_doc(&self) -> Box<Doc> {
+        self.value.to_doc()
+    }
+}
+
+impl DocPrinter for NumericLiteralValue {
+    fn to_doc(&self) -> Box<Doc> {
+        use NumericLiteralValue::*;
+        match self {
+            Int { parsed, .. } => mk_lit(&format!("{}", parsed.as_ref().unwrap())),
+            Float { parsed, .. } => mk_lit(&format!("{}", parsed.as_ref().unwrap())),
+        }
+    }
+}
+
+impl DocPrinter for VLitString {
+    fn to_doc(&self) -> Box<Doc> {
+        self.token.to_doc()
+    }
+}
+
+impl DocPrinter for VVar {
+    fn to_doc(&self) -> Box<Doc> {
+        use VVar::*;
+        match self {
+            Named(vvar_name) => vvar_name.to_doc(),
+            Anon(anon_id) => mk_lit(&format!("{}", anon_id)),
+        }
+    }
+}
+
+impl DocPrinter for VPatternLiteral {
+    fn to_doc(&self) -> Box<Doc> {
+        use VPatternLiteral::*;
+        match self {
+            Numeric(vlit_num) => vlit_num.to_doc(),
+            String(vlit_string) => vlit_string.to_doc(),
+            Unit => mk_lit("()"),
+        }
+    }
+}
+
+impl<T> DocPrinter for RangeBound<T>
+where
+    T: DocPrinter,
+{
+    fn to_doc(&self) -> Box<Doc> {
+        use RangeBound::*;
+        match self {
+            Inclusive(x) => mk_cat(mk_cat(mk_lit("Inclusive("), x.to_doc()), mk_lit(")")),
+            Exclusive(x) => mk_cat(mk_cat(mk_lit("Exclusive("), x.to_doc()), mk_lit(")")),
+        }
+    }
+}
+
+// <<--- helper impl. for doc printer trait

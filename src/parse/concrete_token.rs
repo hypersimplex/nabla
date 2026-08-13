@@ -1,3 +1,5 @@
+use crate::util::printer::*;
+
 use std::collections::HashMap;
 use std::fmt;
 
@@ -176,3 +178,13 @@ impl fmt::Display for ConcreteToken {
         write!(f, "{}", s)
     }
 }
+
+// helper impl. for doc printer trait --->>
+
+impl DocPrinter for ConcreteToken {
+    fn to_doc(&self) -> Box<Doc> {
+        mk_lit(&format!("{}", self))
+    }
+}
+
+// <<--- helper impl. for doc printer trait

@@ -1,8 +1,7 @@
 use crate::parse::abstr_structures;
 use crate::parse::concrete_token;
 use crate::typecheck::ty_var_name::*;
-use std::collections::*;
-use std::fmt;
+use crate::util::printer::*;
 use std::iter::IntoIterator;
 
 /// type expression, a type-level construct that contains type info
@@ -236,71 +235,28 @@ pub(crate) fn decompose_adt_type(ty: &TyExpr) -> Option<(String, Vec<TyExpr>)> {
     }
 }
 
-// helpers for debugging ---
+// helper impl. for doc printer trait --->>
 
-impl fmt::Display for TyExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_texpr(self, f, 0)
-    }
-}
-
-fn fmt_texpr(expr: &TyExpr, f: &mut fmt::Formatter<'_>, prec: u8) -> fmt::Result {
-    if let Some((args, ret)) = match_arrow(expr) {
-        //terminal case for -> type
-        let arrow_prec: u8 = 0;
-        let needs_paren: bool = prec > arrow_prec;
-        if needs_paren {
-            write!(f, "(")?;
-        }
-        let mut iter = args.into_iter();
-        if let Some(first) = iter.next() {
-            fmt_texpr(&first, f, arrow_prec + 1)?;
-            for arg in iter {
-                write!(f, " -> ")?;
-                fmt_texpr(&arg, f, arrow_prec + 1)?;
-            }
-            write!(f, " -> ")?;
-            fmt_texpr(&ret, f, arrow_prec)?;
-        } else {
-            // no args, just return type
-            fmt_texpr(&ret, f, arrow_prec)?;
-        }
-        if needs_paren {
-            write!(f, ")")?;
-        }
-        return Ok(());
-    }
-
-    match expr {
-        TyExpr::TyVar(name) => write!(f, "{}", display_ty_var_name(name)),
-        TyExpr::TyApp(app) => {
-            let app_prec: u8 = 1;
-            let needs_paren: bool = prec > app_prec;
-            if needs_paren {
-                write!(f, "(")?;
-            }
-            fmt_texpr(&app.ty_func, f, app_prec)?;
-            write!(f, " ")?;
-            fmt_texpr(&app.ty_arg, f, app_prec + 1)?;
-            if needs_paren {
-                write!(f, ")")?;
-            }
-            Ok(())
+impl DocPrinter for TyExpr {
+    fn to_doc(&self) -> Box<Doc> {
+        use TyExpr::*;
+        match self {
+            TyExpr::TyVar(ty_var_name) => ty_var_name.to_doc(),
+            TyApp(ty_app) => ty_app.to_doc(),
         }
     }
 }
 
-fn display_ty_var_name(name: &TyVarName) -> String {
-    match name {
-        TyVarName::Builtin(b) => match b {
-            TyVarNameBuiltin::I64 => "i64".to_string(),
-            TyVarNameBuiltin::F64 => "f64".to_string(),
-            TyVarNameBuiltin::String => "String".to_string(),
-            TyVarNameBuiltin::Bool => "Bool".to_string(),
-            TyVarNameBuiltin::Unit => "()".to_string(),
-            TyVarNameBuiltin::Arrow => "->".to_string(),
-        },
-        TyVarName::UserDefined(u) => format!("{}", u.token),
-        TyVarName::Auto(id) => format!("t{}", id),
+impl DocPrinter for TyApplication {
+    fn to_doc(&self) -> Box<Doc> {
+        mk_cat(
+            mk_cat(
+                mk_lit("("),
+                cat_space(self.ty_func.to_doc(), self.ty_arg.to_doc()),
+            ),
+            mk_lit(")"),
+        )
     }
 }
+
+// <<--- helper impl. for doc printer trait

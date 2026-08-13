@@ -1,6 +1,7 @@
 use crate::parse::concrete_token::ConcreteToken;
 use crate::parse::loc::Location;
 use crate::typecheck::ty_expr::*;
+use crate::util::printer::*;
 
 #[derive(Clone, Debug, Eq)]
 pub(crate) struct VVarName {
@@ -41,3 +42,13 @@ impl PartialOrd for VVarName {
         Some(self.cmp(other))
     }
 }
+
+// helper impl. for doc printer trait --->>
+
+impl DocPrinter for VVarName {
+    fn to_doc(&self) -> Box<Doc> {
+        self.token.to_doc()
+    }
+}
+
+// <<--- helper impl. for doc printer trait

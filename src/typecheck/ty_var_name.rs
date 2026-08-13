@@ -1,5 +1,6 @@
 use crate::parse::concrete_token;
 use crate::parse::loc;
+use crate::util::printer::*;
 
 /// type-level variable used for inferencing types
 ///
@@ -38,3 +39,43 @@ pub(crate) fn mk_ty_var_name_userdef(name: &str) -> TyVarName {
         loc: None,
     })
 }
+
+// helper impl. for doc printer trait --->>
+
+impl DocPrinter for TyVarName {
+    fn to_doc(&self) -> Box<Doc> {
+        use TyVarName::*;
+        match self {
+            UserDefined(ty_var_name_user_defined) => ty_var_name_user_defined.to_doc(),
+            Builtin(ty_var_name_builtin) => ty_var_name_builtin.to_doc(),
+            Auto(auto_id) => mk_lit(&format!("TyAuto({})", auto_id)),
+        }
+    }
+}
+
+impl DocPrinter for TyVarNameUserDefined {
+    fn to_doc(&self) -> Box<Doc> {
+        match &self.token {
+            iden @ concrete_token::ConcreteToken::Iden(_) => iden.to_doc(),
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+}
+
+impl DocPrinter for TyVarNameBuiltin {
+    fn to_doc(&self) -> Box<Doc> {
+        use TyVarNameBuiltin::*;
+        match self {
+            I64 => mk_lit("i64"),
+            F64 => mk_lit("f64"),
+            String => mk_lit("String"),
+            Bool => mk_lit("Bool"),
+            Unit => mk_lit("()"),
+            Arrow => mk_lit("->"),
+        }
+    }
+}
+
+// <<--- helper impl. for doc printer trait
