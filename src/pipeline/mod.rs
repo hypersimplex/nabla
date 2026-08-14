@@ -1,5 +1,6 @@
 use crate::builtin::types::*;
 use crate::builtin::values::*;
+use crate::normalize::case_scrutinee::*;
 use crate::normalize::pattern::*;
 use crate::parse::abstr::*;
 use crate::parse::abstr_structures::*;
@@ -159,10 +160,17 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     println!("<<--- type checked functions");
 
     // type preserving passes --->>
-    println!("desugar patterns to appear only in case clause pattern binders");
+    println!("desugar patterns to appear only in case clause pattern binders..");
     for (id, function_info) in ty_check_results.iter_mut() {
         function_info.typed_expr = desugar_pattern(&mut v_var_supply, &function_info.typed_expr);
     }
+
+    println!("case scrutinee normalization to force having only simple variable..");
+    for (id, function_info) in ty_check_results.iter_mut() {
+        function_info.typed_expr =
+            normalize_case_scrutinee(&mut v_var_supply, &function_info.typed_expr);
+    }
+
     // <<--- type preserving passes
 
     println!("normalized/desugared --->>");
@@ -424,6 +432,17 @@ f a = let Pair { x, y } = a
       in x * y
 "###;
 
+static TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION: &str = r###"
+data Maybe T
+  = Just T
+  | Nothing
+
+f_get y = Just(y + 5)
+f x = case f_get x of
+        Just(val) -> 1
+        _ -> 0
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -607,6 +626,16 @@ fn test_pipeline_pattern_normalization_case_scrutinee() {
 #[test]
 fn test_pipeline_pattern_normalization_constructor() {
     match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_case_scrutinee_normalization() {
+    match compile(TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION) {
         Err(e) => {
             println!("{:?}", e);
         }
