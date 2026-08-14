@@ -1,5 +1,6 @@
 use crate::builtin::types::*;
 use crate::builtin::values::*;
+use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
 use crate::normalize::pattern::*;
 use crate::parse::abstr::*;
@@ -75,7 +76,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &mut ty_var_ns,
     );
 
-    let mut v_var_supply: VVarNameSupply = VVarNameSupply::new();
+    let mut v_var_ns: VVarNameSupply = VVarNameSupply::new();
 
     let mut funcs: BTreeMap<usize, VExpr> = BTreeMap::new();
 
@@ -84,7 +85,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
             // convert to an abstraction expression
             let (vexpr, _annot) = vexpr_and_ty_annot_from_aexpr(
                 &AExpr::AbstractionExpression(def.clone()),
-                &mut v_var_supply,
+                &mut v_var_ns,
             );
             validate_pattern_binder_uniqueness(&vexpr)?;
             assert!(matches!(&vexpr, VExpr::Abstraction(_)));
@@ -143,7 +144,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     let mut ty_check_results = ty_check_funcs(
         &ty_env,
         &mut ty_var_ns,
-        &mut v_var_supply,
+        &mut v_var_ns,
         &original_seeded_lhs_binders,
         &mut env_outer,
         &mut env_v_var_to_ty_scheme_binding_seed,
@@ -162,13 +163,18 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     // type preserving passes --->>
     println!("desugar patterns to appear only in case clause pattern binders..");
     for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr = desugar_pattern(&mut v_var_supply, &function_info.typed_expr);
+        function_info.typed_expr = desugar_pattern(&mut v_var_ns, &function_info.typed_expr);
     }
 
     println!("case scrutinee normalization to force having only simple variable..");
     for (id, function_info) in ty_check_results.iter_mut() {
         function_info.typed_expr =
-            normalize_case_scrutinee(&mut v_var_supply, &function_info.typed_expr);
+            normalize_case_scrutinee(&mut v_var_ns, &function_info.typed_expr);
+    }
+
+    println!("case guard desugaring to case expressions without guard expressions..");
+    for (id, function_info) in ty_check_results.iter_mut() {
+        function_info.typed_expr = desugar_case_guard(&mut v_var_ns, &function_info.typed_expr);
     }
 
     // <<--- type preserving passes
@@ -443,6 +449,13 @@ f x = case f_get x of
         _ -> 0
 "###;
 
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_GUARD: &str = r###"
+f x = case x of
+        y | y>10 -> 100
+        10       ->  50
+        _        ->   0
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -636,6 +649,16 @@ fn test_pipeline_pattern_normalization_constructor() {
 #[test]
 fn test_pipeline_case_scrutinee_normalization() {
     match compile(TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_guard() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_GUARD) {
         Err(e) => {
             println!("{:?}", e);
         }
