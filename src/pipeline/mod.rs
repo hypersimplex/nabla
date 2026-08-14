@@ -1,5 +1,6 @@
 use crate::builtin::types::*;
 use crate::builtin::values::*;
+use crate::normalize::pattern::*;
 use crate::parse::abstr::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
@@ -138,7 +139,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     // schematic type variables in type schemes
     let mut env_outer: EnvVVarToTyScheme = env_v_var_to_ty_scheme.clone();
 
-    let ty_check_results = ty_check_funcs(
+    let mut ty_check_results = ty_check_funcs(
         &ty_env,
         &mut ty_var_ns,
         &mut v_var_supply,
@@ -156,6 +157,20 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         println!();
     }
     println!("<<--- type checked functions");
+
+    // type preserving passes --->>
+    println!("desugar patterns to appear only in case clause pattern binders");
+    for (id, function_info) in ty_check_results.iter_mut() {
+        function_info.typed_expr = desugar_pattern(&mut v_var_supply, &function_info.typed_expr);
+    }
+    // <<--- type preserving passes
+
+    println!("normalized/desugared --->>");
+    for (id, function_info) in ty_check_results.iter() {
+        print!("{}", function_info.typed_expr.to_doc());
+        println!();
+    }
+    println!("<<--- normalized/desugared");
 
     todo!("desugar and compile expressions to more basic forms")
 }
@@ -373,6 +388,42 @@ f :: i64 -> i64 -> i64
 f x y = x * y + 5
 "###;
 
+static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_FUNC_PARAM: &str = r###"
+data Maybe T
+  = Just T
+  | Nothing
+
+f (Just x) True = x + 5
+"###;
+
+static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_LET_EXPR: &str = r###"
+data Maybe T
+  = Just T
+  | Nothing
+
+f x y = let Just(a) = x
+            Just(b) = y
+        in a + b
+"###;
+
+static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE: &str = r###"
+data Maybe T
+  = Just T
+  | Nothing
+
+f_get y = Just 5
+f x = case let Just(y) = x in y*10 of
+        50 -> 1
+        _ -> 0
+"###;
+
+static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR: &str = r###"
+data Pair { x :: i64, y :: i64 }
+
+f a = let Pair { x, y } = a
+      in x * y
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -516,6 +567,46 @@ fn test_pipeline_pattern_record_type_nested() {
 #[test]
 fn test_pipeline_function_signature() {
     match compile(TEST_PIPELINE_CONTENT_FUNCTION_SIGNATURE) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_pattern_normalization_func_param() {
+    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_FUNC_PARAM) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_pattern_normalization_let_expr() {
+    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_LET_EXPR) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_pattern_normalization_case_scrutinee() {
+    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_pattern_normalization_constructor() {
+    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR) {
         Err(e) => {
             println!("{:?}", e);
         }

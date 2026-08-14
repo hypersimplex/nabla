@@ -368,7 +368,7 @@ impl DocPrinter for VVar {
         use VVar::*;
         match self {
             Named(vvar_name) => vvar_name.to_doc(),
-            Anon(anon_id) => mk_lit(&format!("{}", anon_id)),
+            Anon(anon_id) => mk_lit(&format!("VAuto({})", anon_id)),
         }
     }
 }
