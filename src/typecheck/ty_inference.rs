@@ -1531,9 +1531,10 @@ pub(crate) fn ty_check_variable(
         .0
         .get(vexpr)
         .ok_or_else(|| match vexpr {
-            VVar::Named(named) => {
-                let name = format!("{}", named.token);
-                let loc = named
+            VVar::Renamed(named_uniqued) => {
+                let name = format!("{}", named_uniqued.original.token);
+                let loc = named_uniqued
+                    .original
                     .loc
                     .as_ref()
                     .map(|l| format!("{:?}", l))
@@ -1542,6 +1543,13 @@ pub(crate) fn ty_check_variable(
             }
             VVar::Anon(id) => TyError::UnboundVariable(
                 format!("unbound anonymous variable anon_{id}").to_string(),
+            ),
+            VVar::Named(named) => TyError::InternalError(
+                format!(
+                    "encountered variable {:?} that is not renamed; ensure renamer pass is ran",
+                    named
+                )
+                .to_string(),
             ),
         })?;
     // instantiate by generating unique schematic type variables to avoid collision, then apply substitution

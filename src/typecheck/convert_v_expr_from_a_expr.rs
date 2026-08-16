@@ -38,6 +38,7 @@ fn v_expr_from_abstr_expr(
         type_expr,
     } = a_abtr_expr;
 
+    // if the lambda abstraction is not named, then give it a name
     let name: VVar = match name {
         Some(x) => VVar::Named(VVarName {
             token: x.token.clone(),

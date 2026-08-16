@@ -30,6 +30,8 @@ pub(crate) struct VAbstrExpr {
 
 #[derive(Clone, Debug)]
 pub(crate) struct VAbstrParam {
+    // if `pattern` is a simple named variable, then `binder` is the same
+    // else `binder` get assigned with an auto-generated variable name
     pub binder: VVar,
     pub pattern: VPattern,
     pub annotation: Option<TyExpr>,
@@ -95,8 +97,17 @@ pub(crate) struct VConstructorExpr {
 pub(crate) enum VVar {
     Named(VVarName),
 
-    // unnamed lambda expression with auto generated id
+    // auto-generated, anonymous variable
     Anon(u64),
+
+    // original variable + uniqued id
+    Renamed(VVarNameUniqued),
+}
+
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+pub(crate) struct VVarNameUniqued {
+    pub original: VVarName,
+    pub unique: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +195,27 @@ impl VPattern {
             VPattern::Record { fields, .. } => {
                 for (_, field_pat) in fields {
                     field_pat.get_bound_vars(out);
+                }
+            }
+        }
+    }
+    pub(crate) fn subst_vars(&mut self, substitution: &BTreeMap<VVar, VVar>) {
+        match self {
+            VPattern::Wild => {}
+            VPattern::Variable(v) => match substitution.get(v) {
+                Some(x) => *v = x.clone(),
+                _ => {}
+            },
+            VPattern::Literal(_) => {}
+            VPattern::Range { .. } => {}
+            VPattern::Constructor { args, .. } => {
+                for arg in args.iter_mut() {
+                    arg.subst_vars(substitution);
+                }
+            }
+            VPattern::Record { fields, .. } => {
+                for (_, field_pat) in fields.iter_mut() {
+                    field_pat.subst_vars(substitution);
                 }
             }
         }
@@ -369,6 +401,7 @@ impl DocPrinter for VVar {
         match self {
             Named(vvar_name) => vvar_name.to_doc(),
             Anon(anon_id) => mk_lit(&format!("VAuto({})", anon_id)),
+            Renamed(vvar_name_uniqued) => vvar_name_uniqued.to_doc(),
         }
     }
 }
@@ -394,6 +427,15 @@ where
             Inclusive(x) => mk_cat(mk_cat(mk_lit("Inclusive("), x.to_doc()), mk_lit(")")),
             Exclusive(x) => mk_cat(mk_cat(mk_lit("Exclusive("), x.to_doc()), mk_lit(")")),
         }
+    }
+}
+
+impl DocPrinter for VVarNameUniqued {
+    fn to_doc(&self) -> Box<Doc> {
+        mk_cat(
+            mk_cat(self.original.token.to_doc(), mk_lit("_")),
+            mk_lit(&format!("{}", self.unique)),
+        )
     }
 }
 

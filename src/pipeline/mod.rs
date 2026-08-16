@@ -3,6 +3,7 @@ use crate::builtin::values::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
 use crate::normalize::pattern::*;
+use crate::normalize::variable_renamer::*;
 use crate::parse::abstr::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
@@ -64,6 +65,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     let mut ty_var_ns = TyVarNameSupply::new();
     let mut env_v_var_to_ty_scheme = EnvVVarToTyScheme::new();
 
+    // note: builtin name does not change
     init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);
 
     // function name -> top-level type schemes
@@ -91,6 +93,18 @@ pub(crate) fn compile(content: &str) -> CompileResult {
             assert!(matches!(&vexpr, VExpr::Abstraction(_)));
             funcs.insert(idx, vexpr);
         }
+    }
+
+    println!("rename user introduced local variables and patterns to uniquify..");
+    // top level bindings stays constant (identity map)
+    let vvars_outer_scope: BTreeMap<VVar, VVar> = env_v_var_to_ty_scheme
+        .0
+        .keys()
+        .map(|x| (x.clone(), x.clone()))
+        .collect();
+
+    for (idx, expr) in funcs.iter_mut() {
+        *expr = rename_var_unique(&mut v_var_ns, &vvars_outer_scope, expr);
     }
 
     // collect bindings for functions; for each of these: insert a monomorphic type variable for the 1st pass
@@ -161,6 +175,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     println!("<<--- type checked functions");
 
     // type preserving passes --->>
+
     println!("desugar patterns to appear only in case clause pattern binders..");
     for (id, function_info) in ty_check_results.iter_mut() {
         function_info.typed_expr = desugar_pattern(&mut v_var_ns, &function_info.typed_expr);
