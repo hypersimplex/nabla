@@ -656,11 +656,11 @@ impl DocPrinter for ConstructorExpr {
         if let Some(x) = &self.record_fields {
             doc = cat_space(doc, mk_lit("{"));
             for (field, field_expr) in x.iter() {
-                doc = mk_cat(doc, mk_line());
-                doc = cat_space(field.to_doc(), field_expr.to_doc());
+                doc = cat_space(doc, field.to_doc());
+                doc = mk_cat(doc, mk_lit(":"));
+                doc = cat_space(doc, field_expr.to_doc());
                 doc = cat_space(doc, mk_lit(","));
             }
-            doc = mk_cat(doc, mk_line());
             doc = mk_cat(doc, mk_lit("}"));
             doc
         } else {
