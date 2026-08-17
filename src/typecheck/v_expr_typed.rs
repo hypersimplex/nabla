@@ -3,7 +3,7 @@
 
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
-use crate::typecheck::v_expr::{RangeBound, VAtom, VConstructorExpr, VPatternLiteral, VVar};
+use crate::typecheck::v_expr::*;
 use crate::util::printer::*;
 
 #[derive(Clone, Debug)]
@@ -152,6 +152,14 @@ pub(crate) fn mk_typed_vexpr_atom(var: &VVar, ty: &TyExpr) -> TypedVExpr {
         atom: VAtom::Variable(var.clone()),
         ty: ty.clone(),
         ty_args: Vec::new(),
+    })
+}
+
+pub(crate) fn mk_typed_vexpr_from_v_lit_numeric(lit: &VLitNumeric) -> TypedVExpr {
+    TypedVExpr::Atom(TypedVAtom {
+        atom: VAtom::Numeric(lit.clone()),
+        ty: lit.ty(),
+        ty_args: vec![],
     })
 }
 

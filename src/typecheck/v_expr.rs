@@ -120,6 +120,15 @@ pub(crate) struct VLitNumeric {
     pub value: NumericLiteralValue,
 }
 
+impl VLitNumeric {
+    pub(crate) fn ty(&self) -> TyExpr {
+        match self.value {
+            NumericLiteralValue::Int { .. } => mk_ty_i64(),
+            NumericLiteralValue::Float { .. } => mk_ty_f64(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct VLitString {
     pub token: concrete_token::ConcreteToken,

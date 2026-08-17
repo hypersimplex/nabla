@@ -4,6 +4,7 @@ use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_scheme::*;
 use crate::typecheck::ty_var_name_supply::*;
 use crate::typecheck::v_expr::*;
+use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name::*;
 
 // initialize all builtin values (operators, functions) in the given environment
@@ -361,4 +362,143 @@ pub fn init_v_var_ty_scheme_builtin_match_fail(
             ty_expr: Box::new(TyExpr::TyVar(ty_var_any)),
         },
     );
+}
+
+pub(crate) fn mk_builtin_var_gt() -> VVar {
+    VVar::Named(VVarName {
+        token: concrete_token::ConcreteToken::AngleR,
+        loc: None,
+        builtin: Some(FnBuiltin::BinaryGreater),
+    })
+}
+
+pub(crate) fn mk_builtin_var_ge() -> VVar {
+    VVar::Named(VVarName {
+        token: concrete_token::ConcreteToken::GreaterEqual,
+        loc: None,
+        builtin: Some(FnBuiltin::BinaryGreaterEqual),
+    })
+}
+
+pub(crate) fn mk_builtin_var_lt() -> VVar {
+    VVar::Named(VVarName {
+        token: concrete_token::ConcreteToken::AngleL,
+        loc: None,
+        builtin: Some(FnBuiltin::BinaryLess),
+    })
+}
+
+pub(crate) fn mk_builtin_var_le() -> VVar {
+    VVar::Named(VVarName {
+        token: concrete_token::ConcreteToken::LessEqual,
+        loc: None,
+        builtin: Some(FnBuiltin::BinaryLessEqual),
+    })
+}
+
+pub(crate) fn mk_builtin_var_and() -> VVar {
+    VVar::Named(VVarName {
+        token: concrete_token::ConcreteToken::And,
+        loc: None,
+        builtin: Some(FnBuiltin::LogicalAnd),
+    })
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_gt(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    expr1: &TypedVExpr,
+    expr2: &TypedVExpr,
+) -> TypedVExpr {
+    let vvar = mk_builtin_var_gt();
+    let callable =
+        mk_builtin_typed_vexpr_callable(env_v_var_to_ty_scheme, &vvar, &[expr1.ty().clone()]);
+    TypedVExpr::Application(TypedVAppExpr {
+        callable: Box::new(callable),
+        args: vec![expr1.clone(), expr2.clone()],
+        ty: mk_ty_bool(),
+    })
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_ge(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    expr1: &TypedVExpr,
+    expr2: &TypedVExpr,
+) -> TypedVExpr {
+    let vvar = mk_builtin_var_ge();
+    let callable =
+        mk_builtin_typed_vexpr_callable(env_v_var_to_ty_scheme, &vvar, &[expr1.ty().clone()]);
+    TypedVExpr::Application(TypedVAppExpr {
+        callable: Box::new(callable),
+        args: vec![expr1.clone(), expr2.clone()],
+        ty: mk_ty_bool(),
+    })
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_lt(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    expr1: &TypedVExpr,
+    expr2: &TypedVExpr,
+) -> TypedVExpr {
+    let vvar = mk_builtin_var_lt();
+    let callable =
+        mk_builtin_typed_vexpr_callable(env_v_var_to_ty_scheme, &vvar, &[expr1.ty().clone()]);
+    TypedVExpr::Application(TypedVAppExpr {
+        callable: Box::new(callable),
+        args: vec![expr1.clone(), expr2.clone()],
+        ty: mk_ty_bool(),
+    })
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_le(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    expr1: &TypedVExpr,
+    expr2: &TypedVExpr,
+) -> TypedVExpr {
+    let vvar = mk_builtin_var_le();
+    let callable =
+        mk_builtin_typed_vexpr_callable(env_v_var_to_ty_scheme, &vvar, &[expr1.ty().clone()]);
+    TypedVExpr::Application(TypedVAppExpr {
+        callable: Box::new(callable),
+        args: vec![expr1.clone(), expr2.clone()],
+        ty: mk_ty_bool(),
+    })
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_callable(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    vvar: &VVar,
+    ty_args: &[TyExpr],
+) -> TypedVExpr {
+    let ty_callable = env_v_var_to_ty_scheme.get(vvar).unwrap().clone().ty_expr;
+    let callable = TypedVExpr::Atom(TypedVAtom {
+        atom: VAtom::Variable(vvar.clone()),
+        ty: *ty_callable,
+        ty_args: ty_args.iter().cloned().collect(),
+    });
+    callable
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_logical_and(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    expr1: &TypedVExpr,
+    expr2: &TypedVExpr,
+) -> TypedVExpr {
+    let var_logical_and = mk_builtin_var_and();
+    let ty_logical_and = env_v_var_to_ty_scheme
+        .get(&var_logical_and)
+        .unwrap()
+        .clone()
+        .ty_expr;
+
+    let callable = TypedVExpr::Atom(TypedVAtom {
+        atom: VAtom::Variable(var_logical_and),
+        ty: *ty_logical_and,
+        ty_args: vec![],
+    });
+
+    TypedVExpr::Application(TypedVAppExpr {
+        callable: Box::new(callable),
+        args: vec![expr1.clone(), expr2.clone()],
+        ty: mk_ty_bool(),
+    })
 }

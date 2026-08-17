@@ -2,6 +2,7 @@ use crate::builtin::types::*;
 use crate::builtin::values::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
+use crate::normalize::literal_range_pattern::*;
 use crate::normalize::pattern::*;
 use crate::normalize::variable_renamer::*;
 use crate::parse::abstr::*;
@@ -181,15 +182,30 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         function_info.typed_expr = desugar_pattern(&mut v_var_ns, &function_info.typed_expr);
     }
 
-    println!("case scrutinee normalization to force having only simple variable..");
+    println!("desugar case literal range pattern to case guard expression");
+    for (id, function_info) in ty_check_results.iter_mut() {
+        function_info.typed_expr = desugar_literal_range_pattern(
+            &mut v_var_ns,
+            &mut env_v_var_to_ty_scheme,
+            &function_info.typed_expr,
+        );
+    }
+
+    println!("normalize case scrutinee to be simple variable..");
     for (id, function_info) in ty_check_results.iter_mut() {
         function_info.typed_expr =
             normalize_case_scrutinee(&mut v_var_ns, &function_info.typed_expr);
     }
 
-    println!("case guard desugaring to case expressions without guard expressions..");
+    println!("desugar case guard to case expressions without guard expressions..");
     for (id, function_info) in ty_check_results.iter_mut() {
         function_info.typed_expr = desugar_case_guard(&mut v_var_ns, &function_info.typed_expr);
+    }
+
+    println!("normalize case scrutinee to be simple variable again after case guard desugaring..");
+    for (id, function_info) in ty_check_results.iter_mut() {
+        function_info.typed_expr =
+            normalize_case_scrutinee(&mut v_var_ns, &function_info.typed_expr);
     }
 
     // <<--- type preserving passes
@@ -201,7 +217,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     }
     println!("<<--- normalized/desugared");
 
-    todo!("desugar and compile expressions to more basic forms")
+    todo!("compile case exprs to more basic forms")
 }
 
 fn insert_declared_fun_signatures(
@@ -471,6 +487,25 @@ f x = case x of
         _        ->   0
 "###;
 
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT: &str = r###"
+f x = case x of
+        0..10 -> 100
+        _     ->   0
+"###;
+
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_FLOAT: &str = r###"
+f x = case x of
+        0.0 .. 10.5 -> 100
+        _           ->   0
+"###;
+
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT_AND_GUARD: &str = r###"
+f x = case x of
+        x | x > 15 -> 200
+        0..10      -> 100
+        _          ->   0
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -674,6 +709,36 @@ fn test_pipeline_case_scrutinee_normalization() {
 #[test]
 fn test_pipeline_desugar_case_guard() {
     match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_GUARD) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_literal_range_int() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_literal_range_float() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_FLOAT) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_literal_range_int_and_guard() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT_AND_GUARD) {
         Err(e) => {
             println!("{:?}", e);
         }
