@@ -396,6 +396,14 @@ pub(crate) fn mk_builtin_var_le() -> VVar {
     })
 }
 
+pub(crate) fn mk_builtin_var_eq() -> VVar {
+    VVar::Named(VVarName {
+        token: concrete_token::ConcreteToken::EqualEqual,
+        loc: None,
+        builtin: Some(FnBuiltin::BinaryEqual),
+    })
+}
+
 pub(crate) fn mk_builtin_var_and() -> VVar {
     VVar::Named(VVarName {
         token: concrete_token::ConcreteToken::And,
@@ -455,6 +463,21 @@ pub(crate) fn mk_builtin_typed_vexpr_le(
     expr2: &TypedVExpr,
 ) -> TypedVExpr {
     let vvar = mk_builtin_var_le();
+    let callable =
+        mk_builtin_typed_vexpr_callable(env_v_var_to_ty_scheme, &vvar, &[expr1.ty().clone()]);
+    TypedVExpr::Application(TypedVAppExpr {
+        callable: Box::new(callable),
+        args: vec![expr1.clone(), expr2.clone()],
+        ty: mk_ty_bool(),
+    })
+}
+
+pub(crate) fn mk_builtin_typed_vexpr_eq(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    expr1: &TypedVExpr,
+    expr2: &TypedVExpr,
+) -> TypedVExpr {
+    let vvar = mk_builtin_var_eq();
     let callable =
         mk_builtin_typed_vexpr_callable(env_v_var_to_ty_scheme, &vvar, &[expr1.ty().clone()]);
     TypedVExpr::Application(TypedVAppExpr {

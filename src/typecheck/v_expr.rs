@@ -137,6 +137,12 @@ pub(crate) struct VLitString {
     pub loc: Option<loc::Location>,
 }
 
+impl VLitString {
+    pub(crate) fn ty(&self) -> TyExpr {
+        mk_ty_string()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum NumericLiteralValue {
     Int { raw: String, parsed: Option<i64> },
@@ -400,7 +406,7 @@ impl DocPrinter for NumericLiteralValue {
 
 impl DocPrinter for VLitString {
     fn to_doc(&self) -> Box<Doc> {
-        self.token.to_doc()
+        mk_cat(mk_cat(mk_lit("\""), self.token.to_doc()), mk_lit("\""))
     }
 }
 

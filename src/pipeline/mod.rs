@@ -2,6 +2,7 @@ use crate::builtin::types::*;
 use crate::builtin::values::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
+use crate::normalize::literal_pattern::*;
 use crate::normalize::literal_range_pattern::*;
 use crate::normalize::pattern::*;
 use crate::normalize::variable_renamer::*;
@@ -185,6 +186,15 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     println!("desugar case literal range pattern to case guard expression");
     for (id, function_info) in ty_check_results.iter_mut() {
         function_info.typed_expr = desugar_literal_range_pattern(
+            &mut v_var_ns,
+            &mut env_v_var_to_ty_scheme,
+            &function_info.typed_expr,
+        );
+    }
+
+    println!("desugar case literal pattern to case guard expression");
+    for (id, function_info) in ty_check_results.iter_mut() {
+        function_info.typed_expr = desugar_literal_pattern(
             &mut v_var_ns,
             &mut env_v_var_to_ty_scheme,
             &function_info.typed_expr,
@@ -506,6 +516,12 @@ f x = case x of
         _          ->   0
 "###;
 
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_PATTERN: &str = r###"
+f x = case x of
+        12         ->  50
+        _          ->   0
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -739,6 +755,16 @@ fn test_pipeline_desugar_case_literal_range_float() {
 #[test]
 fn test_pipeline_desugar_case_literal_range_int_and_guard() {
     match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT_AND_GUARD) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_literal_pattern() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_PATTERN) {
         Err(e) => {
             println!("{:?}", e);
         }
