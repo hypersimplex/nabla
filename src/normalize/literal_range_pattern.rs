@@ -17,26 +17,26 @@ pub(crate) fn desugar_literal_range_pattern(
 ) -> TypedVExpr {
     match expr {
         TypedVExpr::Abstraction(abstr) => {
-            desugar_literal_pattern_abstr(ns, env_v_var_to_ty_scheme, abstr)
+            desugar_literal_range_pattern_abstr(ns, env_v_var_to_ty_scheme, abstr)
         }
         TypedVExpr::Application(app) => {
-            desugar_literal_pattern_app(ns, env_v_var_to_ty_scheme, app)
+            desugar_literal_range_pattern_app(ns, env_v_var_to_ty_scheme, app)
         }
         TypedVExpr::Case(case_expr) => {
-            desugar_literal_pattern_case(ns, env_v_var_to_ty_scheme, case_expr)
+            desugar_literal_range_pattern_case(ns, env_v_var_to_ty_scheme, case_expr)
         }
         TypedVExpr::Let(let_expr) => {
-            desugar_literal_pattern_let_expr(ns, env_v_var_to_ty_scheme, let_expr)
+            desugar_literal_range_pattern_let_expr(ns, env_v_var_to_ty_scheme, let_expr)
         }
         TypedVExpr::Atom(atom) => TypedVExpr::Atom(atom.clone()),
         TypedVExpr::Constructor(constructor) => {
-            desugar_literal_pattern_constructor(ns, env_v_var_to_ty_scheme, constructor)
+            desugar_literal_range_pattern_constructor(ns, env_v_var_to_ty_scheme, constructor)
         }
     }
 }
 
 // note: don't support literal range pattern in parameter pattern
-pub(crate) fn desugar_literal_pattern_abstr(
+pub(crate) fn desugar_literal_range_pattern_abstr(
     ns: &mut VVarNameSupply,
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVAbstrExpr,
@@ -59,7 +59,7 @@ pub(crate) fn desugar_literal_pattern_abstr(
     })
 }
 
-pub(crate) fn desugar_literal_pattern_app(
+pub(crate) fn desugar_literal_range_pattern_app(
     ns: &mut VVarNameSupply,
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVAppExpr,
@@ -79,7 +79,7 @@ pub(crate) fn desugar_literal_pattern_app(
     })
 }
 
-pub(crate) fn desugar_literal_pattern_case(
+pub(crate) fn desugar_literal_range_pattern_case(
     ns: &mut VVarNameSupply,
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVCaseExpr,
@@ -187,15 +187,25 @@ pub(crate) fn desugar_literal_pattern_case(
     })
 }
 
-// note: don't support literal range patterns in let def pattern
-pub(crate) fn desugar_literal_pattern_let_expr(
+// note: don't support literal range patterns in LHS of let defs, but
+// recursively desugar for RHS of defs
+pub(crate) fn desugar_literal_range_pattern_let_expr(
     ns: &mut VVarNameSupply,
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVLetExpr,
 ) -> TypedVExpr {
     let TypedVLetExpr { defs, body, ty } = expr;
     TypedVExpr::Let(TypedVLetExpr {
-        defs: defs.clone(),
+        defs: defs
+            .iter()
+            .map(|(lhs_pat, rhs_expr)| {
+                (
+                    lhs_pat.clone(),
+                    desugar_literal_range_pattern(ns, env_v_var_to_ty_scheme, rhs_expr),
+                )
+            })
+            .collect(),
+
         body: Box::new(desugar_literal_range_pattern(
             ns,
             env_v_var_to_ty_scheme,
@@ -205,7 +215,7 @@ pub(crate) fn desugar_literal_pattern_let_expr(
     })
 }
 
-pub(crate) fn desugar_literal_pattern_constructor(
+pub(crate) fn desugar_literal_range_pattern_constructor(
     ns: &mut VVarNameSupply,
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVConstructorExpr,

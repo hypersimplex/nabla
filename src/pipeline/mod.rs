@@ -522,6 +522,15 @@ f x = case x of
         _          ->   0
 "###;
 
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERALS_IN_LET_DEFS: &str = r###"
+ff z =
+ let y = case z of
+           0..10         -> 10
+           120           -> 20
+           _             -> 30
+ in y
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -765,6 +774,16 @@ fn test_pipeline_desugar_case_literal_range_int_and_guard() {
 #[test]
 fn test_pipeline_desugar_case_literal_pattern() {
     match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_PATTERN) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_literals_in_let_defs() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERALS_IN_LET_DEFS) {
         Err(e) => {
             println!("{:?}", e);
         }
