@@ -12,3 +12,5 @@ Planned features & non-features:
 - no support for type classes for now
 - GC'd backend
 - inferred types and optional user specified types
+- no support for list comprehension for now
+- not optimizing for efficient compilation for now
