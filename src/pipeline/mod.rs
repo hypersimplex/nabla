@@ -1,5 +1,6 @@
 use crate::builtin::types::*;
 use crate::builtin::values::*;
+use crate::core::core_ir::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
 use crate::normalize::literal_pattern::*;
@@ -227,7 +228,16 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     }
     println!("<<--- normalized/desugared");
 
-    todo!("compile case exprs to more basic forms")
+    // [WIP]
+    let top_level_core_exprs: Vec<_> = ty_check_results
+        .iter()
+        .map(|(idx, x)| {
+            let core_expr = core_expr_from_typed_v_expr(&x.typed_expr);
+            core_expr
+        })
+        .collect();
+
+    Ok(())
 }
 
 fn insert_declared_fun_signatures(

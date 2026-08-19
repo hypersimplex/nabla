@@ -68,11 +68,12 @@ pub(crate) struct VCaseClause {
     pub body: Box<VExprAndTyAnnot>,
 }
 
+// [todo]: get rid of this and flatten into TypedVExpr
 #[derive(Clone, Debug)]
 pub(crate) enum VAtom {
     Numeric(VLitNumeric),
     String(VLitString),
-    Unit,
+    Unit, // [todo]: don't really need this special variant
     Variable(VVar),
 }
 
