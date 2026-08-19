@@ -26,8 +26,6 @@ pub(crate) enum TyVarNameBuiltin {
     I64,
     F64,
     String,
-    Bool,
-    Unit,
     Arrow, // internally maps to a type scheme
 }
 
@@ -71,8 +69,6 @@ impl DocPrinter for TyVarNameBuiltin {
             I64 => mk_lit("i64"),
             F64 => mk_lit("f64"),
             String => mk_lit("String"),
-            Bool => mk_lit("Bool"),
-            Unit => mk_lit("()"),
             Arrow => mk_lit("->"),
         }
     }

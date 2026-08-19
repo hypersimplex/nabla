@@ -6,6 +6,7 @@ use crate::typecheck::ty_env::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
+use crate::typecheck::ty_var_name_supply::*;
 use std::collections::*;
 
 /// algebraic data type definition that acts as schema metadata, stored in the
@@ -210,7 +211,10 @@ fn build_sum_type_definition(sum: &DataSum, params: &DataParams) -> Result<ADTDe
 /// pass 1 registers ADT names and parameters
 ///
 /// pass 2 fills constructors
-pub(crate) fn register_adt_into_type_env(items: &[TopLevelItem]) -> Result<TyEnv, TyError> {
+pub(crate) fn register_adt_into_type_env(
+    ty_var_ns: &mut TyVarNameSupply,
+    items: &[TopLevelItem],
+) -> Result<TyEnv, TyError> {
     validate_no_builtin_type_shadowing(items)?;
     let mut env = TyEnv::new();
 
@@ -251,28 +255,55 @@ pub(crate) fn register_adt_into_type_env(items: &[TopLevelItem]) -> Result<TyEnv
     }
 
     // TODO: determine if this is the right place to add builtin structures
-    // into the  env
+    // into the env
     //
     // conflicts with user types should be enforced by
     // `validate_no_builtin_type_shadowing`
-    if env.get_adt("Bool").is_err() {
-        env.add_adt(ADTDef {
-            name: "Bool".to_string(),
-            ty_params: vec![],
-            constructors: vec![
-                ConstructorDef {
-                    name: "True".to_string(),
-                    field_types: vec![],
-                    field_names: None,
-                },
-                ConstructorDef {
-                    name: "False".to_string(),
-                    field_types: vec![],
-                    field_names: None,
-                },
-            ],
-        });
-    }
+
+    env.add_adt(ADTDef {
+        name: "Bool".to_string(),
+        ty_params: vec![],
+        constructors: vec![
+            ConstructorDef {
+                name: "True".to_string(),
+                field_types: vec![],
+                field_names: None,
+            },
+            ConstructorDef {
+                name: "False".to_string(),
+                field_types: vec![],
+                field_names: None,
+            },
+        ],
+    });
+
+    let ty_var_name = ty_var_ns.generate();
+    env.add_adt(ADTDef {
+        name: "Maybe".to_string(),
+        ty_params: vec![ty_var_name.clone()],
+        constructors: vec![
+            ConstructorDef {
+                name: "Nothing".to_string(),
+                field_types: vec![],
+                field_names: None,
+            },
+            ConstructorDef {
+                name: "Just".to_string(),
+                field_types: vec![TyExpr::TyVar(ty_var_name)],
+                field_names: None,
+            },
+        ],
+    });
+
+    env.add_adt(ADTDef {
+        name: "Unit".to_string(),
+        ty_params: vec![],
+        constructors: vec![ConstructorDef {
+            name: "Unit".to_string(),
+            field_types: vec![],
+            field_names: None,
+        }],
+    });
 
     Ok(env)
 }

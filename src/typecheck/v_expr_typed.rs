@@ -171,14 +171,6 @@ pub(crate) fn mk_typed_vexpr_from_v_lit_string(lit: &VLitString) -> TypedVExpr {
     })
 }
 
-pub(crate) fn mk_typed_vexpr_from_v_lit_unit() -> TypedVExpr {
-    TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::Unit,
-        ty: mk_ty_unit(),
-        ty_args: vec![],
-    })
-}
-
 impl TypedVPattern {
     pub(crate) fn ty(&self) -> &TyExpr {
         match self {

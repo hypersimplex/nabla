@@ -17,7 +17,6 @@ pub(crate) fn vexpr_and_ty_annot_from_aexpr(
         ApplyExpression(item) => v_expr_from_app_expr(item, v_var_supply),
         BlockExpression(item) => v_expr_from_block_expr(item, v_var_supply),
         CaseExpression(item) => v_expr_from_case_expr(item, v_var_supply),
-        UnitExpr => (VExpr::Atom(VAtom::Unit), Some(mk_ty_unit())),
         IdentifierExpression(item) => v_expr_from_iden_expr(item, v_var_supply),
         LetExpression(item) => v_expr_from_let_expr(item, v_var_supply),
         NumericExpr(item) => v_expr_from_lit_num_expr(item, v_var_supply),
@@ -363,7 +362,7 @@ fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
             builtin: None,
         })),
         PatternExpr::Literal(lit) => match &lit.expr {
-            AExpr::NumericExpr(_) | AExpr::StringExpr(_) | AExpr::UnitExpr => {
+            AExpr::NumericExpr(_) | AExpr::StringExpr(_) => {
                 VPattern::Literal(literal_expr_to_vpattern(lit))
             }
             other => panic!("unsupported literal pattern expression: {:?}", other),
@@ -440,7 +439,6 @@ fn literal_expr_to_vpattern(lit: &abstr_structures::AExprAnnot) -> VPatternLiter
             token: string.literal.token.clone(),
             loc: Some(string.literal.loc.clone()),
         }),
-        AExpr::UnitExpr => VPatternLiteral::Unit,
         other => panic!("unsupported literal pattern expression: {:?}", other),
     }
 }

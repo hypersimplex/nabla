@@ -157,7 +157,7 @@
 ///       `A -> B -> C` <=> `A -> (B -> C)`
 ///
 /// -----------------------------------------------------------------------------
-use super::abstr_pattern::{PatternTokenStream, parse_pattern_source};
+use super::abstr_pattern::*;
 use super::abstr_structures::*;
 use super::concrete_token::*;
 use super::layout::*;
@@ -537,18 +537,22 @@ fn parse_type_atom_source(source: &mut impl ConcreteTokenSource) -> ParseResult<
                     ..
                 })
             ) {
-                // terminal case:
-                // () type
-                // TODO: convert to a special unit type?
-                source.next_concrete()?;
-                return Ok(ATypeExprComplex::Iden(ATypeExprIden {
-                    identifier: ConcreteTokenAndLoc {
-                        token: ConcreteToken::Iden("()".into()),
-                        loc: token.loc,
-                        starts_a_line: false,
-                    },
-                    type_parameters: Vec::new(),
-                }));
+                // // terminal case:
+                // // () type
+                // source.next_concrete()?;
+                // return Ok(ATypeExprComplex::Iden(ATypeExprIden {
+                //     identifier: ConcreteTokenAndLoc {
+                //         token: ConcreteToken::Iden("Unit".into()),
+                //         loc: token.loc,
+                //         starts_a_line: false,
+                //     },
+                //     type_parameters: Vec::new(),
+                // }));
+                return Err(ParseError::UnexpectedToken {
+                    expected: "`()` is currently not support, please use `Unit` instead"
+                        .to_string(),
+                    found: Some(token),
+                });
             }
             // recursion
             let ty = parse_type_expr_source(source)?;
@@ -752,12 +756,11 @@ where
                     ..
                 })
             ) {
-                // unit type
-                source.next_concrete()?;
-                return Ok(Some(AExprAnnot {
-                    expr: AExpr::UnitExpr,
-                    type_expr: None,
-                }));
+                // [todo]: support parsing tuple and unit
+                return Err(ParseError::unexpected_token(
+                    "use `Unit` instead of `()` for now",
+                    source.peek_concrete().unwrap(),
+                ));
             }
             let expr = parse_expr_source(source, 0)?.ok_or_else(|| {
                 ParseError::unexpected_token("expression inside parentheses", Some(next.clone()))

@@ -120,11 +120,6 @@ pub(crate) fn desugar_literal_pattern_case(
                                 &binder_typed_expr,
                                 &mk_typed_vexpr_from_v_lit_string(&s),
                             ),
-                            VPatternLiteral::Unit => mk_builtin_typed_vexpr_eq(
-                                env_v_var_to_ty_scheme,
-                                &binder_typed_expr,
-                                &mk_typed_vexpr_from_v_lit_unit(),
-                            ),
                         };
 
                         let guard_new = match guard {

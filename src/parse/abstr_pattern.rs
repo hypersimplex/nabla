@@ -240,17 +240,7 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
         // consume '('
         self.next()?;
 
-        // special-case unit pattern: () and early return
-        if let Some(peek) = self.peek()? {
-            if matches!(peek.token, ConcreteToken::ParenR) {
-                // consume ')'
-                self.next()?;
-                return Ok(PatternExpr::Literal(AExprAnnot {
-                    expr: AExpr::UnitExpr,
-                    type_expr: None,
-                }));
-            }
-        }
+        // [todo]: support parsing tuple and unit
 
         let inner = self.parse_pattern()?;
 
@@ -530,82 +520,6 @@ mod tests {
         ];
         let pattern = parse_pattern(&tokens).unwrap();
         assert!(matches!(pattern, PatternExpr::Variable(_)));
-    }
-
-    #[test]
-    fn parse_unit_pattern() {
-        let tokens = vec![
-            make_token(ConcreteToken::ParenL),
-            make_token(ConcreteToken::ParenR),
-        ];
-        let pattern = parse_pattern(&tokens).unwrap();
-        match pattern {
-            PatternExpr::Literal(AExprAnnot {
-                expr: AExpr::UnitExpr,
-                ..
-            }) => {}
-            other => panic!("expected unit literal pattern, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_constructor_with_unit_arg_pattern() {
-        let tokens = vec![
-            make_token(ConcreteToken::Iden("Some".to_string())),
-            make_token(ConcreteToken::ParenL),
-            make_token(ConcreteToken::ParenR),
-        ];
-        let pattern = parse_pattern(&tokens).unwrap();
-        match pattern {
-            PatternExpr::Constructor {
-                args: PatternConstructorArgs::Positional(args),
-                ..
-            } => {
-                assert_eq!(args.len(), 1);
-                assert!(matches!(
-                    args[0],
-                    PatternExpr::Literal(AExprAnnot {
-                        expr: AExpr::UnitExpr,
-                        ..
-                    })
-                ));
-            }
-            other => panic!(
-                "expected constructor pattern with unit arg, got {:?}",
-                other
-            ),
-        }
-    }
-
-    #[test]
-    fn parse_record_pattern_with_unit_field() {
-        let tokens = vec![
-            make_token(ConcreteToken::Iden("Point".to_string())),
-            make_token(ConcreteToken::BraceL),
-            make_token(ConcreteToken::Iden("x".to_string())),
-            make_token(ConcreteToken::Equal),
-            make_token(ConcreteToken::ParenL),
-            make_token(ConcreteToken::ParenR),
-            make_token(ConcreteToken::BraceR),
-        ];
-        let pattern = parse_pattern(&tokens).unwrap();
-        match pattern {
-            PatternExpr::Constructor {
-                args: PatternConstructorArgs::Record { fields, .. },
-                ..
-            } => {
-                assert_eq!(fields.len(), 1);
-                let (_name, field_pat) = &fields[0];
-                assert!(matches!(
-                    field_pat,
-                    PatternExpr::Literal(AExprAnnot {
-                        expr: AExpr::UnitExpr,
-                        ..
-                    })
-                ));
-            }
-            other => panic!("expected record pattern with unit field, got {:?}", other),
-        }
     }
 
     #[test]

@@ -63,10 +63,10 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     println!("{}", top_level.to_doc());
 
-    let ty_env = register_adt_into_type_env(top_level.0.as_slice())?;
-
     let mut ty_var_ns = TyVarNameSupply::new();
     let mut env_v_var_to_ty_scheme = EnvVVarToTyScheme::new();
+
+    let ty_env = register_adt_into_type_env(&mut ty_var_ns, top_level.0.as_slice())?;
 
     // note: builtin name does not change
     init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);
@@ -541,6 +541,29 @@ ff z =
  in y
 "###;
 
+static TEST_PIPELINE_CONTENT_UNIT_TYPE: &str = r###"
+f_get Unit = Unit
+f = f_get Unit
+"###;
+
+static TEST_PIPELINE_CONTENT_CASE_UNIT_CONSTRUCTOR_PATTERN: &str = r###"
+f x = case x of
+        Just(Unit) -> 7
+        _ -> 10
+"###;
+
+static TEST_PIPELINE_CONTENT_UNIT_TYPE_SIGNATURE: &str = r###"
+f_get :: Unit -> Unit
+f_get Unit = Unit
+"###;
+
+static TEST_PIPELINE_CONTENT_BOOL: &str = r###"
+f_get :: Bool -> Bool
+f_get x = case x of
+            True  -> False
+            False -> True
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -794,6 +817,46 @@ fn test_pipeline_desugar_case_literal_pattern() {
 #[test]
 fn test_pipeline_desugar_case_literals_in_let_defs() {
     match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERALS_IN_LET_DEFS) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_unit_type() {
+    match compile(TEST_PIPELINE_CONTENT_UNIT_TYPE) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_case_unit_constructor_pattern() {
+    match compile(TEST_PIPELINE_CONTENT_CASE_UNIT_CONSTRUCTOR_PATTERN) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_unit_type_signature() {
+    match compile(TEST_PIPELINE_CONTENT_UNIT_TYPE_SIGNATURE) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_bool() {
+    match compile(TEST_PIPELINE_CONTENT_BOOL) {
         Err(e) => {
             println!("{:?}", e);
         }

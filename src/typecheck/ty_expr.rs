@@ -121,11 +121,6 @@ pub(crate) fn mk_ty_bool() -> TyExpr {
     build_adt_type_no_loc("Bool", &[])
 }
 
-/// build the Unit type
-pub(crate) fn mk_ty_unit() -> TyExpr {
-    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::Unit))
-}
-
 /// collect the spine of a type application
 /// eg: TyApp(TyApp(TyApp(Arrow, Int), Bool), String) returns (Arrow, [Int, Bool, String])
 /// eg:

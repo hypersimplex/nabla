@@ -413,17 +413,6 @@ pub(crate) fn ty_check_vexpr_typed(
                     }),
                 ))
             }
-            VAtom::Unit => {
-                let ty = mk_ty_unit();
-                Ok((
-                    subst_id(),
-                    TypedVExpr::Atom(TypedVAtom {
-                        atom: VAtom::Unit,
-                        ty,
-                        ty_args: Vec::new(),
-                    }),
-                ))
-            }
             VAtom::Variable(var) => {
                 let (subst, ty, ty_args) = ty_check_variable(env_var_to_ty_scheme, ty_var_ns, var)?;
                 Ok((
@@ -1655,7 +1644,6 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
             let vexpr = match literal {
                 VPatternLiteral::Numeric(num) => VExpr::Atom(VAtom::Numeric(num.clone())),
                 VPatternLiteral::String(lit) => VExpr::Atom(VAtom::String(lit.clone())),
-                VPatternLiteral::Unit => VExpr::Atom(VAtom::Unit),
             };
             let (subst, typed_expr) =
                 ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &vexpr)?;
@@ -1675,14 +1663,12 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                 RangeBound::Inclusive(lit) | RangeBound::Exclusive(lit) => match lit {
                     VPatternLiteral::Numeric(num) => VExpr::Atom(VAtom::Numeric(num.clone())),
                     VPatternLiteral::String(lit) => VExpr::Atom(VAtom::String(lit.clone())),
-                    VPatternLiteral::Unit => VExpr::Atom(VAtom::Unit),
                 },
             };
             let v_expr_end = match end {
                 RangeBound::Inclusive(lit) | RangeBound::Exclusive(lit) => match lit {
                     VPatternLiteral::Numeric(num) => VExpr::Atom(VAtom::Numeric(num.clone())),
                     VPatternLiteral::String(lit) => VExpr::Atom(VAtom::String(lit.clone())),
-                    VPatternLiteral::Unit => VExpr::Atom(VAtom::Unit),
                 },
             };
             let (subst_start, typed_start) =

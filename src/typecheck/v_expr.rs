@@ -73,7 +73,6 @@ pub(crate) struct VCaseClause {
 pub(crate) enum VAtom {
     Numeric(VLitNumeric),
     String(VLitString),
-    Unit, // [todo]: don't really need this special variant
     Variable(VVar),
 }
 
@@ -242,7 +241,6 @@ impl VPattern {
 pub(crate) enum VPatternLiteral {
     Numeric(VLitNumeric),
     String(VLitString),
-    Unit,
 }
 
 pub(crate) type VExprAndTyAnnot = (VExpr, Option<TyExpr>);
@@ -383,7 +381,6 @@ impl DocPrinter for VAtom {
         match self {
             Numeric(lit_num) => lit_num.to_doc(),
             String(lit_string) => lit_string.to_doc(),
-            Unit => mk_lit("()"),
             Variable(var) => var.to_doc(),
         }
     }
@@ -428,7 +425,6 @@ impl DocPrinter for VPatternLiteral {
         match self {
             Numeric(vlit_num) => vlit_num.to_doc(),
             String(vlit_string) => vlit_string.to_doc(),
-            Unit => mk_lit("()"),
         }
     }
 }

@@ -762,7 +762,6 @@ impl DocPrinter for AExprAnnot {
 pub(crate) enum AExpr {
     StringExpr(LiteralStringExpr),
     NumericExpr(LiteralNumericExpr),
-    UnitExpr,
     IdentifierExpression(IdenExpr),
     LetExpression(LetExpr),
     AbstractionExpression(AbstractionExpr),
@@ -778,7 +777,6 @@ impl DocPrinter for AExpr {
         match self {
             StringExpr(x) => x.to_doc(),
             NumericExpr(x) => x.to_doc(),
-            UnitExpr => mk_lit("()"),
             IdentifierExpression(x) => x.to_doc(),
             LetExpression(x) => x.to_doc(),
             AbstractionExpression(x) => x.to_doc(),
