@@ -11,10 +11,11 @@ literatures from SPJ, Wolfe, and Banerjee.
 Planned features & non-features:
 - no support for type classes for now (eg: "System F"-like core for now)
 - GC'd backend
+- evaluation strategy: weak head normal form
 - inferred types and optional user specified types
 - no support for list comprehension for now
 - not optimizing for efficient compilation for now
 - support for literal (range) pattern in case expression
 - monomorphization [planned]
 - builtin tabular(arrays/matrices) support [possibly/experimental]
-- experimental construct for explicit finite iterations (eg: like recursion and loops but with termination guarantee) [possibly/experimental]
+- experimental construct for explicit finite iterations (eg: like recursion and loops but with termination guarantee) + strictness opt-in => enabling polyhedral analysis [possibly/experimental]
