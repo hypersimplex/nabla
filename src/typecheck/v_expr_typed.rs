@@ -2,6 +2,7 @@
 //! checking/inference
 
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_scheme::*;
 use crate::typecheck::ty_var_name::*;
 use crate::typecheck::v_expr::*;
 use crate::util::printer::*;
@@ -12,8 +13,46 @@ pub(crate) enum TypedVExpr {
     Application(TypedVAppExpr),
     Case(TypedVCaseExpr),
     Let(TypedVLetExpr),
-    Atom(TypedVAtom),
+    LitNumeric(TypedVLitNumeric),
+    LitString(TypedVLitString),
+    // represents callsite/reference of a variable
+    //
+    // note: definition of variable is done in let expression / top level
+    // definition
+    Variable(TypedVVariable),
     Constructor(TypedVConstructorExpr),
+}
+
+// [todo]
+#[derive(Clone, Debug)]
+pub(crate) struct TypedVLitNumeric {
+    pub val: VLitNumeric,
+
+    pub ty: TyExpr,
+}
+
+// [todo]
+#[derive(Clone, Debug)]
+pub(crate) struct TypedVLitString {
+    pub val: VLitString,
+
+    pub ty: TyExpr,
+}
+
+// [todo]
+#[derive(Clone, Debug)]
+pub(crate) struct TypedVVariable {
+    pub var: VVar,
+
+    pub ty: TyExpr,
+
+    // explicit type args at this use site
+    //
+    // [todo]: for TyApp insertion, order should match the binding's
+    // `ty_vars_schematic`
+    //
+    // e.g.: id @Int 3 where ty_args = [Int]
+    pub ty_args: Vec<TyExpr>,
 }
 
 #[derive(Clone, Debug)]
@@ -63,19 +102,6 @@ pub(crate) struct TypedVLetExpr {
     pub defs: Vec<(TypedVPattern, TypedVExpr)>,
     pub body: Box<TypedVExpr>,
     pub ty: TyExpr,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct TypedVAtom {
-    pub atom: VAtom,
-    pub ty: TyExpr,
-    // explicit type args at this use site
-    //
-    // [todo]: for TyApp insertion, order shoudl match the binding's
-    // `ty_vars_schematic`
-    //
-    // e.g.: id @Int 3 where ty_args = [Int]
-    pub ty_args: Vec<TyExpr>,
 }
 
 /// construct for product and record type
@@ -140,34 +166,34 @@ impl TypedVExpr {
             TypedVExpr::Application(app) => &app.ty,
             TypedVExpr::Case(case) => &case.ty,
             TypedVExpr::Let(let_expr) => &let_expr.ty,
-            TypedVExpr::Atom(atom) => &atom.ty,
+            TypedVExpr::LitNumeric(x) => &x.ty,
+            TypedVExpr::LitString(x) => &x.ty,
+            TypedVExpr::Variable(x) => &x.ty,
             TypedVExpr::Constructor(cons) => &cons.ty,
         }
     }
 }
 
-/// builds a typed variable atom expression.
-pub(crate) fn mk_typed_vexpr_atom(var: &VVar, ty: &TyExpr) -> TypedVExpr {
-    TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::Variable(var.clone()),
+/// builds a typed variable expression.
+pub(crate) fn mk_typed_vexpr_var(var: &VVar, ty: &TyExpr) -> TypedVExpr {
+    TypedVExpr::Variable(TypedVVariable {
+        var: var.clone(),
         ty: ty.clone(),
         ty_args: Vec::new(),
     })
 }
 
 pub(crate) fn mk_typed_vexpr_from_v_lit_numeric(lit: &VLitNumeric) -> TypedVExpr {
-    TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::Numeric(lit.clone()),
+    TypedVExpr::LitNumeric(TypedVLitNumeric {
+        val: lit.clone(),
         ty: lit.ty(),
-        ty_args: vec![],
     })
 }
 
 pub(crate) fn mk_typed_vexpr_from_v_lit_string(lit: &VLitString) -> TypedVExpr {
-    TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::String(lit.clone()),
+    TypedVExpr::LitString(TypedVLitString {
+        val: lit.clone(),
         ty: lit.ty(),
-        ty_args: vec![],
     })
 }
 
@@ -194,7 +220,9 @@ impl DocPrinter for TypedVExpr {
             Application(x) => x.to_doc(),
             Case(x) => x.to_doc(),
             Let(x) => x.to_doc(),
-            Atom(x) => x.to_doc(),
+            LitNumeric(x) => x.to_doc(),
+            LitString(x) => x.to_doc(),
+            Variable(x) => x.to_doc(),
             Constructor(x) => x.to_doc(),
         }
     }
@@ -310,27 +338,6 @@ impl DocPrinter for TypedVLetExpr {
     }
 }
 
-impl DocPrinter for TypedVAtom {
-    fn to_doc(&self) -> Box<Doc> {
-        let mut doc_ty_args = mk_lit("<");
-        for i in self.ty_args.iter() {
-            doc_ty_args = mk_cat(doc_ty_args, mk_cat(i.to_doc(), mk_lit(",")));
-        }
-        doc_ty_args = mk_cat(doc_ty_args, mk_lit(">"));
-
-        mk_cat(
-            mk_cat(
-                mk_lit("("),
-                cat_space(
-                    cat_space(mk_cat(self.atom.to_doc(), doc_ty_args), mk_lit("::")),
-                    self.ty.to_doc(),
-                ),
-            ),
-            mk_lit(")"),
-        )
-    }
-}
-
 impl DocPrinter for TypedVConstructorExpr {
     fn to_doc(&self) -> Box<Doc> {
         // println!("printing for TypedVConstructorExpr: {:?}", self);
@@ -426,6 +433,53 @@ impl DocPrinter for TypedVPattern {
                 doc
             }
         }
+    }
+}
+
+impl DocPrinter for TypedVLitNumeric {
+    fn to_doc(&self) -> Box<Doc> {
+        mk_cat(
+            mk_cat(
+                mk_lit("("),
+                cat_space(cat_space(self.val.to_doc(), mk_lit("::")), self.ty.to_doc()),
+            ),
+            mk_lit(")"),
+        )
+    }
+}
+
+impl DocPrinter for TypedVLitString {
+    fn to_doc(&self) -> Box<Doc> {
+        mk_cat(
+            mk_cat(
+                mk_lit("("),
+                cat_space(cat_space(self.val.to_doc(), mk_lit("::")), self.ty.to_doc()),
+            ),
+            mk_lit(")"),
+        )
+    }
+}
+
+impl DocPrinter for TypedVVariable {
+    fn to_doc(&self) -> Box<Doc> {
+        let mut doc_ty_args = mk_nil();
+        if !self.ty_args.is_empty() {
+            doc_ty_args = mk_lit("<");
+            for i in self.ty_args.iter() {
+                doc_ty_args = mk_cat(doc_ty_args, mk_cat(i.to_doc(), mk_lit(",")));
+            }
+            doc_ty_args = mk_cat(doc_ty_args, mk_lit(">"));
+        }
+        mk_cat(
+            mk_cat(
+                mk_lit("("),
+                cat_space(
+                    cat_space(mk_cat(self.var.to_doc(), doc_ty_args), mk_lit("::")),
+                    self.ty.to_doc(),
+                ),
+            ),
+            mk_lit(")"),
+        )
     }
 }
 

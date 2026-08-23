@@ -214,11 +214,11 @@ fn v_expr_from_iden_expr(
 ) -> VExprAndTyAnnot {
     let abstr_structures::IdenExpr { iden, builtin } = iden_expr;
     (
-        VExpr::Atom(VAtom::Variable(VVar::Named(VVarName {
+        VExpr::Variable(VVar::Named(VVarName {
             token: iden.token.clone(),
             loc: Some(iden.loc.clone()),
             builtin: builtin.as_ref().map(|x| x.into()),
-        }))),
+        })),
         None,
     )
 }
@@ -277,11 +277,11 @@ fn v_expr_from_lit_num_expr(
     let abstr_structures::LiteralNumericExpr { literal } = lit_num_expr;
     let value = classify_numeric_literal(&literal.token);
     (
-        VExpr::Atom(VAtom::Numeric(VLitNumeric {
+        VExpr::LitNumeric(VLitNumeric {
             token: literal.token.clone(),
             loc: Some(literal.loc.clone()),
             value,
-        })),
+        }),
         None,
     )
 }
@@ -292,10 +292,10 @@ fn v_expr_from_lit_string_expr(
 ) -> VExprAndTyAnnot {
     let abstr_structures::LiteralStringExpr { literal } = lit_string_expr;
     (
-        VExpr::Atom(VAtom::String(VLitString {
+        VExpr::LitString(VLitString {
             token: literal.token.clone(),
             loc: Some(literal.loc.clone()),
-        })),
+        }),
         None,
     )
 }

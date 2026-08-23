@@ -286,10 +286,18 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
             body: Box::new(apply_subst_typed_expr(subst, *let_expr.body)),
             ty: subst_ty(subst, &let_expr.ty),
         }),
-        TypedVExpr::Atom(atom) => TypedVExpr::Atom(TypedVAtom {
-            atom: atom.atom,
-            ty: subst_ty(subst, &atom.ty),
-            ty_args: atom
+        TypedVExpr::LitNumeric(x) => TypedVExpr::LitNumeric(TypedVLitNumeric {
+            val: x.val.clone(),
+            ty: subst_ty(subst, &x.ty),
+        }),
+        TypedVExpr::LitString(x) => TypedVExpr::LitString(TypedVLitString {
+            val: x.val.clone(),
+            ty: subst_ty(subst, &x.ty),
+        }),
+        TypedVExpr::Variable(x) => TypedVExpr::Variable(TypedVVariable {
+            var: x.var.clone(),
+            ty: subst_ty(subst, &x.ty),
+            ty_args: x
                 .ty_args
                 .into_iter()
                 .map(|arg| subst_ty(subst, &arg))
@@ -390,41 +398,38 @@ pub(crate) fn ty_check_vexpr_typed(
         }
         VExpr::Case(expr) => ty_check_case_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr),
         VExpr::Let(expr) => ty_check_let_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr),
-        VExpr::Atom(atom) => match atom {
-            VAtom::Numeric(lit) => {
-                let (subst, ty) = ty_check_lit_numeric(env_var_to_ty_scheme, ty_var_ns, lit)?;
-                Ok((
-                    subst,
-                    TypedVExpr::Atom(TypedVAtom {
-                        atom: VAtom::Numeric(lit.clone()),
-                        ty,
-                        ty_args: Vec::new(),
-                    }),
-                ))
-            }
-            VAtom::String(lit) => {
-                let (subst, ty) = ty_check_lit_string(env_var_to_ty_scheme, ty_var_ns, lit)?;
-                Ok((
-                    subst,
-                    TypedVExpr::Atom(TypedVAtom {
-                        atom: VAtom::String(lit.clone()),
-                        ty,
-                        ty_args: Vec::new(),
-                    }),
-                ))
-            }
-            VAtom::Variable(var) => {
-                let (subst, ty, ty_args) = ty_check_variable(env_var_to_ty_scheme, ty_var_ns, var)?;
-                Ok((
-                    subst,
-                    TypedVExpr::Atom(TypedVAtom {
-                        atom: VAtom::Variable(var.clone()),
-                        ty,
-                        ty_args,
-                    }),
-                ))
-            }
-        },
+
+        VExpr::LitNumeric(lit) => {
+            let (subst, ty) = ty_check_lit_numeric(env_var_to_ty_scheme, ty_var_ns, lit)?;
+            Ok((
+                subst,
+                TypedVExpr::LitNumeric(TypedVLitNumeric {
+                    val: lit.clone(),
+                    ty,
+                }),
+            ))
+        }
+        VExpr::LitString(lit) => {
+            let (subst, ty) = ty_check_lit_string(env_var_to_ty_scheme, ty_var_ns, lit)?;
+            Ok((
+                subst,
+                TypedVExpr::LitString(TypedVLitString {
+                    val: lit.clone(),
+                    ty,
+                }),
+            ))
+        }
+        VExpr::Variable(var) => {
+            let (subst, ty, ty_args) = ty_check_variable(env_var_to_ty_scheme, ty_var_ns, var)?;
+            Ok((
+                subst,
+                TypedVExpr::Variable(TypedVVariable {
+                    var: var.clone(),
+                    ty,
+                    ty_args,
+                }),
+            ))
+        }
         VExpr::Constructor(expr) => {
             ty_check_constructor_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)
         }
@@ -450,7 +455,6 @@ pub(crate) fn ty_check_abstraction_typed(
 
     // process parameters
     for param in v_abstr_expr.params.iter() {
-        // apply_subst_env_in_place(&subst_params, &mut env_lambda);
         env_lambda = env_lambda.apply_subst_to_env(&subst_params);
 
         let ty_binder = TyExpr::TyVar(ty_var_ns.generate());
@@ -466,14 +470,12 @@ pub(crate) fn ty_check_abstraction_typed(
             ty_check_pattern_typed(&mut env_lambda, ty_env, ty_var_ns, &param.pattern)?;
         subst_params = subst_compose(&pattern_subst, &subst_params);
 
-        // apply_subst_env_in_place(&subst_params, &mut env_lambda);
         env_lambda = env_lambda.apply_subst_to_env(&subst_params);
 
         let ty_binder_resolved = subst_ty(&subst_params, &ty_binder);
         let pattern_resolved = subst_ty(&subst_params, typed_pattern_raw.ty());
         subst_params = unify_ty_exprs(&subst_params, &ty_binder_resolved, &pattern_resolved)?;
 
-        // apply_subst_env_in_place(&subst_params, &mut env_lambda);
         env_lambda = env_lambda.apply_subst_to_env(&subst_params);
 
         if let Some(param_annot) = &param.annotation {
@@ -481,7 +483,6 @@ pub(crate) fn ty_check_abstraction_typed(
             let ty_binder_substituted = subst_ty(&subst_params, &ty_binder);
             subst_params = unify_ty_exprs(&subst_params, &ty_binder_substituted, &annot_resolved)?;
 
-            // apply_subst_env_in_place(&subst_params, &mut env_lambda);
             env_lambda = env_lambda.apply_subst_to_env(&subst_params);
         }
 
@@ -494,7 +495,6 @@ pub(crate) fn ty_check_abstraction_typed(
 
     // process body
 
-    // apply_subst_env_in_place(&subst_params, &mut env_lambda);
     env_lambda = env_lambda.apply_subst_to_env(&subst_params);
 
     let (body_vexpr, body_optional_texpr) = v_abstr_expr.body.as_ref();
@@ -941,7 +941,6 @@ pub(crate) fn ty_check_let_typed(
             let (pattern, def_expr, optional_annot): &(VPattern, VExpr, Option<TyExpr>) =
                 &vexpr.defs[*idx];
 
-            // apply_subst_env_in_place(&subst_accum, &mut env_var_to_ty_scheme_binding_seed);
             env_var_to_ty_scheme_binding_seed =
                 env_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
 
@@ -959,7 +958,6 @@ pub(crate) fn ty_check_let_typed(
                 apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
 
             // typecheck RHS
-            // apply_subst_env_in_place(&subst_accum, &mut env_var_to_ty_scheme_binding_seed);
             env_var_to_ty_scheme_binding_seed =
                 env_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
 
@@ -1030,7 +1028,6 @@ pub(crate) fn ty_check_let_typed(
         let free_ty_vars_in_env: BTreeSet<_> = {
             let mut env_outer_copy = env_outer.clone();
 
-            // apply_subst_env_in_place(&subst_accum, &mut env_outer_copy);
             env_outer_copy = env_outer_copy.apply_subst_to_env(&subst_accum);
 
             // `free(env)` for HM generalization
@@ -1215,7 +1212,6 @@ pub(crate) fn ty_check_let_typed(
     }
 
     // typecheck body of let expression using accumulated env and substitutions
-    // apply_subst_env_in_place(&subst_accum, &mut env_var_to_ty_scheme_binding_seed);
     env_var_to_ty_scheme_binding_seed =
         env_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
 
@@ -1511,7 +1507,7 @@ pub(crate) fn ty_check_lit_string(
 ///   substitute them into the scheme type and return the instantiated type
 /// - return explicit type arguments in scheme order
 pub(crate) fn ty_check_variable(
-    env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    env_var_to_ty_scheme: &EnvVVarToTyScheme,
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VVar,
 ) -> Result<(Substitution, TyExpr, Vec<TyExpr>), TyError> {
@@ -1642,8 +1638,8 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
         VPattern::Literal(literal) => {
             let mut env_clone = env.clone();
             let vexpr = match literal {
-                VPatternLiteral::Numeric(num) => VExpr::Atom(VAtom::Numeric(num.clone())),
-                VPatternLiteral::String(lit) => VExpr::Atom(VAtom::String(lit.clone())),
+                VPatternLiteral::Numeric(num) => VExpr::LitNumeric(num.clone()),
+                VPatternLiteral::String(lit) => VExpr::LitString(lit.clone()),
             };
             let (subst, typed_expr) =
                 ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &vexpr)?;
@@ -1661,14 +1657,14 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
             let mut env_clone = env.clone();
             let v_expr_start = match start {
                 RangeBound::Inclusive(lit) | RangeBound::Exclusive(lit) => match lit {
-                    VPatternLiteral::Numeric(num) => VExpr::Atom(VAtom::Numeric(num.clone())),
-                    VPatternLiteral::String(lit) => VExpr::Atom(VAtom::String(lit.clone())),
+                    VPatternLiteral::Numeric(num) => VExpr::LitNumeric(num.clone()),
+                    VPatternLiteral::String(lit) => VExpr::LitString(lit.clone()),
                 },
             };
             let v_expr_end = match end {
                 RangeBound::Inclusive(lit) | RangeBound::Exclusive(lit) => match lit {
-                    VPatternLiteral::Numeric(num) => VExpr::Atom(VAtom::Numeric(num.clone())),
-                    VPatternLiteral::String(lit) => VExpr::Atom(VAtom::String(lit.clone())),
+                    VPatternLiteral::Numeric(num) => VExpr::LitNumeric(num.clone()),
+                    VPatternLiteral::String(lit) => VExpr::LitString(lit.clone()),
                 },
             };
             let (subst_start, typed_start) =
@@ -2004,21 +2000,23 @@ pub(crate) fn fill_missing_ty_args(
                 ty: let_expr.ty,
             }))
         }
-        TypedVExpr::Atom(atom) => {
-            // base case of recursion
-            let TypedVAtom {
-                atom: atom_inner,
-                ty,
-                mut ty_args,
-            } = atom;
-            if let VAtom::Variable(var) = &atom_inner {
-                if ty_args.is_empty() {
-                    if let Some(scheme) = scheme_info_for_scc.get(var) {
-                        // perform back filling at use site
+        // base case of recursion
+        TypedVExpr::LitNumeric(x) => Ok(TypedVExpr::LitNumeric(x)),
+        // base case of recursion
+        TypedVExpr::LitString(x) => Ok(TypedVExpr::LitString(x)),
+        // base case of recursion
+        TypedVExpr::Variable(TypedVVariable {
+            var,
+            ty,
+            mut ty_args,
+        }) => {
+            if ty_args.is_empty() {
+                if let Some(scheme) = scheme_info_for_scc.get(&var) {
+                    // perform back filling at use site
 
-                        // sanity check for matching the binder scheme against
-                        // this call-site type
-                        let instantiation_subst = unify_ty_exprs(&subst_id(), &scheme.ty_expr, &ty)
+                    // sanity check for matching the binder scheme against
+                    // this call-site type
+                    let instantiation_subst = unify_ty_exprs(&subst_id(), &scheme.ty_expr, &ty)
                             .map_err(|err| {
                                 TyError::TypeConflict(
                                     format_args!(
@@ -2028,34 +2026,28 @@ pub(crate) fn fill_missing_ty_args(
                                     .to_string(),
                                 )
                             })?;
-                        ty_args = scheme
-                            .ty_vars_schematic
-                            .iter()
-                            .cloned()
-                            .map(|tvn| subst_ty(&instantiation_subst, &TyExpr::TyVar(tvn)))
-                            .collect();
-                        let used_ty_vars: BTreeSet<_> =
-                            ty_args.iter().flat_map(free_ty_vars).collect();
-                        let in_scope_ty_vars = free_ty_vars(&ty);
-                        if !used_ty_vars.is_subset(&in_scope_ty_vars) {
-                            return Err(TyError::TypeConflict(
-                                format_args!(
+                    ty_args = scheme
+                        .ty_vars_schematic
+                        .iter()
+                        .cloned()
+                        .map(|tvn| subst_ty(&instantiation_subst, &TyExpr::TyVar(tvn)))
+                        .collect();
+                    let used_ty_vars: BTreeSet<_> = ty_args.iter().flat_map(free_ty_vars).collect();
+                    let in_scope_ty_vars = free_ty_vars(&ty);
+                    if !used_ty_vars.is_subset(&in_scope_ty_vars) {
+                        return Err(TyError::TypeConflict(
+                            format_args!(
 				"recursive ty_args introduce new type vars for {:?}: {:?} not in {:?}",
 				var,
 				used_ty_vars,
 				in_scope_ty_vars
                             )
-                                .to_string(),
-                            ));
-                        }
+                            .to_string(),
+                        ));
                     }
                 }
             }
-            Ok(TypedVExpr::Atom(TypedVAtom {
-                atom: atom_inner,
-                ty,
-                ty_args,
-            }))
+            Ok(TypedVExpr::Variable(TypedVVariable { var, ty, ty_args }))
         }
         TypedVExpr::Constructor(constructor) => {
             Ok(TypedVExpr::Constructor(TypedVConstructorExpr {

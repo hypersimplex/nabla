@@ -74,7 +74,7 @@ pub(crate) fn validate_pattern_binder_uniqueness(vexpr: &VExpr) -> TyChkResult<(
             }
             validate_pattern_binder_uniqueness(&let_expr.body.0)
         }
-        VExpr::Atom(_) => Ok(()),
+        VExpr::LitNumeric(_) | VExpr::LitString(_) | VExpr::Variable(_) => Ok(()),
         VExpr::Constructor(cons) => {
             for (arg, _) in &cons.args {
                 validate_pattern_binder_uniqueness(arg)?;

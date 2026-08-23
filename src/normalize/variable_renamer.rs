@@ -28,7 +28,9 @@ fn rename_var_unique_aux(
         Application(x) => rename_var_unique_application(ns, vvar_outer_scope, lvl, x),
         Case(x) => rename_var_unique_case(ns, vvar_outer_scope, lvl, x),
         Let(x) => rename_var_unique_let(ns, vvar_outer_scope, lvl, x),
-        Atom(x) => rename_var_unique_atom(ns, vvar_outer_scope, lvl, x),
+        LitNumeric(x) => expr.clone(),
+        LitString(x) => expr.clone(),
+        Variable(x) => rename_var_unique_vvar(ns, vvar_outer_scope, lvl, x),
         Constructor(x) => rename_var_unique_constructor(ns, vvar_outer_scope, lvl, x),
     }
 }
@@ -223,19 +225,16 @@ fn rename_var_unique_let(
     VExpr::Let(VLetExpr { defs, body })
 }
 
-fn rename_var_unique_atom(
+fn rename_var_unique_vvar(
     ns: &mut VVarNameSupply,
     vvar_outer_scope: &BTreeMap<VVar, VVar>,
     lvl: u32, // 0 for top-level scope
-    expr: &VAtom,
+    vvar: &VVar,
 ) -> VExpr {
     // apply var substitution
-    use VAtom::*;
-    match expr {
-        Variable(x) if let Some(mapped_to_var) = vvar_outer_scope.get(x) => {
-            VExpr::Atom(VAtom::Variable(mapped_to_var.clone()))
-        }
-        _ => VExpr::Atom(expr.clone()),
+    match vvar_outer_scope.get(vvar) {
+        Some(mapped_to_var) => VExpr::Variable(mapped_to_var.clone()),
+        _ => VExpr::Variable(vvar.clone()),
     }
 }
 

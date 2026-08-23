@@ -13,7 +13,9 @@ pub(crate) fn desugar_pattern(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> Typ
         TypedVExpr::Application(app) => desugar_pattern_app(ns, app),
         TypedVExpr::Case(case_expr) => desugar_pattern_case(ns, case_expr),
         TypedVExpr::Let(let_expr) => desugar_pattern_let_expr(ns, let_expr),
-        TypedVExpr::Atom(atom) => TypedVExpr::Atom(atom.clone()),
+        TypedVExpr::LitNumeric(_) | TypedVExpr::LitString(_) | TypedVExpr::Variable(_) => {
+            expr.clone()
+        }
         TypedVExpr::Constructor(constructor) => desugar_pattern_constructor(ns, constructor),
     }
 }
@@ -210,7 +212,7 @@ fn desugar_pattern_let_expr(ns: &mut VVarNameSupply, let_expr: &TypedVLetExpr) -
                 &binder_scrutinee,
                 &ty_scrutinee,
                 pattern,
-                &mk_typed_vexpr_atom(&binder, &ty_binder),
+                &mk_typed_vexpr_var(&binder, &ty_binder),
                 &ty_binder,
             );
             lowered_defs.push((
@@ -282,7 +284,7 @@ fn mk_case_with_single_clause(
     ty: &TyExpr,
 ) -> TypedVExpr {
     TypedVExpr::Case(TypedVCaseExpr {
-        arg: Box::new(mk_typed_vexpr_atom(binder_scrutinee, ty_scrutinee)),
+        arg: Box::new(mk_typed_vexpr_var(binder_scrutinee, ty_scrutinee)),
         clauses: vec![TypedVCaseClause {
             pattern: pattern.clone(),
             guard: None,
@@ -293,9 +295,9 @@ fn mk_case_with_single_clause(
 }
 
 /// helper to build a simple typed variable
-fn mk_typed_vexpr_atom(var: &VVar, ty: &TyExpr) -> TypedVExpr {
-    TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::Variable(var.clone()),
+fn mk_typed_vexpr_var(var: &VVar, ty: &TyExpr) -> TypedVExpr {
+    TypedVExpr::Variable(TypedVVariable {
+        var: var.clone(),
         ty: ty.clone(),
         ty_args: Vec::new(),
     })

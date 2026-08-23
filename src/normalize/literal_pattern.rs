@@ -25,7 +25,9 @@ pub(crate) fn desugar_literal_pattern(
         TypedVExpr::Let(let_expr) => {
             desugar_literal_pattern_let_expr(ns, env_v_var_to_ty_scheme, let_expr)
         }
-        TypedVExpr::Atom(atom) => TypedVExpr::Atom(atom.clone()),
+        TypedVExpr::LitNumeric(_) | TypedVExpr::LitString(_) | TypedVExpr::Variable(_) => {
+            expr.clone()
+        }
         TypedVExpr::Constructor(constructor) => {
             desugar_literal_pattern_constructor(ns, env_v_var_to_ty_scheme, constructor)
         }
@@ -103,8 +105,8 @@ pub(crate) fn desugar_literal_pattern_case(
                             ty_vars_schematic: vec![],
                         };
 
-                        let binder_typed_expr = TypedVExpr::Atom(TypedVAtom {
-                            atom: VAtom::Variable(simple_binder_var),
+                        let binder_typed_expr = TypedVExpr::Variable(TypedVVariable {
+                            var: simple_binder_var,
                             ty: arg.ty().clone(),
                             ty_args: vec![],
                         });

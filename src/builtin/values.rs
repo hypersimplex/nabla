@@ -492,9 +492,10 @@ pub(crate) fn mk_builtin_typed_vexpr_callable(
     vvar: &VVar,
     ty_args: &[TyExpr],
 ) -> TypedVExpr {
-    let ty_callable = env_v_var_to_ty_scheme.get(vvar).unwrap().clone().ty_expr;
-    let callable = TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::Variable(vvar.clone()),
+    let ty_scheme = env_v_var_to_ty_scheme.get(vvar).unwrap();
+    let ty_callable = ty_scheme.ty_expr.clone();
+    let callable = TypedVExpr::Variable(TypedVVariable {
+        var: vvar.clone(),
         ty: *ty_callable,
         ty_args: ty_args.iter().cloned().collect(),
     });
@@ -507,14 +508,13 @@ pub(crate) fn mk_builtin_typed_vexpr_logical_and(
     expr2: &TypedVExpr,
 ) -> TypedVExpr {
     let var_logical_and = mk_builtin_var_and();
-    let ty_logical_and = env_v_var_to_ty_scheme
-        .get(&var_logical_and)
-        .unwrap()
-        .clone()
-        .ty_expr;
 
-    let callable = TypedVExpr::Atom(TypedVAtom {
-        atom: VAtom::Variable(var_logical_and),
+    let ty_scheme = env_v_var_to_ty_scheme.get(&var_logical_and).unwrap();
+
+    let ty_logical_and = ty_scheme.ty_expr.clone();
+
+    let callable = TypedVExpr::Variable(TypedVVariable {
+        var: var_logical_and,
         ty: *ty_logical_and,
         ty_args: vec![],
     });

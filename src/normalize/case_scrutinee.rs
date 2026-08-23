@@ -63,7 +63,7 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
                 ty: ty.clone(),
             });
 
-            if matches!(arg_norm, TypedVExpr::Atom(_)) {
+            if matches!(arg_norm, TypedVExpr::Variable(_)) {
                 // scrutinee is already a simple variable
                 return rebuilt;
             }
@@ -79,8 +79,8 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
             };
 
             // use the new simple variable as the scrutinee instead
-            let binder_expr = TypedVExpr::Atom(TypedVAtom {
-                atom: VAtom::Variable(binder.clone()),
+            let binder_expr = TypedVExpr::Variable(TypedVVariable {
+                var: binder.clone(),
                 ty: ty_binder,
                 ty_args: Vec::new(),
             });

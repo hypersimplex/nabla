@@ -12,7 +12,9 @@ pub enum VExpr {
     Application(VAppExpr),
     Case(VCaseExpr),
     Let(VLetExpr),
-    Atom(VAtom),
+    LitNumeric(VLitNumeric),
+    LitString(VLitString),
+    Variable(VVar),
     Constructor(VConstructorExpr),
 }
 
@@ -66,14 +68,6 @@ pub(crate) struct VCaseClause {
     pub pattern: VPattern,
     pub guard: Option<VExprAndTyAnnot>,
     pub body: Box<VExprAndTyAnnot>,
-}
-
-// [todo]: get rid of this and flatten into TypedVExpr
-#[derive(Clone, Debug)]
-pub(crate) enum VAtom {
-    Numeric(VLitNumeric),
-    String(VLitString),
-    Variable(VVar),
 }
 
 /// ADT constructor expression
@@ -277,7 +271,9 @@ impl VExpr {
             VExpr::Application(app_expr) => app_expr.get_free_vars(bound),
             VExpr::Case(case_expr) => case_expr.get_free_vars(bound),
             VExpr::Let(let_expr) => let_expr.get_free_vars(bound),
-            VExpr::Atom(atom_expr) => atom_expr.get_free_vars(bound),
+            VExpr::LitNumeric(x) => x.get_free_vars(bound),
+            VExpr::LitString(x) => x.get_free_vars(bound),
+            VExpr::Variable(x) => x.get_free_vars(bound),
             VExpr::Constructor(constructor_expr) => constructor_expr.get_free_vars(bound),
         }
     }
@@ -345,14 +341,24 @@ impl VLetExpr {
     }
 }
 
-impl VAtom {
+impl VLitNumeric {
+    pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
+        BTreeSet::new()
+    }
+}
+
+impl VLitString {
+    pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
+        BTreeSet::new()
+    }
+}
+
+impl VVar {
     pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
         let mut out = BTreeSet::new();
-        if let VAtom::Variable(v) = self {
-            // a variable atom is free iff it is not in scope
-            if !bound.contains(v) {
-                out.insert(v.clone());
-            }
+        // a variable atom is free iff it is not in scope
+        if !bound.contains(self) {
+            out.insert(self.clone());
         }
         out
     }
@@ -374,17 +380,6 @@ impl VConstructorExpr {
 }
 
 // helper impl. for doc printer trait --->>
-
-impl DocPrinter for VAtom {
-    fn to_doc(&self) -> Box<Doc> {
-        use VAtom::*;
-        match self {
-            Numeric(lit_num) => lit_num.to_doc(),
-            String(lit_string) => lit_string.to_doc(),
-            Variable(var) => var.to_doc(),
-        }
-    }
-}
 
 impl DocPrinter for VLitNumeric {
     fn to_doc(&self) -> Box<Doc> {
