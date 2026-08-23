@@ -312,11 +312,17 @@ impl DocPrinter for TypedVLetExpr {
 
 impl DocPrinter for TypedVAtom {
     fn to_doc(&self) -> Box<Doc> {
+        let mut doc_ty_args = mk_lit("<");
+        for i in self.ty_args.iter() {
+            doc_ty_args = mk_cat(doc_ty_args, mk_cat(i.to_doc(), mk_lit(",")));
+        }
+        doc_ty_args = mk_cat(doc_ty_args, mk_lit(">"));
+
         mk_cat(
             mk_cat(
                 mk_lit("("),
                 cat_space(
-                    cat_space(self.atom.to_doc(), mk_lit("::")),
+                    cat_space(mk_cat(self.atom.to_doc(), doc_ty_args), mk_lit("::")),
                     self.ty.to_doc(),
                 ),
             ),

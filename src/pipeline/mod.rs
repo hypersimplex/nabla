@@ -564,6 +564,18 @@ f_get x = case x of
             False -> True
 "###;
 
+static TEST_PIPELINE_CONTENT_POLYMORPHIC_FUNCTION: &str = r###"
+id x = x
+
+f x = case x of
+       10  -> id 10
+       _   -> 20
+
+f2 x = case x of
+         Maybe.Nothing  -> id x
+         _              -> Maybe.Just(10)
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -857,6 +869,16 @@ fn test_pipeline_unit_type_signature() {
 #[test]
 fn test_pipeline_bool() {
     match compile(TEST_PIPELINE_CONTENT_BOOL) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_polymorphic_function() {
+    match compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_FUNCTION) {
         Err(e) => {
             println!("{:?}", e);
         }
