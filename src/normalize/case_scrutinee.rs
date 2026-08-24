@@ -1,3 +1,4 @@
+use crate::typecheck::ty_scheme::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name_supply::*;
@@ -75,14 +76,21 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
             let binder_pat = TypedVPattern::Variable {
                 binder: binder.clone(),
                 ty: ty_binder.clone(),
-                ty_vars_schematic: Vec::new(),
+                ty_schematic: TyScheme {
+                    ty_vars_schematic: vec![],
+                    ty_expr: Box::new(ty_binder.clone()),
+                },
             };
 
             // use the new simple variable as the scrutinee instead
             let binder_expr = TypedVExpr::Variable(TypedVVariable {
                 var: binder.clone(),
-                ty: ty_binder,
+                ty: ty_binder.clone(),
                 ty_args: Vec::new(),
+                ty_schematic: TyScheme {
+                    ty_vars_schematic: vec![],
+                    ty_expr: Box::new(ty_binder),
+                },
             });
             rebuilt = match rebuilt {
                 TypedVExpr::Case(mut c) => {

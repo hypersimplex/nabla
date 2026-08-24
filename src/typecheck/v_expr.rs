@@ -237,6 +237,16 @@ pub(crate) enum VPatternLiteral {
     String(VLitString),
 }
 
+impl VPatternLiteral {
+    pub(crate) fn ty(&self) -> TyExpr {
+        use VPatternLiteral::*;
+        match self {
+            Numeric(x) => x.ty(),
+            String(x) => x.ty(),
+        }
+    }
+}
+
 pub(crate) type VExprAndTyAnnot = (VExpr, Option<TyExpr>);
 
 pub(crate) fn classify_numeric_literal(

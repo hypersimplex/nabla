@@ -1,5 +1,6 @@
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
+use crate::util::printer::*;
 
 /// type scheme, a template used for instantiating a type:
 ///
@@ -35,4 +36,19 @@ pub(crate) struct TyScheme {
     //   - schematic type variables in `ty_vars_schematic`
     //   - unbound/free type variables (non-schematic type variables)
     pub ty_expr: Box<TyExpr>,
+}
+
+impl DocPrinter for TyScheme {
+    fn to_doc(&self) -> Box<Doc> {
+        let mut doc = mk_nil();
+        doc = mk_cat(doc, mk_lit("Scheme{["));
+        for i in self.ty_vars_schematic.iter() {
+            doc = mk_cat(doc, i.to_doc());
+            doc = mk_cat(doc, mk_lit(","));
+        }
+        doc = mk_cat(doc, mk_lit("]"));
+        doc = cat_space(doc, self.ty_expr.to_doc());
+        doc = mk_cat(doc, mk_lit("}"));
+        doc
+    }
 }

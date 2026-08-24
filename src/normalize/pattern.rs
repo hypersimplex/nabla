@@ -1,4 +1,5 @@
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_scheme::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name::*;
@@ -300,6 +301,10 @@ fn mk_typed_vexpr_var(var: &VVar, ty: &TyExpr) -> TypedVExpr {
         var: var.clone(),
         ty: ty.clone(),
         ty_args: Vec::new(),
+        ty_schematic: TyScheme {
+            ty_vars_schematic: vec![],
+            ty_expr: Box::new(ty.clone()),
+        },
     })
 }
 
@@ -308,6 +313,10 @@ fn mk_typed_vpattern_variable(binder: &VVar, ty: &TyExpr) -> TypedVPattern {
     TypedVPattern::Variable {
         binder: binder.clone(),
         ty: ty.clone(),
-        ty_vars_schematic: Vec::new(),
+        // [TODO]
+        ty_schematic: TyScheme {
+            ty_vars_schematic: vec![],
+            ty_expr: Box::new(ty.clone()),
+        },
     }
 }

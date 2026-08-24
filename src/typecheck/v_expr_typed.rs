@@ -15,10 +15,6 @@ pub(crate) enum TypedVExpr {
     Let(TypedVLetExpr),
     LitNumeric(TypedVLitNumeric),
     LitString(TypedVLitString),
-    // represents callsite/reference of a variable
-    //
-    // note: definition of variable is done in let expression / top level
-    // definition
     Variable(TypedVVariable),
     Constructor(TypedVConstructorExpr),
 }
@@ -39,7 +35,10 @@ pub(crate) struct TypedVLitString {
     pub ty: TyExpr,
 }
 
-// [todo]
+/// represents callsite/reference of a variable
+///
+/// note: definition of variable is done in let expression / top level
+/// definition
 #[derive(Clone, Debug)]
 pub(crate) struct TypedVVariable {
     pub var: VVar,
@@ -53,6 +52,8 @@ pub(crate) struct TypedVVariable {
     //
     // e.g.: id @Int 3 where ty_args = [Int]
     pub ty_args: Vec<TyExpr>,
+
+    pub ty_schematic: TyScheme,
 }
 
 #[derive(Clone, Debug)]
@@ -133,7 +134,7 @@ pub(crate) enum TypedVPattern {
         binder: VVar,
         ty: TyExpr,
         // note: order matters
-        ty_vars_schematic: Vec<TyVarName>,
+        ty_schematic: TyScheme,
     },
     Literal {
         literal: VPatternLiteral,
@@ -149,6 +150,9 @@ pub(crate) enum TypedVPattern {
         constructor: String,
         args: Vec<TypedVPattern>,
         ty: TyExpr,
+
+        // possibly type arguments applied to the ADT
+        ty_args: Vec<TyExpr>,
     },
     Record {
         ty_name: Option<String>,
@@ -156,6 +160,9 @@ pub(crate) enum TypedVPattern {
         fields: Vec<(String, TypedVPattern)>,
         rest: bool, // `..` presence
         ty: TyExpr,
+
+        // possibly type arguments applied to the ADT
+        ty_args: Vec<TyExpr>,
     },
 }
 
@@ -172,15 +179,6 @@ impl TypedVExpr {
             TypedVExpr::Constructor(cons) => &cons.ty,
         }
     }
-}
-
-/// builds a typed variable expression.
-pub(crate) fn mk_typed_vexpr_var(var: &VVar, ty: &TyExpr) -> TypedVExpr {
-    TypedVExpr::Variable(TypedVVariable {
-        var: var.clone(),
-        ty: ty.clone(),
-        ty_args: Vec::new(),
-    })
 }
 
 pub(crate) fn mk_typed_vexpr_from_v_lit_numeric(lit: &VLitNumeric) -> TypedVExpr {
@@ -375,11 +373,14 @@ impl DocPrinter for TypedVPattern {
             Variable {
                 binder,
                 ty,
-                ty_vars_schematic,
+                ty_schematic,
             } => mk_cat(
                 mk_cat(
-                    mk_cat(mk_lit("("), cat_space(binder.to_doc(), mk_lit("::"))),
-                    ty.to_doc(),
+                    mk_cat(
+                        mk_cat(mk_lit("("), cat_space(binder.to_doc(), mk_lit("::"))),
+                        ty.to_doc(),
+                    ),
+                    mk_cat(mk_lit("/"), ty_schematic.to_doc()),
                 ),
                 mk_lit(")"),
             ),
@@ -390,10 +391,21 @@ impl DocPrinter for TypedVPattern {
                 constructor,
                 args,
                 ty,
+                ty_args,
             } => {
                 let mut doc = mk_nil();
                 doc = mk_cat(doc, mk_lit(&format!("{}.", ty_name)));
                 doc = mk_cat(doc, mk_lit(&format!("{}", constructor)));
+
+                if !ty_args.is_empty() {
+                    doc = mk_cat(doc, mk_lit("<"));
+                    for i in ty_args {
+                        doc = mk_cat(doc, i.to_doc());
+                        doc = mk_cat(doc, mk_lit(","));
+                    }
+                    doc = mk_cat(doc, mk_lit(">"));
+                }
+
                 for i in args.iter() {
                     doc = cat_space(doc, i.to_doc());
                 }
@@ -405,12 +417,22 @@ impl DocPrinter for TypedVPattern {
                 fields,
                 rest,
                 ty,
+                ty_args,
             } => {
                 let mut doc = mk_nil();
                 if let Some(qualified_type) = ty_name {
                     doc = mk_cat(doc, mk_lit(&format!("{}.", qualified_type)));
                 }
                 doc = mk_cat(doc, mk_lit(&format!("{} {{", constructor)));
+
+                if !ty_args.is_empty() {
+                    doc = mk_cat(doc, mk_lit("<"));
+                    for i in ty_args {
+                        doc = mk_cat(doc, i.to_doc());
+                        doc = mk_cat(doc, mk_lit(","));
+                    }
+                    doc = mk_cat(doc, mk_lit(">"));
+                }
 
                 let mut doc_fields = mk_nil();
                 for (field, pat) in fields.iter() {
@@ -472,11 +494,14 @@ impl DocPrinter for TypedVVariable {
         }
         mk_cat(
             mk_cat(
-                mk_lit("("),
-                cat_space(
-                    cat_space(mk_cat(self.var.to_doc(), doc_ty_args), mk_lit("::")),
-                    self.ty.to_doc(),
+                mk_cat(
+                    mk_lit("("),
+                    cat_space(
+                        cat_space(mk_cat(self.var.to_doc(), doc_ty_args), mk_lit("::")),
+                        self.ty.to_doc(),
+                    ),
                 ),
+                mk_cat(mk_lit("/"), self.ty_schematic.to_doc()),
             ),
             mk_lit(")"),
         )

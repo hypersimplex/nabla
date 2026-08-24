@@ -1,6 +1,7 @@
 use crate::builtin::values::*;
 use crate::typecheck::env_v_var_to_ty_scheme::*;
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_scheme::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name::*;
@@ -102,13 +103,20 @@ pub(crate) fn desugar_literal_pattern_case(
                         let pattern_new = TypedVPattern::Variable {
                             binder: simple_binder_var.clone(),
                             ty: ty.clone(),
-                            ty_vars_schematic: vec![],
+                            ty_schematic: TyScheme {
+                                ty_vars_schematic: vec![],
+                                ty_expr: Box::new(ty.clone()),
+                            },
                         };
 
                         let binder_typed_expr = TypedVExpr::Variable(TypedVVariable {
                             var: simple_binder_var,
                             ty: arg.ty().clone(),
                             ty_args: vec![],
+                            ty_schematic: TyScheme {
+                                ty_vars_schematic: vec![],
+                                ty_expr: Box::new(arg.ty().clone()),
+                            },
                         });
 
                         let expr_predicate = match literal {

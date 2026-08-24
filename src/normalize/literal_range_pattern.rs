@@ -1,13 +1,14 @@
 use crate::builtin::values::*;
 use crate::typecheck::env_v_var_to_ty_scheme::*;
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_scheme::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name::*;
 use crate::typecheck::v_var_name_supply::*;
-use std::ops::Deref;
 
 use std::collections::*;
+use std::ops::Deref;
 
 /// desugar typed expression by eliminating literal range patterns in case expressions
 pub(crate) fn desugar_literal_range_pattern(
@@ -114,13 +115,20 @@ pub(crate) fn desugar_literal_range_pattern_case(
                         let pattern = TypedVPattern::Variable {
                             binder: simple_binder_var.clone(),
                             ty: ty.clone(),
-                            ty_vars_schematic: vec![],
+                            ty_schematic: TyScheme {
+                                ty_vars_schematic: vec![],
+                                ty_expr: Box::new(ty.clone()),
+                            },
                         };
 
                         let binder_typed_expr = TypedVExpr::Variable(TypedVVariable {
                             var: simple_binder_var,
                             ty: arg.ty().clone(),
                             ty_args: vec![],
+                            ty_schematic: TyScheme {
+                                ty_vars_schematic: vec![],
+                                ty_expr: Box::new(ty.clone()),
+                            },
                         });
 
                         let expr_cmp_start = match start {

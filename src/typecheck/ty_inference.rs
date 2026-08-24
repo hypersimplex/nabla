@@ -288,21 +288,25 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
         }),
         TypedVExpr::LitNumeric(x) => TypedVExpr::LitNumeric(TypedVLitNumeric {
             val: x.val.clone(),
-            ty: subst_ty(subst, &x.ty),
+            ty: x.ty.clone(),
         }),
         TypedVExpr::LitString(x) => TypedVExpr::LitString(TypedVLitString {
             val: x.val.clone(),
-            ty: subst_ty(subst, &x.ty),
+            ty: x.ty.clone(),
         }),
-        TypedVExpr::Variable(x) => TypedVExpr::Variable(TypedVVariable {
-            var: x.var.clone(),
-            ty: subst_ty(subst, &x.ty),
-            ty_args: x
-                .ty_args
-                .into_iter()
-                .map(|arg| subst_ty(subst, &arg))
-                .collect(),
-        }),
+        TypedVExpr::Variable(x) => {
+            let ret = TypedVExpr::Variable(TypedVVariable {
+                var: x.var.clone(),
+                ty: subst_ty(subst, &x.ty),
+                ty_args: x
+                    .ty_args
+                    .into_iter()
+                    .map(|arg| subst_ty(subst, &arg))
+                    .collect(),
+                ty_schematic: subst_ty_scheme(subst, &x.ty_schematic),
+            });
+            ret
+        }
         TypedVExpr::Constructor(constructor) => TypedVExpr::Constructor(TypedVConstructorExpr {
             ty_name: constructor.ty_name,
             constructor_name: constructor.constructor_name,
@@ -334,11 +338,11 @@ pub(crate) fn apply_subst_typed_pattern(
         TypedVPattern::Variable {
             binder,
             ty,
-            ty_vars_schematic,
+            ty_schematic,
         } => TypedVPattern::Variable {
             binder,
             ty: subst_ty(subst, &ty),
-            ty_vars_schematic,
+            ty_schematic: subst_ty_scheme(subst, &ty_schematic),
         },
         TypedVPattern::Literal { literal, ty } => TypedVPattern::Literal {
             literal,
@@ -354,6 +358,7 @@ pub(crate) fn apply_subst_typed_pattern(
             constructor,
             args,
             ty,
+            ty_args,
         } => TypedVPattern::Constructor {
             ty_name,
             constructor,
@@ -362,6 +367,7 @@ pub(crate) fn apply_subst_typed_pattern(
                 .map(|arg| apply_subst_typed_pattern(subst, arg))
                 .collect(),
             ty: subst_ty(subst, &ty),
+            ty_args: ty_args.iter().map(|x| subst_ty(subst, x)).collect(),
         },
         TypedVPattern::Record {
             ty_name,
@@ -369,6 +375,7 @@ pub(crate) fn apply_subst_typed_pattern(
             fields,
             rest,
             ty,
+            ty_args,
         } => TypedVPattern::Record {
             ty_name,
             constructor,
@@ -378,6 +385,7 @@ pub(crate) fn apply_subst_typed_pattern(
                 .collect(),
             rest,
             ty: subst_ty(subst, &ty),
+            ty_args: ty_args.iter().map(|x| subst_ty(subst, x)).collect(),
         },
     }
 }
@@ -427,6 +435,7 @@ pub(crate) fn ty_check_vexpr_typed(
                     var: var.clone(),
                     ty,
                     ty_args,
+                    ty_schematic: env_var_to_ty_scheme.get(var).unwrap().clone(),
                 }),
             ))
         }
@@ -1126,7 +1135,7 @@ pub(crate) fn ty_check_let_typed(
 
                     env_var_to_ty_scheme_binding_seed
                         .insert(var.clone(), ty_scheme_updated.clone());
-                    env_outer.insert(var.clone(), ty_scheme_updated);
+                    env_outer.insert(var.clone(), ty_scheme_updated.clone());
 
                     // system f prep begin: apply scc substitution and stamp scheme order ---
                     let binding_after_subst =
@@ -1139,7 +1148,7 @@ pub(crate) fn ty_check_let_typed(
                     *typed_binding_vexpr = set_scheme_ty_vars_for_binder_in_pattern(
                         binding_after_subst,
                         &var,
-                        scheme_ty_vars.clone(),
+                        ty_scheme_updated.clone(),
                     );
                     // system f prep end ---
                 }
@@ -1183,15 +1192,9 @@ pub(crate) fn ty_check_let_typed(
                     match typed_binding_vexpr {
                         TypedVPattern::Variable {
                             binder,
-                            ty_vars_schematic,
+                            ty_schematic,
                             ..
-                        } => Some((
-                            binder.clone(),
-                            TyScheme {
-                                ty_vars_schematic: ty_vars_schematic.clone(),
-                                ty_expr: Box::new(typed_def_vexpr.ty().clone()),
-                            },
-                        )),
+                        } => Some((binder.clone(), ty_schematic.clone())),
                         _ => None,
                     }
                 }
@@ -1613,7 +1616,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                     TypedVPattern::Variable {
                         binder: var.clone(),
                         ty: (*ty_scheme.ty_expr).clone(),
-                        ty_vars_schematic: ty_scheme.ty_vars_schematic.clone(),
+                        ty_schematic: ty_scheme.clone(),
                     },
                 ));
             }
@@ -1631,7 +1634,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                 TypedVPattern::Variable {
                     binder: var.clone(),
                     ty,
-                    ty_vars_schematic: Vec::new(),
+                    ty_schematic: env.get(var).unwrap().clone(),
                 },
             ))
         }
@@ -1746,6 +1749,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                         constructor: constructor.clone(),
                         args: typed_args,
                         ty: ty_result,
+                        ty_args: result_params,
                     },
                 ),
             ))
@@ -1859,6 +1863,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                         fields: typed_fields,
                         rest: *rest,
                         ty: ty_result,
+                        ty_args: result_params,
                     },
                 ),
             ))
@@ -1910,7 +1915,9 @@ fn is_adt_type_var(type_env: &TyEnv, tvn: &TyVarName) -> bool {
 /// - let:
 ///     - collect binders from all defs, drop them from the `scheme_info_for_scc`
 ///       map to handle shadowing, recurse into RHS and body
-/// - atom:
+/// - literal:
+///     - no-op
+/// - variable:
 ///     - if a variable has empty ty_args and appears in the map, synthesize
 ///       ty_args by matching the scheme to the call-site type in scheme order
 /// - application / constructor:
@@ -2009,6 +2016,7 @@ pub(crate) fn fill_missing_ty_args(
             var,
             ty,
             mut ty_args,
+            mut ty_schematic,
         }) => {
             if ty_args.is_empty() {
                 if let Some(scheme) = scheme_info_for_scc.get(&var) {
@@ -2032,6 +2040,9 @@ pub(crate) fn fill_missing_ty_args(
                         .cloned()
                         .map(|tvn| subst_ty(&instantiation_subst, &TyExpr::TyVar(tvn)))
                         .collect();
+
+                    ty_schematic = scheme.clone();
+
                     let used_ty_vars: BTreeSet<_> = ty_args.iter().flat_map(free_ty_vars).collect();
                     let in_scope_ty_vars = free_ty_vars(&ty);
                     if !used_ty_vars.is_subset(&in_scope_ty_vars) {
@@ -2047,7 +2058,12 @@ pub(crate) fn fill_missing_ty_args(
                     }
                 }
             }
-            Ok(TypedVExpr::Variable(TypedVVariable { var, ty, ty_args }))
+            Ok(TypedVExpr::Variable(TypedVVariable {
+                var,
+                ty,
+                ty_args,
+                ty_schematic,
+            }))
         }
         TypedVExpr::Constructor(constructor) => {
             Ok(TypedVExpr::Constructor(TypedVConstructorExpr {
@@ -2082,26 +2098,26 @@ pub(crate) fn fill_missing_ty_args(
 fn set_scheme_ty_vars_for_binder_in_pattern(
     pattern: TypedVPattern,
     binder_target: &VVar,
-    ty_vars_schematic: Vec<TyVarName>,
+    ty_schematic: TyScheme,
 ) -> TypedVPattern {
     // attach scheme vars to the matching binder while preserving other pattern structure
     match pattern {
         TypedVPattern::Variable {
             binder: pat_binder,
             ty,
-            ty_vars_schematic: existing,
+            ty_schematic: existing,
         } => {
             if &pat_binder == binder_target {
                 TypedVPattern::Variable {
                     binder: pat_binder,
                     ty,
-                    ty_vars_schematic,
+                    ty_schematic,
                 }
             } else {
                 TypedVPattern::Variable {
                     binder: pat_binder,
                     ty,
-                    ty_vars_schematic: existing,
+                    ty_schematic: existing,
                 }
             }
         }
@@ -2110,6 +2126,7 @@ fn set_scheme_ty_vars_for_binder_in_pattern(
             constructor,
             args,
             ty,
+            ty_args,
         } => TypedVPattern::Constructor {
             ty_name,
             constructor,
@@ -2119,11 +2136,12 @@ fn set_scheme_ty_vars_for_binder_in_pattern(
                     set_scheme_ty_vars_for_binder_in_pattern(
                         arg,
                         binder_target,
-                        ty_vars_schematic.clone(),
+                        ty_schematic.clone(),
                     )
                 })
                 .collect(),
             ty,
+            ty_args,
         },
         TypedVPattern::Record {
             ty_name,
@@ -2131,6 +2149,7 @@ fn set_scheme_ty_vars_for_binder_in_pattern(
             fields,
             rest,
             ty,
+            ty_args,
         } => TypedVPattern::Record {
             ty_name,
             constructor,
@@ -2142,13 +2161,14 @@ fn set_scheme_ty_vars_for_binder_in_pattern(
                         set_scheme_ty_vars_for_binder_in_pattern(
                             pat,
                             binder_target,
-                            ty_vars_schematic.clone(),
+                            ty_schematic.clone(),
                         ),
                     )
                 })
                 .collect(),
             rest,
             ty,
+            ty_args,
         },
         other => other,
     }

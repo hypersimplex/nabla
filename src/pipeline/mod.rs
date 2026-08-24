@@ -376,6 +376,16 @@ f x = case x of
         _ -> 0.0
 "###;
 
+static TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE: &str = r###"
+data Tree Tx =
+  Leaf i64 Tx
+  | Node Tree Tree
+
+f x = case x of
+        Leaf a b -> 1
+        _ -> 2
+"###;
+
 static TEST_PIPELINE_CONTENT_FUNCTION_DEPENDENCE: &str = r###"
 f4 yy zz = yy * (f5 zz)
 
@@ -576,6 +586,21 @@ f2 x = case x of
          _              -> Maybe.Just(10)
 "###;
 
+static TEST_PIPELINE_CONTENT_LOCAL_POLYMORPHIC_FUNCTION: &str = r###"
+f x = let id x = x
+      in
+        case x of
+         Maybe.Nothing  -> id x
+         _              -> Maybe.Just(10)
+"###;
+
+static TEST_PIPELINE_CONTENT_PARTIALLY_APPLIED_BINDING: &str = r###"
+f x = let first a b = a
+          partial = first x
+      in
+          partial
+"###;
+
 #[test]
 fn test_pipeline_simple() {
     match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
@@ -639,6 +664,16 @@ fn test_pipeline_record() {
 #[test]
 fn test_pipeline_pattern_sum_type() {
     match compile(TEST_PIPELINE_CONTENT_PATTERN_SUM_TYPE) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_polymorphic_sum_type() {
+    match compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE) {
         Err(e) => {
             println!("{:?}", e);
         }
@@ -879,6 +914,26 @@ fn test_pipeline_bool() {
 #[test]
 fn test_pipeline_polymorphic_function() {
     match compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_FUNCTION) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_local_polymorphic_function() {
+    match compile(TEST_PIPELINE_CONTENT_LOCAL_POLYMORPHIC_FUNCTION) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_partially_applied_binding() {
+    match compile(TEST_PIPELINE_CONTENT_PARTIALLY_APPLIED_BINDING) {
         Err(e) => {
             println!("{:?}", e);
         }

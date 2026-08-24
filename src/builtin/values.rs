@@ -498,6 +498,7 @@ pub(crate) fn mk_builtin_typed_vexpr_callable(
         var: vvar.clone(),
         ty: *ty_callable,
         ty_args: ty_args.iter().cloned().collect(),
+        ty_schematic: ty_scheme.clone(),
     });
     callable
 }
@@ -517,6 +518,7 @@ pub(crate) fn mk_builtin_typed_vexpr_logical_and(
         var: var_logical_and,
         ty: *ty_logical_and,
         ty_args: vec![],
+        ty_schematic: ty_scheme.clone(),
     });
 
     TypedVExpr::Application(TypedVAppExpr {
