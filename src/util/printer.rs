@@ -320,7 +320,7 @@ f_nested_pattern_match_record_rest x =
     Option.Some(Custom { y, .. }) -> 0
     _ -> 1
 
-f_unit = ()
+f_unit = Unit
 
 f_inner_lambda a =
   let h = (\x y -> x * y) a a
