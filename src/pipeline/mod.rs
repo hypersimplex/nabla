@@ -14,25 +14,34 @@ use crate::parse::lex::*;
 use crate::parse::parser::*;
 use crate::typecheck::adt::*;
 use crate::typecheck::convert_v_expr_from_a_expr::*;
-use crate::typecheck::dependency_top_level::*;
 use crate::typecheck::env_v_var_to_ty_scheme::*;
 use crate::typecheck::pat_binder_uniqueness::*;
 use crate::typecheck::subst::*;
 use crate::typecheck::subst_persistent::*;
-use crate::typecheck::ty_check_funcs::*;
 use crate::typecheck::ty_env::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_inference::*;
 use crate::typecheck::ty_scheme::*;
 use crate::typecheck::ty_var_name::*;
 use crate::typecheck::ty_var_name_supply::*;
 use crate::typecheck::v_expr::*;
+use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name::*;
 use crate::typecheck::v_var_name_supply::*;
 use crate::util::printer::*;
 
 use std::collections::*;
 use std::path::Path;
+
+#[derive(Clone, Debug)]
+pub(crate) struct ProgramFunctionArtifacts {
+    pub name: VVar,
+    pub vexpr: VExpr,
+    pub ty_expr: TyExpr,
+    pub scheme: TyScheme,
+    pub typed_expr: TypedVExpr,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) enum CompileError {
@@ -110,65 +119,65 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         *expr = rename_var_unique(&mut v_var_ns, &vvars_outer_scope, expr);
     }
 
-    // collect bindings for functions; for each of these: insert a monomorphic type variable for the 1st pass
-    let mut original_seeded_lhs_binders: BTreeSet<VVar> = BTreeSet::new();
-    // map top level function binding to an integer id to for in generic graph algo
-    let mut map_binding_to_def_group: BTreeMap<VVar, usize> = BTreeMap::new();
-    // environment accumulating info as type-checking progresses
-    let mut env_v_var_to_ty_scheme_binding_seed: EnvVVarToTyScheme = env_v_var_to_ty_scheme.clone();
+    // collect binding, definition, and optional signature for each top level
+    // function
+    let def_indices: Vec<usize> = funcs.keys().copied().collect();
+    let defs: Vec<(VPattern, VExpr, Option<TyScheme>)> = def_indices
+        .iter()
+        .map(|idx| {
+            let vexpr = funcs.get(idx).unwrap().clone();
+            let v_var_binding_func = match &vexpr {
+                VExpr::Abstraction(VAbstrExpr { name, .. }) => name.clone(),
+                _ => unreachable!(),
+            };
+            let opt_signature = match &v_var_binding_func {
+                VVar::Named(VVarName {
+                    token: ConcreteToken::Iden(name),
+                    ..
+                }) => declared_function_type_schemes.get(name).cloned(),
+                _ => None,
+            };
+            (VPattern::Variable(v_var_binding_func), vexpr, opt_signature)
+        })
+        .collect();
 
-    for (idx, vexpr) in funcs.iter() {
-        let v_var_binding_func = match vexpr {
-            VExpr::Abstraction(VAbstrExpr {
-                name: name @ VVar::Named(VVarName { .. }),
-                ..
-            }) => name,
-            _ => unreachable!(),
-        };
-
-        if let Some(first_def_idx) = map_binding_to_def_group.get(&v_var_binding_func).copied() {
-            return Err(TyError::PatBinderUniqueness(format!(
-                "duplicate top-level binder `{:?}` (internal info: top-level binder seeding pass; def indices = {}, {})",
-                v_var_binding_func, first_def_idx, idx
-            )))?;
-        }
-        original_seeded_lhs_binders.insert(v_var_binding_func.clone());
-        map_binding_to_def_group.insert(v_var_binding_func.clone(), *idx);
-        // recursion policy (top-level)
-        // - seed the env with monomorphic placeholder for each function in
-        //   preparation for type inference/check (following the approach of
-        //   look to the variables ref. SPJ 1987 S.9.5.2)
-        // - signatures are checked after inference
-        // - no polymorphic recursion support for now
-        env_v_var_to_ty_scheme_binding_seed.insert(
-            v_var_binding_func.clone(),
-            TyScheme {
-                ty_vars_schematic: vec![],
-                ty_expr: Box::new(TyExpr::TyVar(ty_var_ns.generate())),
-            },
-        );
-    }
-
-    println!("analyzing dependency of top level functions into SCCs..");
-    let scc_groups: Vec<BTreeSet<usize>> =
-        compute_mutually_dependent_top_level_groups(&funcs, &map_binding_to_def_group);
+    println!("analyzing dependency of top level functions and type checking..");
 
     // this is used to compute free variables in environment; these are needed
     // to determine the set of generalizable type variables which become
     // schematic type variables in type schemes
     let mut env_outer: EnvVVarToTyScheme = env_v_var_to_ty_scheme.clone();
 
-    let mut ty_check_results = ty_check_funcs(
+    let mut env_v_var_to_ty_scheme_binding_seed: EnvVVarToTyScheme = env_v_var_to_ty_scheme.clone();
+
+    let (_subst, typed_group_results) = ty_check_binding_group(
+        &mut env_v_var_to_ty_scheme_binding_seed,
+        &mut env_outer,
         &ty_env,
         &mut ty_var_ns,
-        &mut v_var_ns,
-        &original_seeded_lhs_binders,
-        &mut env_outer,
-        &mut env_v_var_to_ty_scheme_binding_seed,
-        &scc_groups,
-        &funcs,
-        &declared_function_type_schemes,
+        &defs,
     )?;
+
+    let mut ty_check_results: BTreeMap<usize, ProgramFunctionArtifacts> = BTreeMap::new();
+    for (idx, def) in typed_group_results.into_iter() {
+        let orig_idx = def_indices[idx];
+        let binder = match &def.typed_pattern {
+            TypedVPattern::Variable { binder, .. } => binder.clone(),
+            _ => unreachable!(),
+        };
+        let vexpr = funcs.get(&orig_idx).unwrap().clone();
+        let ty_expr = def.typed_rhs.ty().clone();
+        ty_check_results.insert(
+            orig_idx,
+            ProgramFunctionArtifacts {
+                name: binder,
+                vexpr,
+                ty_expr,
+                scheme: def.scheme,
+                typed_expr: def.typed_rhs,
+            },
+        );
+    }
 
     println!("type checked functions --->>");
     for (id, function_info) in ty_check_results.iter() {

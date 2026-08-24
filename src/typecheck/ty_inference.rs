@@ -793,52 +793,54 @@ pub(crate) fn ty_check_case_typed(
     ))
 }
 
-/// type check let expression (implements let-polymorphism / generalization)
+#[derive(Clone, Debug)]
+pub(crate) struct TypedBindingGroupDef {
+    pub typed_pattern: TypedVPattern,
+    pub typed_rhs: TypedVExpr,
+    pub scheme: TyScheme,
+}
+
+/// shared binding-group type checking and inference engine used for both
+/// top-level functions and local `let` binding definitions
 ///
-/// shape
-///   let x1 = e1
-///       x2 = e2
-///       ...
-///   in body
+/// returns (substitution, {id -> (binding, def group)})
+/// where id is the index of input `defs`
 ///
-/// steps
-/// - type check each `ei` to get types `ti`
-/// - generalize `ti` by quantifying free vars (excluding those already in the outer env)
-/// - extend the env with schemes (`x1: (\forall)a.t1`, `x2: (\forall)b.t2`, ...)
-/// - type check the body in the extended env and return its type
+/// steps:
+/// - binder seeding with monomorphic placeholders and uniqueness validation
+/// - dependency graph construction and finding strongly connected components
+/// - topological iteration over SCCs (where dependencies are ordered first)
+/// - LHS pattern and RHS expression typechecking and unification
+/// - optional signature (polymorphic or monomorphic) verification
+/// - generalization `free(def) \ free(env)` per SCC
+/// - SCC-wide type scheme variable substitution to keep mutually recursive bindings consistent
+/// - `ty_args` backfilling for recursive uses
 ///
-/// policy
-/// - let-bound variables are polymorphic (instantiable at multiple types)
-/// - lambda parameters are monomorphic within their scope
-/// - pattern-bound variables are monomorphic (case binders)
-///   - future plan: desugar pattern bindings into let-bound selectors before Core so
-///     polymorphism lives on let binders
-pub(crate) fn ty_check_let_typed(
-    env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+/// notes:
+///   recursion policy:
+///   - seed the env with monomorphic placeholder for definition associated with
+///     each simple variable binder in preparation for type inference/check
+///     (following the approach of look to the variables ref. SPJ 1987 S.9.5.2)
+///   - no polymorphic recursion support
+pub(crate) fn ty_check_binding_group(
+    // environment accumulating info as type-checking progresses
+    env_v_var_to_ty_scheme_binding_seed: &mut EnvVVarToTyScheme,
+    env_outer: &mut EnvVVarToTyScheme,
     ty_env: &TyEnv,
     ty_var_ns: &mut TyVarNameSupply,
-    vexpr: &VLetExpr,
-) -> Result<(Substitution, TypedVExpr), TyError> {
-    // let-group setup
-    // - collect all LHS binders (including nested pattern binders) for every definition
-    // - seed each binder with a monomorphic placeholder type in the working environment
-    // - build a binder -> definition-index map for dependency graph construction
-    // - for each RHS, collect free variables and add edges for in-group binder references
-    // - compute SCCs over definition indices
-    //
-    // policy
-    // - pattern binders are monomorphic (case binders) until selector desugaring is added
-    // - recursion is monomorphic only; polyrec requires explicit signatures (todo)
-
-    // this env accumulates info as typechecking progresses
-    let mut env_var_to_ty_scheme_binding_seed = env_var_to_ty_scheme.clone();
+    defs: &[(VPattern, VExpr, Option<TyScheme>)],
+) -> Result<(Substitution, BTreeMap<usize, TypedBindingGroupDef>), TyError> {
+    // collect bindings for function/definition; for each of these: insert a monomorphic type variable for the 1st pass
     let mut original_seeded_lhs_binders = BTreeSet::new();
+
+    // map top level function binding to an integer id to for in generic graph algo
     let mut map_binding_to_def_group: BTreeMap<VVar, usize> = BTreeMap::new();
-    for (idx, (pattern, _def_expr, _annot)) in vexpr.defs.iter().enumerate() {
+
+    for (idx, (pattern, _def_expr, _annot)) in defs.iter().enumerate() {
         let pattern_vars_collected = collect_all_pattern_variables(pattern)?;
         for pat_var in pattern_vars_collected {
             // each collected pattern variable is a binder
-
+            //
             // keep a container to discriminate the original set of LHS binders with placeholder type variables
             // note: do not allow same name for binders across different definitions or within same definition group
             if original_seeded_lhs_binders.contains(&pat_var) {
@@ -856,7 +858,7 @@ pub(crate) fn ty_check_let_typed(
                             )
                         })?;
                 return Err(TyError::PatBinderUniqueness(format!(
-                    "duplicate let binder `{:?}` in the same let group (internal: binder seeding pass, first_def_idx={:?}, duplicate_def_idx={:?})",
+                    "duplicate binder `{:?}` in the same binding group (internal: binder seeding pass, first_def_idx={:?}, duplicate_def_idx={:?})",
                     &pat_var, first_def_idx, idx
                 ).to_string()));
             }
@@ -864,7 +866,12 @@ pub(crate) fn ty_check_let_typed(
             original_seeded_lhs_binders.insert(pat_var.clone());
 
             // introduce monomorphic type variable (placeholder) for each binder
-            env_var_to_ty_scheme_binding_seed.insert(
+            // recursion policy
+            // - seed the env with monomorphic placeholder for each function in
+            //   preparation for type inference/check (following the approach of
+            //   look to the variables ref. SPJ 1987 S.9.5.2)
+            // - no polymorphic recursion support
+            env_v_var_to_ty_scheme_binding_seed.insert(
                 pat_var.clone(),
                 TyScheme {
                     ty_vars_schematic: vec![],
@@ -887,10 +894,12 @@ pub(crate) fn ty_check_let_typed(
 
         // extract free value-level variables in each RHS and retain only binders from
         // this let group
+        //
         // return definition indices that the current definition depends on
+        //
         // definitions with no in-group recursive references yield an empty neighbor set
         let neighbours = |idx| -> Vec<usize> {
-            let (_pat, def_expr, _ty_annot): &(VPattern, VExpr, Option<TyExpr>) = &vexpr.defs[idx];
+            let (_pat, def_expr, _ty_annot): &(VPattern, VExpr, Option<TyScheme>) = &defs[idx];
             let variables = def_expr.get_free_vars(&BTreeSet::new());
             // map free variables that are in this let group's binder map to definition indices
             let connected_def_ids: BTreeSet<usize> = variables
@@ -900,7 +909,7 @@ pub(crate) fn ty_check_let_typed(
             connected_def_ids.into_iter().collect()
         };
 
-        for (idx, (_pattern, _def_expr, _annot)) in vexpr.defs.iter().enumerate() {
+        for (idx, (_pattern, _def_expr, _annot)) in defs.iter().enumerate() {
             scc(
                 &mut map_def_to_previsit,
                 &mut map_def_to_earliest,
@@ -914,10 +923,6 @@ pub(crate) fn ty_check_let_typed(
         }
     }
 
-    // used to compute free variables in environment
-    // this is needed to determine the set of generalizable type variables which become schematic type variables in type schemes
-    let mut env_outer = env_var_to_ty_scheme.clone();
-
     // process in order of SCC dependency
     // ssc_groups should already be in order of dependency
     //   where current group i only possibly have dependencies on group(s) with index j < i
@@ -928,6 +933,7 @@ pub(crate) fn ty_check_let_typed(
     enum TypedLhsRhsPair {
         // single variable bound; generalize as one scheme for this binder
         SimpleVarBindingPair((TypedVPattern, TypedVExpr)),
+
         // pattern binding (may bind multiple vars); collect bound vars for per-var generalization
         NonSimpleVarBindingPair(
             (
@@ -947,15 +953,16 @@ pub(crate) fn ty_check_let_typed(
         //    then backfill recursive ty_args
 
         for idx in scc.iter() {
-            let (pattern, def_expr, optional_annot): &(VPattern, VExpr, Option<TyExpr>) =
-                &vexpr.defs[*idx];
+            // note: optional TyScheme subsumes monomorphic type
+            let (pattern, def_expr, optional_annot): &(VPattern, VExpr, Option<TyScheme>) =
+                &defs[*idx];
 
-            env_var_to_ty_scheme_binding_seed =
-                env_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
+            *env_v_var_to_ty_scheme_binding_seed =
+                env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
 
             let (subst, bound_vvars_in_pattern, typed_binding_expr) =
                 ty_check_pattern_typed_with_seeded_binders(
-                    &mut env_var_to_ty_scheme_binding_seed,
+                    env_v_var_to_ty_scheme_binding_seed,
                     &original_seeded_lhs_binders,
                     ty_env,
                     ty_var_ns,
@@ -967,11 +974,11 @@ pub(crate) fn ty_check_let_typed(
                 apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
 
             // typecheck RHS
-            env_var_to_ty_scheme_binding_seed =
-                env_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
+            *env_v_var_to_ty_scheme_binding_seed =
+                env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
 
             let (subst, typed_rhs_vexpr) = ty_check_vexpr_typed(
-                &mut env_var_to_ty_scheme_binding_seed,
+                env_v_var_to_ty_scheme_binding_seed,
                 ty_env,
                 ty_var_ns,
                 def_expr,
@@ -987,21 +994,30 @@ pub(crate) fn ty_check_let_typed(
             typed_binding_expr = apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
             let mut typed_rhs_vexpr = apply_subst_typed_expr(&subst_accum, typed_rhs_vexpr);
 
-            // if present, enforce the optional local type annotation on variable binders
-            if let (VPattern::Variable(var), Some(annot_ty)) = (pattern, optional_annot.as_ref()) {
-                let annot_resolved = subst_ty(&subst_accum, annot_ty);
-                subst_accum = unify_ty_exprs(&subst_accum, typed_rhs_vexpr.ty(), &annot_resolved)
+            // if present, enforce optional type annotation/signature
+            if let (VPattern::Variable(var), Some(sig_scheme)) = (pattern, optional_annot.as_ref())
+            {
+                // instantiate and then unify
+                let mut subst_sig = subst_id();
+                for tvn in sig_scheme.ty_vars_schematic.iter() {
+                    subst_sig = subst_sig.insert(tvn.clone(), TyExpr::TyVar(ty_var_ns.generate()));
+                }
+                let sig_type_inst = subst_ty(
+                    &subst_compose(&subst_sig, &subst_accum),
+                    &sig_scheme.ty_expr,
+                );
+                subst_accum = unify_ty_exprs(&subst_accum, typed_rhs_vexpr.ty(), &sig_type_inst)
                     .map_err(|e| {
                         TyError::TypeConflict(format!(
-                            "local let annotation mismatch for binder `{:?}`: inferred: {:?},  annotation: {:?},  detail: {:?}",
+                            "annotation/signature mismatch for binder `{:?}`: inferred: {:?}, annotation: {:?}, detail: {:?}",
                             var,
                             typed_rhs_vexpr.ty(),
-                            annot_resolved,
+                            sig_type_inst,
                             e
                         ).to_string())
                     })?;
 
-                // keep typed nodes in sync after annotation unification.
+                // keep typed nodes in sync after annotation unification
                 typed_binding_expr = apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
                 typed_rhs_vexpr = apply_subst_typed_expr(&subst_accum, typed_rhs_vexpr);
             }
@@ -1032,21 +1048,19 @@ pub(crate) fn ty_check_let_typed(
         // generalization (per SCC)
         // - compute free vars in each def and in the outer env
         // - scheme vars = free(def) \ free(env)
-        // - record scheme var order on simple binders for later `TyLam` insertion
+        // - record type scheme on simple binders for translating to core IR
         // - update monomorphic placeholders after generalization completes
         let free_ty_vars_in_env: BTreeSet<_> = {
             let mut env_outer_copy = env_outer.clone();
-
             env_outer_copy = env_outer_copy.apply_subst_to_env(&subst_accum);
 
-            // `free(env)` for HM generalization
-            // vars in scheme bodies that are not bound by the scheme
+            // `free(env)` for HM generalization:
+            // type vars in scheme bodies that are not bound by the scheme
             free_tvns_in_ty_env(&env_outer_copy).into_iter().collect()
         };
 
-        // system f prep begin: track scheme var order and build an scc-wide scheme substitution ---
-
         // scc-wide map from generalized unification vars to canonical scheme vars
+        //
         // keeps mutually recursive binders in sync when they share a generalized var,
         // so one scc_subst can rewrite all RHSs/patterns and ty_args consistently
         let mut scc_scheme_var_map: BTreeMap<TyVarName, TyVarName> = BTreeMap::new();
@@ -1056,10 +1070,11 @@ pub(crate) fn ty_check_let_typed(
         for idx in scc.iter() {
             let entry = typed_binding_def_pairs
                 .get(idx)
-                .expect("SCC indices are drawn from let binding definitions");
+                .expect("SCC indices are drawn from binding definitions");
             match entry {
                 TypedLhsRhsPair::SimpleVarBindingPair((_typed_binding_vexpr, typed_def_vexpr)) => {
                     // set subtract: free type variables in def texpr \ free type variables (schematic vars) from env
+
                     let free_ty_vars_in_def =
                         free_ty_vars_excluding_adts(typed_def_vexpr.ty(), ty_env);
                     let ty_vars_generalizable: Vec<_> = free_ty_vars_in_def
@@ -1073,16 +1088,10 @@ pub(crate) fn ty_check_let_typed(
                             .or_insert_with(|| ty_var_ns.generate());
                     }
                 }
-                TypedLhsRhsPair::NonSimpleVarBindingPair((
-                    _typed_pattern_vexpr,
-                    _bound_vvars_in_pattern,
-                    _typed_def_vexpr,
-                )) => {
-                    // pattern binding policy
-                    // - pattern-bound variables stay monomorphic (MR-style); no scheme vars
-                    // - to allow polymorphic pattern bindings later, desugar into let-bound
-                    //   selectors before Core so polymorphism lives on let binders
-                }
+
+                // pattern binding policy
+                // - pattern-bound variables stay monomorphic (MR-style); no scheme vars
+                TypedLhsRhsPair::NonSimpleVarBindingPair(_) => {}
             }
         }
 
@@ -1091,18 +1100,17 @@ pub(crate) fn ty_check_let_typed(
             .map(|(tvn, scheme_tvn)| (tvn.clone(), TyExpr::TyVar(scheme_tvn.clone())))
             .collect();
         let scc_subst = subst_from_map(&scc_subst_map);
-        // system f prep end ---
 
         // second generalization pass: apply scc substitution, finalize schemes, and stamp scheme vars
         for idx in scc.iter() {
             let entry = typed_binding_def_pairs
                 .get_mut(idx)
-                .expect("SCC indices are drawn from let binding definitions");
+                .expect("SCC indices are drawn from binding definitions");
             match entry {
                 TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, typed_def_vexpr)) => {
                     let var = match &*typed_binding_vexpr {
                         TypedVPattern::Variable { binder, .. } => binder.clone(),
-                        _ => unreachable!("simple let pairs are created from variable patterns"),
+                        _ => unreachable!("simple pairs are created from variable patterns"),
                     };
 
                     // recompute per-binder generalized vars so the ordering stays local and fresh
@@ -1111,7 +1119,6 @@ pub(crate) fn ty_check_let_typed(
                             .into_iter()
                             .filter(|tvn| !free_ty_vars_in_env.contains(tvn))
                             .collect();
-                    // system f prep begin: use scc scheme vars for explicit TyLam/TyApp metadata ---
                     let scheme_ty_vars: Vec<_> = ty_vars_generalizable
                         .iter()
                         .map(|tvn| {
@@ -1123,7 +1130,6 @@ pub(crate) fn ty_check_let_typed(
                             })
                         })
                         .collect::<Result<Vec<_>, _>>()?;
-                    // system f prep end ---
 
                     // update for inferencing for remaining SCC groups
                     let ty_scheme_updated = TyScheme {
@@ -1133,24 +1139,24 @@ pub(crate) fn ty_check_let_typed(
                         ty_expr: Box::new(subst_ty(&scc_subst, typed_def_vexpr.ty())),
                     };
 
-                    env_var_to_ty_scheme_binding_seed
+                    env_v_var_to_ty_scheme_binding_seed
                         .insert(var.clone(), ty_scheme_updated.clone());
                     env_outer.insert(var.clone(), ty_scheme_updated.clone());
 
-                    // system f prep begin: apply scc substitution and stamp scheme order ---
+                    // apply scc substitution and stamp scheme order
                     let binding_after_subst =
                         apply_subst_typed_pattern(&scc_subst, typed_binding_vexpr.clone());
                     let rhs_after_subst =
                         apply_subst_typed_expr(&scc_subst, typed_def_vexpr.clone());
                     *typed_def_vexpr = rhs_after_subst;
 
-                    // record generalized scheme var order on the binding pattern for later TyLam insertion
+                    // record generalized type scheme on the binding for ease of
+                    // translation to core IR later
                     *typed_binding_vexpr = set_scheme_ty_vars_for_binder_in_pattern(
                         binding_after_subst,
                         &var,
                         ty_scheme_updated.clone(),
                     );
-                    // system f prep end ---
                 }
                 TypedLhsRhsPair::NonSimpleVarBindingPair((
                     typed_pattern_vexpr,
@@ -1159,8 +1165,6 @@ pub(crate) fn ty_check_let_typed(
                 )) => {
                     // pattern binding policy
                     // - pattern-bound variables are monomorphic; do not attach scheme vars
-                    // - to allow polymorphic pattern bindings later, desugar into let-bound
-                    //   selectors first
                     let binding_after_subst =
                         apply_subst_typed_pattern(&scc_subst, typed_pattern_vexpr.clone());
                     let rhs_after_subst =
@@ -1174,7 +1178,7 @@ pub(crate) fn ty_check_let_typed(
                                 ty_vars_schematic: Vec::new(),
                                 ty_expr: Box::new(ty_var.clone()),
                             };
-                            env_var_to_ty_scheme_binding_seed.insert(var.clone(), scheme.clone());
+                            env_v_var_to_ty_scheme_binding_seed.insert(var.clone(), scheme.clone());
                             env_outer.insert(var.clone(), scheme);
                         }
                     }
@@ -1183,12 +1187,13 @@ pub(crate) fn ty_check_let_typed(
             }
         }
 
-        // system f prep begin: fill recursive uses with explicit ty_args for elaboration ---
+        // fill recursive uses with explicit ty_args
+        //
         // derive schemes from stamped binding patterns to keep a single source of truth
         let scheme_info_for_scc: BTreeMap<VVar, TyScheme> = typed_binding_def_pairs
             .iter()
             .filter_map(|(_idx, entry)| match entry {
-                TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, typed_def_vexpr)) => {
+                TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, _typed_def_vexpr)) => {
                     match typed_binding_vexpr {
                         TypedVPattern::Variable {
                             binder,
@@ -1211,38 +1216,116 @@ pub(crate) fn ty_check_let_typed(
                 }
             }
         }
-        // system f prep end ---
     }
 
-    // typecheck body of let expression using accumulated env and substitutions
-    env_var_to_ty_scheme_binding_seed =
-        env_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
+    let final_defs: BTreeMap<usize, TypedBindingGroupDef> = typed_binding_def_pairs
+        .into_iter()
+        .map(|(idx, pair)| {
+            let (typed_pattern, typed_rhs, scheme) = match pair {
+                TypedLhsRhsPair::SimpleVarBindingPair((pat, rhs)) => {
+                    let scheme = match &pat {
+                        TypedVPattern::Variable { ty_schematic, .. } => ty_schematic.clone(),
+                        _ => TyScheme {
+                            ty_vars_schematic: Vec::new(),
+                            ty_expr: Box::new(rhs.ty().clone()),
+                        },
+                    };
+                    (pat, rhs, scheme)
+                }
+                TypedLhsRhsPair::NonSimpleVarBindingPair((pat, _, rhs)) => {
+                    let scheme = TyScheme {
+                        ty_vars_schematic: Vec::new(),
+                        ty_expr: Box::new(rhs.ty().clone()),
+                    };
+                    (pat, rhs, scheme)
+                }
+            };
+            (
+                idx,
+                TypedBindingGroupDef {
+                    typed_pattern,
+                    typed_rhs,
+                    scheme,
+                },
+            )
+        })
+        .collect();
 
-    let (subst_body, typed_body_expr) = ty_check_vexpr_typed(
-        &mut env_var_to_ty_scheme_binding_seed,
-        ty_env,
-        ty_var_ns,
-        &vexpr.body.0,
-    )?;
+    Ok((subst_accum, final_defs))
+}
+
+/// type check let expression (implements let-polymorphism / generalization)
+///
+/// shape
+///   let x1 = e1
+///       x2 = e2
+///       ...
+///   in body
+///
+/// steps
+/// - type check each `ei` to get types `ti`
+/// - generalize `ti` by quantifying free vars (excluding those already in the outer env)
+/// - extend the env with schemes (`x1: (\forall)a.t1`, `x2: (\forall)b.t2`, ...)
+/// - type check the body in the extended env and return its type
+///
+/// policy
+/// - let-bound variables are polymorphic (instantiable at multiple types)
+/// - lambda parameters are monomorphic within their scope
+/// - pattern-bound variables are monomorphic
+pub(crate) fn ty_check_let_typed(
+    env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    ty_env: &TyEnv,
+    ty_var_ns: &mut TyVarNameSupply,
+    vexpr: &VLetExpr,
+) -> Result<(Substitution, TypedVExpr), TyError> {
+    let defs: Vec<(VPattern, VExpr, Option<TyScheme>)> = vexpr
+        .defs
+        .iter()
+        .map(|(pat, expr, annot)| {
+            (
+                pat.clone(),
+                expr.clone(),
+                annot.as_ref().map(|ty| TyScheme {
+                    ty_vars_schematic: vec![],
+                    ty_expr: Box::new(ty.clone()),
+                }),
+            )
+        })
+        .collect();
+
+    // used to compute free variables in environment
+    // this is needed to determine the set of generalizable type variables which become schematic type variables in type schemes
+    let mut env_outer = env_var_to_ty_scheme.clone();
+
+    // environment accumulating info as type-checking progresses
+    let mut env_working = env_var_to_ty_scheme.clone();
+
+    let (mut subst_accum, typed_binding_def_pairs) =
+        ty_check_binding_group(&mut env_working, &mut env_outer, ty_env, ty_var_ns, &defs)?;
+
+    // typecheck body of let expression using accumulated env and substitutions
+    env_working = env_working.apply_subst_to_env(&subst_accum);
+
+    let (subst_body, typed_body_expr) =
+        ty_check_vexpr_typed(&mut env_working, ty_env, ty_var_ns, &vexpr.body.0)?;
 
     subst_accum = subst_compose(&subst_body, &subst_accum);
     let typed_body_expr = apply_subst_typed_expr(&subst_accum, typed_body_expr);
     let ty_body = typed_body_expr.ty().clone();
 
+    let typed_defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs
+        .into_iter()
+        .map(|(_idx, def)| {
+            let typed_pat = apply_subst_typed_pattern(&subst_accum, def.typed_pattern);
+            let typed_rhs = apply_subst_typed_expr(&subst_accum, def.typed_rhs);
+            (typed_pat, typed_rhs)
+        })
+        .collect();
+
     Ok((
         subst_accum,
         TypedVExpr::Let(TypedVLetExpr {
-            defs: typed_binding_def_pairs
-                .into_iter()
-                .map(|(_idx, t)| match t {
-                    TypedLhsRhsPair::SimpleVarBindingPair(item) => item,
-                    TypedLhsRhsPair::NonSimpleVarBindingPair((
-                        typed_vpattern,
-                        _,
-                        typed_def_vexpr,
-                    )) => (typed_vpattern, typed_def_vexpr),
-                })
-                .collect(),
+            defs: typed_defs,
             body: Box::new(typed_body_expr),
             ty: ty_body,
         }),
