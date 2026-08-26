@@ -277,47 +277,7 @@ fn insert_declared_fun_signatures(
 /// in the type environment
 fn build_scheme_from_signature(sig: &FnSig, ty_env: &TyEnv, ns: &mut TyVarNameSupply) -> TyScheme {
     let ty_expr = lower_type_annot_to_ty_expr(&sig.ty);
-
-    fn collect_user_vars<'a>(
-        ty: &'a TyExpr,
-        out: &mut BTreeSet<&'a TyVarNameUserDefined>,
-        te: &TyEnv,
-    ) {
-        match ty {
-            TyExpr::TyVar(TyVarName::UserDefined(u)) => {
-                if let Err(TyError::UnknownType(_)) = te.get_adt(&format!("{}", u.token)) {
-                    out.insert(u);
-                }
-            }
-            TyExpr::TyVar(_) => {}
-            TyExpr::TyApp(app) => {
-                collect_user_vars(&app.ty_func, out, te);
-                collect_user_vars(&app.ty_arg, out, te);
-            }
-        }
-    }
-
-    let mut ty_vars_schematic: Vec<TyVarName> = Vec::new();
-    let mut subst = SubstPersistentIdent::default();
-
-    let mut to_generalize = BTreeSet::new();
-    collect_user_vars(&ty_expr, &mut to_generalize, ty_env);
-
-    for u in to_generalize {
-        let fresh_ty_var_name = ns.generate();
-        ty_vars_schematic.push(fresh_ty_var_name.clone());
-        subst = subst.insert(
-            TyVarName::UserDefined(u.clone()),
-            TyExpr::TyVar(fresh_ty_var_name),
-        );
-    }
-
-    let ty_expr_generalized = subst_ty(&subst, &ty_expr);
-
-    TyScheme {
-        ty_vars_schematic,
-        ty_expr: Box::new(ty_expr_generalized),
-    }
+    build_scheme_from_ty_expr(&ty_expr, ty_env, ns)
 }
 
 static TEST_PIPELINE_CONTENT_SIMPLE: &str = r###"
@@ -470,6 +430,9 @@ f y = case y of
 static TEST_PIPELINE_CONTENT_FUNCTION_SIGNATURE: &str = r###"
 f :: i64 -> i64 -> i64
 f x y = x * y + 5
+
+g :: a -> a
+g x = x
 "###;
 
 static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_FUNC_PARAM: &str = r###"
@@ -608,6 +571,15 @@ f x = let first a b = a
           partial = first x
       in
           partial
+"###;
+
+static TEST_PIPELINE_CONTENT_LET_BINDING_TYPE_ANNOTATION: &str = r###"
+f x =
+      // [todo] support type annotation of let definition
+      // let id :: (a ->a)
+      let id x = x
+      in
+          id x
 "###;
 
 #[test]
@@ -943,6 +915,16 @@ fn test_pipeline_local_polymorphic_function() {
 #[test]
 fn test_pipeline_partially_applied_binding() {
     match compile(TEST_PIPELINE_CONTENT_PARTIALLY_APPLIED_BINDING) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_let_binding_type_annotation() {
+    match compile(TEST_PIPELINE_CONTENT_LET_BINDING_TYPE_ANNOTATION) {
         Err(e) => {
             println!("{:?}", e);
         }

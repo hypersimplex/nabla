@@ -1285,10 +1285,11 @@ pub(crate) fn ty_check_let_typed(
             (
                 pat.clone(),
                 expr.clone(),
-                annot.as_ref().map(|ty| TyScheme {
-                    ty_vars_schematic: vec![],
-                    ty_expr: Box::new(ty.clone()),
-                }),
+                // conversion to TyScheme for running the helper
+                // `ty_check_binding_group`
+                annot
+                    .as_ref()
+                    .map(|ty| build_scheme_from_ty_expr(ty, ty_env, ty_var_ns)),
             )
         })
         .collect();
@@ -2463,4 +2464,54 @@ fn schematic_info_without_binders(
         next.remove(binder);
     }
     next
+}
+
+/// build a type scheme from a `ty_expr` type annotation
+/// by generalizing free user-defined type variables that are not ADT names
+/// in the type environment
+pub(crate) fn build_scheme_from_ty_expr(
+    ty_expr: &TyExpr,
+    ty_env: &TyEnv,
+    ns: &mut TyVarNameSupply,
+) -> TyScheme {
+    fn collect_user_vars<'a>(
+        ty: &'a TyExpr,
+        out: &mut BTreeSet<&'a TyVarNameUserDefined>,
+        te: &TyEnv,
+    ) {
+        match ty {
+            TyExpr::TyVar(TyVarName::UserDefined(u)) => {
+                if let Err(TyError::UnknownType(_)) = te.get_adt(&format!("{}", u.token)) {
+                    out.insert(u);
+                }
+            }
+            TyExpr::TyVar(_) => {}
+            TyExpr::TyApp(app) => {
+                collect_user_vars(&app.ty_func, out, te);
+                collect_user_vars(&app.ty_arg, out, te);
+            }
+        }
+    }
+
+    let mut ty_vars_schematic: Vec<TyVarName> = Vec::new();
+    let mut subst = SubstPersistentIdent::default();
+
+    let mut to_generalize = BTreeSet::new();
+    collect_user_vars(&ty_expr, &mut to_generalize, ty_env);
+
+    for u in to_generalize {
+        let fresh_ty_var_name = ns.generate();
+        ty_vars_schematic.push(fresh_ty_var_name.clone());
+        subst = subst.insert(
+            TyVarName::UserDefined(u.clone()),
+            TyExpr::TyVar(fresh_ty_var_name),
+        );
+    }
+
+    let ty_expr_generalized = subst_ty(&subst, &ty_expr);
+
+    TyScheme {
+        ty_vars_schematic,
+        ty_expr: Box::new(ty_expr_generalized),
+    }
 }
