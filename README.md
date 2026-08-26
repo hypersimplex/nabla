@@ -10,9 +10,9 @@ literatures from SPJ, Wolfe, and Banerjee.
 
 Planned features & non-features:
 - no support for type classes for now (eg: "System F"-like core for now)
-- GC'd backend
+- GC'd backend runtime, with G-machine implementation, to be done in Rust
 - evaluation strategy: weak head normal form
-- inferred types and optional user specified types
+- inferred types (HW algo) and optional user specified types
 - no support for list comprehension for now
 - not optimizing for efficient compilation for now
 - support for literal (range) pattern in case expression
