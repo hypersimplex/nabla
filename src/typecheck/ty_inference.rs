@@ -295,7 +295,8 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
             ty: x.ty.clone(),
         }),
         TypedVExpr::Variable(x) => {
-            let ret = TypedVExpr::Variable(TypedVVariable {
+            
+            TypedVExpr::Variable(TypedVVariable {
                 var: x.var.clone(),
                 ty: subst_ty(subst, &x.ty),
                 ty_args: x
@@ -304,8 +305,7 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
                     .map(|arg| subst_ty(subst, &arg))
                     .collect(),
                 ty_schematic: subst_ty_scheme(subst, &x.ty_schematic),
-            });
-            ret
+            })
         }
         TypedVExpr::Constructor(constructor) => TypedVExpr::Constructor(TypedVConstructorExpr {
             ty_name: constructor.ty_name,
@@ -852,14 +852,14 @@ pub(crate) fn ty_check_binding_group(
                             TyError::InternalError(
                                 format_args!(
                                     "binder={:?} cannot be found; duplicate_def_idx={:?}",
-                                    &pat_var, idx
+                                    pat_var, idx
                                 )
                                 .to_string(),
                             )
                         })?;
                 return Err(TyError::PatBinderUniqueness(format!(
                     "duplicate binder `{:?}` in the same binding group (internal: binder seeding pass, first_def_idx={:?}, duplicate_def_idx={:?})",
-                    &pat_var, first_def_idx, idx
+                    pat_var, first_def_idx, idx
                 ).to_string()));
             }
 
@@ -1190,9 +1190,7 @@ pub(crate) fn ty_check_binding_group(
         // fill recursive uses with explicit ty_args
         //
         // derive schemes from stamped binding patterns to keep a single source of truth
-        let scheme_info_for_scc: BTreeMap<VVar, TyScheme> = typed_binding_def_pairs
-            .iter()
-            .filter_map(|(_idx, entry)| match entry {
+        let scheme_info_for_scc: BTreeMap<VVar, TyScheme> = typed_binding_def_pairs.values().filter_map(|entry| match entry {
                 TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, _typed_def_vexpr)) => {
                     match typed_binding_vexpr {
                         TypedVPattern::Variable {
@@ -1208,12 +1206,11 @@ pub(crate) fn ty_check_binding_group(
             .collect();
         if !scheme_info_for_scc.is_empty() {
             for idx in scc.iter() {
-                if let Some(entry) = typed_binding_def_pairs.get_mut(idx) {
-                    if let TypedLhsRhsPair::SimpleVarBindingPair((_, typed_def_vexpr)) = entry {
+                if let Some(entry) = typed_binding_def_pairs.get_mut(idx)
+                    && let TypedLhsRhsPair::SimpleVarBindingPair((_, typed_def_vexpr)) = entry {
                         *typed_def_vexpr =
                             fill_missing_ty_args(typed_def_vexpr.clone(), &scheme_info_for_scc)?;
                     }
-                }
             }
         }
     }
@@ -1314,9 +1311,7 @@ pub(crate) fn ty_check_let_typed(
     let typed_body_expr = apply_subst_typed_expr(&subst_accum, typed_body_expr);
     let ty_body = typed_body_expr.ty().clone();
 
-    let typed_defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs
-        .into_iter()
-        .map(|(_idx, def)| {
+    let typed_defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs.into_values().map(|def| {
             let typed_pat = apply_subst_typed_pattern(&subst_accum, def.typed_pattern);
             let typed_rhs = apply_subst_typed_expr(&subst_accum, def.typed_rhs);
             (typed_pat, typed_rhs)
@@ -1867,7 +1862,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
 
             let expected_field_map: HashMap<&String, TyExpr> = expected_field_names
                 .iter()
-                .zip(expected_field_types.into_iter())
+                .zip(expected_field_types)
                 .collect();
 
             let mut seen = HashSet::new();
@@ -2102,8 +2097,8 @@ pub(crate) fn fill_missing_ty_args(
             mut ty_args,
             mut ty_schematic,
         }) => {
-            if ty_args.is_empty() {
-                if let Some(scheme) = scheme_info_for_scc.get(&var) {
+            if ty_args.is_empty()
+                && let Some(scheme) = scheme_info_for_scc.get(&var) {
                     // perform back filling at use site
 
                     // sanity check for matching the binder scheme against
@@ -2141,7 +2136,6 @@ pub(crate) fn fill_missing_ty_args(
                         ));
                     }
                 }
-            }
             Ok(TypedVExpr::Variable(TypedVVariable {
                 var,
                 ty,
@@ -2152,7 +2146,6 @@ pub(crate) fn fill_missing_ty_args(
         TypedVExpr::Constructor(constructor) => {
             Ok(TypedVExpr::Constructor(TypedVConstructorExpr {
                 // if zero-arg constructor, then this behaves like the base case of recursion
-                // constructor: constructor.constructor,
                 ty_name: constructor.ty_name,
                 constructor_name: constructor.constructor_name,
                 args: constructor
@@ -2393,7 +2386,7 @@ fn collect_all_pattern_variables_aux(
                 collect_all_pattern_variables_aux(ret, field_pattern)?;
             }
         }
-        VPattern::Wild { .. } | VPattern::Literal { .. } | VPattern::Range { .. } => {}
+        VPattern::Wild | VPattern::Literal { .. } | VPattern::Range { .. } => {}
     }
     Ok(())
 }
@@ -2497,7 +2490,7 @@ pub(crate) fn build_scheme_from_ty_expr(
     let mut subst = SubstPersistentIdent::default();
 
     let mut to_generalize = BTreeSet::new();
-    collect_user_vars(&ty_expr, &mut to_generalize, ty_env);
+    collect_user_vars(ty_expr, &mut to_generalize, ty_env);
 
     for u in to_generalize {
         let fresh_ty_var_name = ns.generate();
@@ -2508,7 +2501,7 @@ pub(crate) fn build_scheme_from_ty_expr(
         );
     }
 
-    let ty_expr_generalized = subst_ty(&subst, &ty_expr);
+    let ty_expr_generalized = subst_ty(&subst, ty_expr);
 
     TyScheme {
         ty_vars_schematic,

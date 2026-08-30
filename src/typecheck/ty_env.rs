@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::typecheck::adt::*;
 use crate::typecheck::ty_err::*;
-use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
 
 pub struct TyEnv {

@@ -350,14 +350,14 @@ fn ty_expr_from_with_params(
                 let g = fun.head.lock().map_err(|_| {
                     TyError::InternalError("failed to lock function type head".to_string())
                 })?;
-                ty_expr_from_with_params(&*g, params)?
+                ty_expr_from_with_params(&g, params)?
             };
             let tail = match &fun.tail {
                 Some(x) => {
                     let guard = x.lock().map_err(|_| {
                         TyError::InternalError("failed to lock function type tail".to_string())
                     })?;
-                    ty_expr_from_with_params(&*guard, params)?
+                    ty_expr_from_with_params(&guard, params)?
                 }
                 None => {
                     return Err(TyError::AdtError(

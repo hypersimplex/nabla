@@ -177,7 +177,7 @@ pub(crate) fn match_builtin_type(ty: &TyExpr, builtin: &TyVarNameBuiltin) -> boo
 /// check if a type expression is an auto-generated type variable
 pub(crate) fn match_ty_var_auto(ty: &TyExpr) -> bool {
     match ty {
-        TyExpr::TyVar(TyVarName::Auto(x)) => true,
+        TyExpr::TyVar(TyVarName::Auto(_x)) => true,
         _ => {
             println!("{:?} does not match expected TyVarName::Auto(_)", ty);
             false

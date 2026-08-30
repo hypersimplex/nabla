@@ -210,7 +210,7 @@ fn v_expr_from_case_expr(
 
 fn v_expr_from_iden_expr(
     iden_expr: &abstr_structures::IdenExpr,
-    v_var_supply: &mut VVarNameSupply,
+    _v_var_supply: &mut VVarNameSupply,
 ) -> VExprAndTyAnnot {
     let abstr_structures::IdenExpr { iden, builtin } = iden_expr;
     (
@@ -272,7 +272,7 @@ fn v_expr_from_let_expr(
 
 fn v_expr_from_lit_num_expr(
     lit_num_expr: &abstr_structures::LiteralNumericExpr,
-    v_var_supply: &mut VVarNameSupply,
+    _v_var_supply: &mut VVarNameSupply,
 ) -> VExprAndTyAnnot {
     let abstr_structures::LiteralNumericExpr { literal } = lit_num_expr;
     let value = classify_numeric_literal(&literal.token);
@@ -288,7 +288,7 @@ fn v_expr_from_lit_num_expr(
 
 fn v_expr_from_lit_string_expr(
     lit_string_expr: &abstr_structures::LiteralStringExpr,
-    v_var_supply: &mut VVarNameSupply,
+    _v_var_supply: &mut VVarNameSupply,
 ) -> VExprAndTyAnnot {
     let abstr_structures::LiteralStringExpr { literal } = lit_string_expr;
     (

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::typecheck::ty_err::*;
-use crate::typecheck::v_expr::{VAbstrParam, VExpr, VPattern, VVar};
+use crate::typecheck::v_expr::{VExpr, VPattern, VVar};
 
 fn collect_pattern_binders_unique(
     pattern: &VPattern,

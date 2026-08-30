@@ -211,10 +211,7 @@ impl VPattern {
     pub(crate) fn subst_vars(&mut self, substitution: &BTreeMap<VVar, VVar>) {
         match self {
             VPattern::Wild => {}
-            VPattern::Variable(v) => match substitution.get(v) {
-                Some(x) => *v = x.clone(),
-                _ => {}
-            },
+            VPattern::Variable(v) => if let Some(x) = substitution.get(v) { *v = x.clone() },
             VPattern::Literal(_) => {}
             VPattern::Range { .. } => {}
             VPattern::Constructor { args, .. } => {
@@ -352,13 +349,13 @@ impl VLetExpr {
 }
 
 impl VLitNumeric {
-    pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
+    pub(crate) fn get_free_vars(&self, _bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
         BTreeSet::new()
     }
 }
 
 impl VLitString {
-    pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
+    pub(crate) fn get_free_vars(&self, _bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
         BTreeSet::new()
     }
 }

@@ -1,5 +1,4 @@
 use crate::typecheck::v_expr::*;
-use crate::typecheck::v_var_name::*;
 
 /// supplies auto generated type variable names
 pub(crate) struct VVarNameSupply {

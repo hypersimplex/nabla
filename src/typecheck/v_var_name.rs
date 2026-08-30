@@ -17,8 +17,8 @@ impl PartialEq for VVarName {
     fn eq(&self, other: &Self) -> bool {
         match (self.builtin, other.builtin) {
             (Some(x), Some(y)) => return x.eq(&y),
-            (Some(x), None) => return false,
-            (None, Some(y)) => return false,
+            (Some(_x), None) => return false,
+            (None, Some(_y)) => return false,
             _ => {}
         }
         self.token.eq(&other.token)
@@ -29,8 +29,8 @@ impl Ord for VVarName {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self.builtin, other.builtin) {
             (Some(x), Some(y)) => return x.cmp(&y),
-            (Some(x), None) => return std::cmp::Ordering::Greater,
-            (None, Some(y)) => return std::cmp::Ordering::Less,
+            (Some(_x), None) => return std::cmp::Ordering::Greater,
+            (None, Some(_y)) => return std::cmp::Ordering::Less,
             _ => {}
         }
         self.token.cmp(&other.token)

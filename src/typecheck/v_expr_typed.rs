@@ -3,7 +3,6 @@
 
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_scheme::*;
-use crate::typecheck::ty_var_name::*;
 use crate::typecheck::v_expr::*;
 use crate::util::printer::*;
 
@@ -228,7 +227,7 @@ impl DocPrinter for TypedVExpr {
 
 impl DocPrinter for TypedVAbstrExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_abstr = {
+        let doc_abstr = {
             let mut doc_name = self.name.to_doc();
             doc_name = mk_cat(mk_lit("("), doc_name);
             doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty.to_doc()));
@@ -269,7 +268,7 @@ impl DocPrinter for TypedVAbstrParam {
 
 impl DocPrinter for TypedVAppExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_app = self.callable.to_doc();
+        let doc_app = self.callable.to_doc();
         let mut doc_args = mk_nil();
         for (idx, arg) in self.args.iter().enumerate() {
             if idx != 0 {
@@ -369,7 +368,7 @@ impl DocPrinter for TypedVPattern {
     fn to_doc(&self) -> Box<Doc> {
         use TypedVPattern::*;
         match self {
-            Wild { ty } => mk_lit("_"),
+            Wild { ty: _ } => mk_lit("_"),
             Variable {
                 binder,
                 ty,
@@ -384,18 +383,18 @@ impl DocPrinter for TypedVPattern {
                 ),
                 mk_lit(")"),
             ),
-            Literal { literal, ty } => literal.to_doc(),
-            Range { start, end, ty } => mk_cat(mk_cat(start.to_doc(), mk_lit("..")), end.to_doc()),
+            Literal { literal, ty: _ } => literal.to_doc(),
+            Range { start, end, ty: _ } => mk_cat(mk_cat(start.to_doc(), mk_lit("..")), end.to_doc()),
             Constructor {
                 ty_name,
                 constructor,
                 args,
-                ty,
+                ty: _,
                 ty_args,
             } => {
                 let mut doc = mk_nil();
                 doc = mk_cat(doc, mk_lit(&format!("{}.", ty_name)));
-                doc = mk_cat(doc, mk_lit(&format!("{}", constructor)));
+                doc = mk_cat(doc, mk_lit(&constructor.to_string()));
 
                 if !ty_args.is_empty() {
                     doc = mk_cat(doc, mk_lit("<"));
@@ -416,7 +415,7 @@ impl DocPrinter for TypedVPattern {
                 constructor,
                 fields,
                 rest,
-                ty,
+                ty: _,
                 ty_args,
             } => {
                 let mut doc = mk_nil();
@@ -451,7 +450,7 @@ impl DocPrinter for TypedVPattern {
                     doc_fields = mk_cat(doc_fields, mk_cat(mk_line_force(), mk_lit("..")));
                 }
                 doc = mk_cat(doc, mk_nest(4, mk_group(doc_fields)));
-                doc = mk_cat(doc, mk_lit(&format!("}}")));
+                doc = mk_cat(doc, mk_lit("}"));
                 doc
             }
         }
