@@ -40,14 +40,8 @@ pub(crate) fn desugar_literal_pattern_abstr(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVAbstrExpr,
 ) -> TypedVExpr {
-    let TypedVAbstrExpr {
-        name,
-        params,
-        body,
-        ty,
-    } = expr;
+    let TypedVAbstrExpr { params, body, ty } = expr;
     TypedVExpr::Abstraction(TypedVAbstrExpr {
-        name: name.clone(),
         params: params.clone(),
         body: Box::new(desugar_literal_pattern(ns, env_v_var_to_ty_scheme, body)),
         ty: ty.clone(),

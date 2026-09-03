@@ -7,6 +7,21 @@ use crate::typecheck::v_expr::*;
 use crate::util::printer::*;
 
 #[derive(Clone, Debug)]
+pub(crate) struct TopLevelFunction {
+    // analogous to LHS binding of let expression
+    pub name: VVar,
+
+    pub vexpr: VExpr,
+
+    pub ty_expr: TyExpr,
+
+    pub scheme: TyScheme,
+
+    // this is guaranteed to be a lambda abstraction
+    pub typed_expr: TypedVExpr,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) enum TypedVExpr {
     Abstraction(TypedVAbstrExpr),
     Application(TypedVAppExpr),
@@ -57,7 +72,6 @@ pub(crate) struct TypedVVariable {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TypedVAbstrExpr {
-    pub name: VVar,
     pub params: Vec<TypedVAbstrParam>,
     pub body: Box<TypedVExpr>,
     pub ty: TyExpr,
@@ -209,6 +223,22 @@ impl TypedVPattern {
 
 // helper impl. for doc printer trait --->>
 
+impl DocPrinter for TopLevelFunction {
+    fn to_doc(&self) -> Box<Doc> {
+        let doc_fn = {
+            let mut doc_name = self.name.to_doc();
+            doc_name = mk_cat(mk_lit("("), doc_name);
+            doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty_expr.to_doc()));
+            doc_name = mk_cat(doc_name, mk_lit(")"));
+            cat_space(
+                cat_space(doc_name, mk_lit("=")),
+                mk_nest(4, self.typed_expr.to_doc()),
+            )
+        };
+        doc_fn
+    }
+}
+
 impl DocPrinter for TypedVExpr {
     fn to_doc(&self) -> Box<Doc> {
         use TypedVExpr::*;
@@ -227,27 +257,15 @@ impl DocPrinter for TypedVExpr {
 
 impl DocPrinter for TypedVAbstrExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let doc_abstr = {
-            let mut doc_name = self.name.to_doc();
-            doc_name = mk_cat(mk_lit("("), doc_name);
-            doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty.to_doc()));
-            doc_name = mk_cat(doc_name, mk_lit(")"));
-            cat_space(doc_name, mk_lit("= "))
-        };
-        let mut rhs = mk_nil();
-        rhs = mk_cat(rhs, mk_lit("\\"));
+        let mut rhs = mk_lit("\\");
         for (idx, param) in self.params.iter().enumerate() {
-            if idx != 0 {
-                rhs = cat_space(rhs, param.to_doc());
-            } else {
-                rhs = mk_cat(rhs, param.to_doc());
-            }
+            rhs = cat_space(rhs, param.to_doc());
         }
         rhs = cat_space(rhs, mk_lit("->"));
         let doc_body = self.body.to_doc();
 
         rhs = cat_space(rhs, mk_nest(4, doc_body));
-        mk_cat(doc_abstr, mk_group(rhs))
+        mk_group(rhs)
     }
 }
 
@@ -384,7 +402,9 @@ impl DocPrinter for TypedVPattern {
                 mk_lit(")"),
             ),
             Literal { literal, ty: _ } => literal.to_doc(),
-            Range { start, end, ty: _ } => mk_cat(mk_cat(start.to_doc(), mk_lit("..")), end.to_doc()),
+            Range { start, end, ty: _ } => {
+                mk_cat(mk_cat(start.to_doc(), mk_lit("..")), end.to_doc())
+            }
             Constructor {
                 ty_name,
                 constructor,

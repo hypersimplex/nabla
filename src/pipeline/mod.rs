@@ -35,15 +35,6 @@ use std::collections::*;
 use std::path::Path;
 
 #[derive(Clone, Debug)]
-pub(crate) struct ProgramFunctionArtifacts {
-    pub name: VVar,
-    pub vexpr: VExpr,
-    pub ty_expr: TyExpr,
-    pub scheme: TyScheme,
-    pub typed_expr: TypedVExpr,
-}
-
-#[derive(Clone, Debug)]
 pub(crate) enum CompileError {
     Parse(ParseError),
     Type(TyError),
@@ -158,7 +149,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &defs,
     )?;
 
-    let mut ty_check_results: BTreeMap<usize, ProgramFunctionArtifacts> = BTreeMap::new();
+    let mut ty_check_results: BTreeMap<usize, TopLevelFunction> = BTreeMap::new();
     for (idx, def) in typed_group_results.into_iter() {
         let orig_idx = def_indices[idx];
         let binder = match &def.typed_pattern {
@@ -169,7 +160,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         let ty_expr = def.typed_rhs.ty().clone();
         ty_check_results.insert(
             orig_idx,
-            ProgramFunctionArtifacts {
+            TopLevelFunction {
                 name: binder,
                 vexpr,
                 ty_expr,
@@ -180,8 +171,8 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     }
 
     println!("type checked functions --->>");
-    for (id, function_info) in ty_check_results.iter() {
-        print!("{}", function_info.typed_expr.to_doc());
+    for (id, top_lvl_fn) in ty_check_results.iter() {
+        print!("{}", top_lvl_fn.to_doc());
         println!();
     }
     println!("<<--- type checked functions");
@@ -189,50 +180,48 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     // type preserving passes --->>
 
     println!("desugar patterns to appear only in case clause pattern binders..");
-    for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr = desugar_pattern(&mut v_var_ns, &function_info.typed_expr);
+    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
+        top_lvl_fn.typed_expr = desugar_pattern(&mut v_var_ns, &top_lvl_fn.typed_expr);
     }
 
     println!("desugar case literal range pattern to case guard expression");
-    for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr = desugar_literal_range_pattern(
+    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
+        top_lvl_fn.typed_expr = desugar_literal_range_pattern(
             &mut v_var_ns,
             &mut env_v_var_to_ty_scheme,
-            &function_info.typed_expr,
+            &top_lvl_fn.typed_expr,
         );
     }
 
     println!("desugar case literal pattern to case guard expression");
-    for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr = desugar_literal_pattern(
+    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
+        top_lvl_fn.typed_expr = desugar_literal_pattern(
             &mut v_var_ns,
             &mut env_v_var_to_ty_scheme,
-            &function_info.typed_expr,
+            &top_lvl_fn.typed_expr,
         );
     }
 
     println!("normalize case scrutinee to be simple variable..");
-    for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr =
-            normalize_case_scrutinee(&mut v_var_ns, &function_info.typed_expr);
+    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
+        top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
     }
 
     println!("desugar case guard to case expressions without guard expressions..");
-    for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr = desugar_case_guard(&mut v_var_ns, &function_info.typed_expr);
+    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
+        top_lvl_fn.typed_expr = desugar_case_guard(&mut v_var_ns, &top_lvl_fn.typed_expr);
     }
 
     println!("normalize case scrutinee to be simple variable again after case guard desugaring..");
-    for (id, function_info) in ty_check_results.iter_mut() {
-        function_info.typed_expr =
-            normalize_case_scrutinee(&mut v_var_ns, &function_info.typed_expr);
+    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
+        top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
     }
 
     // <<--- type preserving passes
 
     println!("normalized/desugared --->>");
-    for (id, function_info) in ty_check_results.iter() {
-        print!("{}", function_info.typed_expr.to_doc());
+    for (id, top_lvl_fn) in ty_check_results.iter() {
+        print!("{}", top_lvl_fn.to_doc());
         println!();
     }
     println!("<<--- normalized/desugared");

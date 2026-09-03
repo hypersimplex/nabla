@@ -211,7 +211,11 @@ impl VPattern {
     pub(crate) fn subst_vars(&mut self, substitution: &BTreeMap<VVar, VVar>) {
         match self {
             VPattern::Wild => {}
-            VPattern::Variable(v) => if let Some(x) = substitution.get(v) { *v = x.clone() },
+            VPattern::Variable(v) => {
+                if let Some(x) = substitution.get(v) {
+                    *v = x.clone()
+                }
+            }
             VPattern::Literal(_) => {}
             VPattern::Range { .. } => {}
             VPattern::Constructor { args, .. } => {

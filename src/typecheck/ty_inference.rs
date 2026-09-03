@@ -242,7 +242,6 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
                 .collect();
             let body = Box::new(apply_subst_typed_expr(subst, *abstr.body));
             TypedVExpr::Abstraction(TypedVAbstrExpr {
-                name: abstr.name,
                 params,
                 body,
                 ty: subst_ty(subst, &abstr.ty),
@@ -294,19 +293,16 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
             val: x.val.clone(),
             ty: x.ty.clone(),
         }),
-        TypedVExpr::Variable(x) => {
-            
-            TypedVExpr::Variable(TypedVVariable {
-                var: x.var.clone(),
-                ty: subst_ty(subst, &x.ty),
-                ty_args: x
-                    .ty_args
-                    .into_iter()
-                    .map(|arg| subst_ty(subst, &arg))
-                    .collect(),
-                ty_schematic: subst_ty_scheme(subst, &x.ty_schematic),
-            })
-        }
+        TypedVExpr::Variable(x) => TypedVExpr::Variable(TypedVVariable {
+            var: x.var.clone(),
+            ty: subst_ty(subst, &x.ty),
+            ty_args: x
+                .ty_args
+                .into_iter()
+                .map(|arg| subst_ty(subst, &arg))
+                .collect(),
+            ty_schematic: subst_ty_scheme(subst, &x.ty_schematic),
+        }),
         TypedVExpr::Constructor(constructor) => TypedVExpr::Constructor(TypedVConstructorExpr {
             ty_name: constructor.ty_name,
             constructor_name: constructor.constructor_name,
@@ -550,7 +546,6 @@ pub(crate) fn ty_check_abstraction_typed(
     Ok((
         phi.clone(),
         TypedVExpr::Abstraction(TypedVAbstrExpr {
-            name: v_abstr_expr.name.clone(),
             params: typed_params,
             body: Box::new(typed_body),
             ty: arrow_type,
@@ -1190,7 +1185,9 @@ pub(crate) fn ty_check_binding_group(
         // fill recursive uses with explicit ty_args
         //
         // derive schemes from stamped binding patterns to keep a single source of truth
-        let scheme_info_for_scc: BTreeMap<VVar, TyScheme> = typed_binding_def_pairs.values().filter_map(|entry| match entry {
+        let scheme_info_for_scc: BTreeMap<VVar, TyScheme> = typed_binding_def_pairs
+            .values()
+            .filter_map(|entry| match entry {
                 TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, _typed_def_vexpr)) => {
                     match typed_binding_vexpr {
                         TypedVPattern::Variable {
@@ -1207,10 +1204,11 @@ pub(crate) fn ty_check_binding_group(
         if !scheme_info_for_scc.is_empty() {
             for idx in scc.iter() {
                 if let Some(entry) = typed_binding_def_pairs.get_mut(idx)
-                    && let TypedLhsRhsPair::SimpleVarBindingPair((_, typed_def_vexpr)) = entry {
-                        *typed_def_vexpr =
-                            fill_missing_ty_args(typed_def_vexpr.clone(), &scheme_info_for_scc)?;
-                    }
+                    && let TypedLhsRhsPair::SimpleVarBindingPair((_, typed_def_vexpr)) = entry
+                {
+                    *typed_def_vexpr =
+                        fill_missing_ty_args(typed_def_vexpr.clone(), &scheme_info_for_scc)?;
+                }
             }
         }
     }
@@ -1311,7 +1309,9 @@ pub(crate) fn ty_check_let_typed(
     let typed_body_expr = apply_subst_typed_expr(&subst_accum, typed_body_expr);
     let ty_body = typed_body_expr.ty().clone();
 
-    let typed_defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs.into_values().map(|def| {
+    let typed_defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs
+        .into_values()
+        .map(|def| {
             let typed_pat = apply_subst_typed_pattern(&subst_accum, def.typed_pattern);
             let typed_rhs = apply_subst_typed_expr(&subst_accum, def.typed_rhs);
             (typed_pat, typed_rhs)
@@ -2098,12 +2098,13 @@ pub(crate) fn fill_missing_ty_args(
             mut ty_schematic,
         }) => {
             if ty_args.is_empty()
-                && let Some(scheme) = scheme_info_for_scc.get(&var) {
-                    // perform back filling at use site
+                && let Some(scheme) = scheme_info_for_scc.get(&var)
+            {
+                // perform back filling at use site
 
-                    // sanity check for matching the binder scheme against
-                    // this call-site type
-                    let instantiation_subst = unify_ty_exprs(&subst_id(), &scheme.ty_expr, &ty)
+                // sanity check for matching the binder scheme against
+                // this call-site type
+                let instantiation_subst = unify_ty_exprs(&subst_id(), &scheme.ty_expr, &ty)
                             .map_err(|err| {
                                 TyError::TypeConflict(
                                     format_args!(
@@ -2113,29 +2114,27 @@ pub(crate) fn fill_missing_ty_args(
                                     .to_string(),
                                 )
                             })?;
-                    ty_args = scheme
-                        .ty_vars_schematic
-                        .iter()
-                        .cloned()
-                        .map(|tvn| subst_ty(&instantiation_subst, &TyExpr::TyVar(tvn)))
-                        .collect();
+                ty_args = scheme
+                    .ty_vars_schematic
+                    .iter()
+                    .cloned()
+                    .map(|tvn| subst_ty(&instantiation_subst, &TyExpr::TyVar(tvn)))
+                    .collect();
 
-                    ty_schematic = scheme.clone();
+                ty_schematic = scheme.clone();
 
-                    let used_ty_vars: BTreeSet<_> = ty_args.iter().flat_map(free_ty_vars).collect();
-                    let in_scope_ty_vars = free_ty_vars(&ty);
-                    if !used_ty_vars.is_subset(&in_scope_ty_vars) {
-                        return Err(TyError::TypeConflict(
-                            format_args!(
-				"recursive ty_args introduce new type vars for {:?}: {:?} not in {:?}",
-				var,
-				used_ty_vars,
-				in_scope_ty_vars
-                            )
-                            .to_string(),
-                        ));
-                    }
+                let used_ty_vars: BTreeSet<_> = ty_args.iter().flat_map(free_ty_vars).collect();
+                let in_scope_ty_vars = free_ty_vars(&ty);
+                if !used_ty_vars.is_subset(&in_scope_ty_vars) {
+                    return Err(TyError::TypeConflict(
+                        format_args!(
+                            "recursive ty_args introduce new type vars for {:?}: {:?} not in {:?}",
+                            var, used_ty_vars, in_scope_ty_vars
+                        )
+                        .to_string(),
+                    ));
                 }
+            }
             Ok(TypedVExpr::Variable(TypedVVariable {
                 var,
                 ty,

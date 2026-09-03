@@ -86,12 +86,7 @@ fn desugar_pattern_case(ns: &mut VVarNameSupply, case_expr: &TypedVCaseExpr) -> 
 /// where binder1/binder2 are compiler-managed binders for the original
 /// parameter positions
 fn desugar_pattern_abstr(ns: &mut VVarNameSupply, abstr: &TypedVAbstrExpr) -> TypedVExpr {
-    let TypedVAbstrExpr {
-        name,
-        params,
-        body,
-        ty,
-    } = abstr;
+    let TypedVAbstrExpr { params, body, ty } = abstr;
 
     let mut body_expr = desugar_pattern(ns, body);
 
@@ -120,7 +115,6 @@ fn desugar_pattern_abstr(ns: &mut VVarNameSupply, abstr: &TypedVAbstrExpr) -> Ty
         .collect();
 
     TypedVExpr::Abstraction(TypedVAbstrExpr {
-        name: name.clone(),
         params: params_desugared,
         body: Box::new(body_expr),
         ty: ty.clone(),
