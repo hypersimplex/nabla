@@ -225,17 +225,14 @@ impl TypedVPattern {
 
 impl DocPrinter for TopLevelFunction {
     fn to_doc(&self) -> Box<Doc> {
-        let doc_fn = {
-            let mut doc_name = self.name.to_doc();
-            doc_name = mk_cat(mk_lit("("), doc_name);
-            doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty_expr.to_doc()));
-            doc_name = mk_cat(doc_name, mk_lit(")"));
-            cat_space(
-                cat_space(doc_name, mk_lit("=")),
-                mk_nest(4, self.typed_expr.to_doc()),
-            )
-        };
-        doc_fn
+        let mut doc_name = self.name.to_doc();
+        doc_name = mk_cat(mk_lit("("), doc_name);
+        doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty_expr.to_doc()));
+        doc_name = mk_cat(doc_name, mk_lit(")"));
+        cat_space(
+            cat_space(doc_name, mk_lit("=")),
+            mk_nest(4, self.typed_expr.to_doc()),
+        )
     }
 }
 
@@ -258,7 +255,7 @@ impl DocPrinter for TypedVExpr {
 impl DocPrinter for TypedVAbstrExpr {
     fn to_doc(&self) -> Box<Doc> {
         let mut rhs = mk_lit("\\");
-        for (idx, param) in self.params.iter().enumerate() {
+        for param in self.params.iter() {
             rhs = cat_space(rhs, param.to_doc());
         }
         rhs = cat_space(rhs, mk_lit("->"));
