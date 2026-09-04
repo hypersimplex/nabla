@@ -415,15 +415,19 @@ fn parse_function_definition(
         None
     };
     parser.expect_concrete(&ConcreteToken::Equal)?;
+
     // parse function body expr
-    let expr =
+    let body_expr =
         parse_expr_source(parser, 0)?.ok_or_else(|| ParseError::unexpected_eof("function body"))?;
-    Ok(TopLevelItem::FunctionDefinition(AbstractionExpr {
-        name: Some(identifier),
-        pattern: patterns,
-        param_patterns,
-        expr: Box::new(expr),
-        type_expr,
+
+    Ok(TopLevelItem::FunctionDefinition(TopLevelFunction {
+        name: identifier,
+        abstraction: AbstractionExpr {
+            pattern: patterns,
+            param_patterns,
+            expr: Box::new(body_expr),
+            type_expr,
+        },
     }))
 }
 
@@ -1066,7 +1070,6 @@ fn parse_let_def_item(item: &mut LayoutItemParser<'_>) -> ParseResult<(PatternEx
             .collect();
         rhs = AExprAnnot {
             expr: AExpr::AbstractionExpression(AbstractionExpr {
-                name: None,
                 pattern: pattern_tokens,
                 param_patterns,
                 expr: Box::new(rhs),
@@ -1104,7 +1107,6 @@ where
         parse_expr_source(source, 0)?.ok_or_else(|| ParseError::unexpected_eof("lambda body"))?;
     Ok(AExprAnnot {
         expr: AExpr::AbstractionExpression(AbstractionExpr {
-            name: None,
             pattern: patterns,
             param_patterns,
             expr: Box::new(body),

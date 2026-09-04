@@ -7,7 +7,7 @@ use crate::typecheck::v_expr::*;
 use crate::util::printer::*;
 
 #[derive(Clone, Debug)]
-pub(crate) struct TopLevelFunction {
+pub(crate) struct TypedTopLevelFunction {
     // analogous to LHS binding of let expression
     pub name: VVar,
 
@@ -223,7 +223,7 @@ impl TypedVPattern {
 
 // helper impl. for doc printer trait --->>
 
-impl DocPrinter for TopLevelFunction {
+impl DocPrinter for TypedTopLevelFunction {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc_name = self.name.to_doc();
         doc_name = mk_cat(mk_lit("("), doc_name);

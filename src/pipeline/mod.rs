@@ -11,6 +11,7 @@ use crate::parse::abstr::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
 use crate::parse::lex::*;
+use crate::parse::loc::ConcreteTokenAndLoc;
 use crate::parse::parser::*;
 use crate::typecheck::adt::*;
 use crate::typecheck::convert_v_expr_from_a_expr::*;
@@ -83,18 +84,37 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     let mut v_var_ns: VVarNameSupply = VVarNameSupply::new();
 
-    let mut funcs: BTreeMap<usize, VExpr> = BTreeMap::new();
+    let mut funcs: BTreeMap<usize, (VVar, VExpr)> = BTreeMap::new();
+
+    let mut seen_top_level_fn_names = BTreeSet::new();
 
     for (idx, item) in top_level.0.iter().enumerate() {
         if let TopLevelItem::FunctionDefinition(def) = item {
+            let TopLevelFunction { name, abstraction } = def;
+
             // convert to an abstraction expression
             let (vexpr, _annot) = vexpr_and_ty_annot_from_aexpr(
-                &AExpr::AbstractionExpression(def.clone()),
+                &AExpr::AbstractionExpression(abstraction.clone()),
                 &mut v_var_ns,
             );
             validate_pattern_binder_uniqueness(&vexpr)?;
             assert!(matches!(&vexpr, VExpr::Abstraction(_)));
-            funcs.insert(idx, vexpr);
+
+            let var_binder_for_fn = VVar::Named(VVarName {
+                token: name.token.clone(),
+                loc: Some(name.loc.clone()),
+                builtin: None,
+            });
+
+            if seen_top_level_fn_names.contains(&var_binder_for_fn) {
+                return Err(TyError::PatBinderUniqueness(format!(
+                    "duplicate binder for top level function: {:?}",
+                    &var_binder_for_fn
+                )))?;
+            }
+            seen_top_level_fn_names.insert(var_binder_for_fn.clone());
+
+            funcs.insert(idx, (var_binder_for_fn, vexpr));
         }
     }
 
@@ -106,7 +126,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         .map(|x| (x.clone(), x.clone()))
         .collect();
 
-    for (idx, expr) in funcs.iter_mut() {
+    for (idx, (_var_binder_for_fn, expr)) in funcs.iter_mut() {
         *expr = rename_var_unique(&mut v_var_ns, &vvars_outer_scope, expr);
     }
 
@@ -116,19 +136,16 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     let defs: Vec<(VPattern, VExpr, Option<TyScheme>)> = def_indices
         .iter()
         .map(|idx| {
-            let vexpr = funcs.get(idx).unwrap().clone();
-            let v_var_binding_func = match &vexpr {
-                VExpr::Abstraction(VAbstrExpr { name, .. }) => name.clone(),
-                _ => unreachable!(),
-            };
-            let opt_signature = match &v_var_binding_func {
+            let (var_binder_to_fn, vexpr) = funcs.get(idx).unwrap().clone();
+
+            let opt_signature = match &var_binder_to_fn {
                 VVar::Named(VVarName {
                     token: ConcreteToken::Iden(name),
                     ..
-                }) => declared_function_type_schemes.get(name).cloned(),
+                }) => declared_function_type_schemes.get(name.as_str()).cloned(),
                 _ => None,
             };
-            (VPattern::Variable(v_var_binding_func), vexpr, opt_signature)
+            (VPattern::Variable(var_binder_to_fn), vexpr, opt_signature)
         })
         .collect();
 
@@ -149,19 +166,15 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &defs,
     )?;
 
-    let mut ty_check_results: BTreeMap<usize, TopLevelFunction> = BTreeMap::new();
+    let mut ty_check_results: BTreeMap<usize, TypedTopLevelFunction> = BTreeMap::new();
     for (idx, def) in typed_group_results.into_iter() {
         let orig_idx = def_indices[idx];
-        let binder = match &def.typed_pattern {
-            TypedVPattern::Variable { binder, .. } => binder.clone(),
-            _ => unreachable!(),
-        };
-        let vexpr = funcs.get(&orig_idx).unwrap().clone();
+        let (var_binder_to_fn, vexpr) = funcs.get(&orig_idx).unwrap().clone();
         let ty_expr = def.typed_rhs.ty().clone();
         ty_check_results.insert(
             orig_idx,
-            TopLevelFunction {
-                name: binder,
+            TypedTopLevelFunction {
+                name: var_binder_to_fn.clone(),
                 vexpr,
                 ty_expr,
                 scheme: def.scheme,

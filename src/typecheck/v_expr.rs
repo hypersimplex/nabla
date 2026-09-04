@@ -20,9 +20,6 @@ pub enum VExpr {
 
 #[derive(Clone, Debug)]
 pub(crate) struct VAbstrExpr {
-    // name of abstraction or anonymous
-    pub name: VVar,
-
     // parameter metadata with original pattern
     pub params: Vec<VAbstrParam>,
 

@@ -41,22 +41,9 @@ fn rename_var_unique_abstraction(
     lvl: u32, // 0 for top-level scope
     expr: &VAbstrExpr,
 ) -> VExpr {
-    let mut vvar_scope = vvar_outer_scope.clone(); //for simplicity, clone for now but we'll optimize this [todo]
-    let VAbstrExpr { name, params, body } = expr;
-    vvar_scope.insert(
-        name.clone(),
-        if lvl == 0 {
-            // top-level binder for the lambda abstraction remain unchanged
-            name.clone()
-        } else {
-            // local binder gets a unique name
-            ns.uniqify(name)
-        },
-    );
+    let VAbstrExpr { params, body } = expr;
 
-    let name = vvar_scope.get(name).unwrap().clone();
-
-    let mut vvar_unique_map = vvar_scope.clone();
+    let mut vvar_unique_map = vvar_outer_scope.clone();
 
     let params = params
         .iter()
@@ -92,7 +79,7 @@ fn rename_var_unique_abstraction(
     let body_v_expr = rename_var_unique_aux(ns, &vvar_unique_map, lvl + 1, body_v_expr);
     let body = Box::new((body_v_expr, body_ty_annot.clone()));
 
-    VExpr::Abstraction(VAbstrExpr { name, params, body })
+    VExpr::Abstraction(VAbstrExpr { params, body })
 }
 
 fn rename_var_unique_application(

@@ -30,22 +30,11 @@ fn v_expr_from_abstr_expr(
     v_var_supply: &mut VVarNameSupply,
 ) -> VExprAndTyAnnot {
     let abstr_structures::AbstractionExpr {
-        name,
         pattern: _,
         param_patterns,
         expr,
         type_expr,
     } = a_abtr_expr;
-
-    // if the lambda abstraction is not named, then give it a name
-    let name: VVar = match name {
-        Some(x) => VVar::Named(VVarName {
-            token: x.token.clone(),
-            loc: Some(x.loc.clone()),
-            builtin: None,
-        }),
-        _ => v_var_supply.generate(),
-    };
 
     let params: Vec<VAbstrParam> = param_patterns
         .iter()
@@ -65,7 +54,7 @@ fn v_expr_from_abstr_expr(
 
     let body = Box::new(vexpr_and_ty_annot_from_aexpr(&expr.expr, v_var_supply));
     (
-        VExpr::Abstraction(VAbstrExpr { name, params, body }),
+        VExpr::Abstraction(VAbstrExpr { params, body }),
         type_expr.as_ref().map(lower_type_annot_to_ty_expr),
     )
 }

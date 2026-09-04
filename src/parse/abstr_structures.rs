@@ -401,26 +401,15 @@ impl DocPrinter for LetExpr {
 // expr: x + y + z
 #[derive(Clone, Debug)]
 pub(crate) struct AbstractionExpr {
-    pub name: Option<ConcreteTokenAndLoc>,   // named or annonymous
-    pub pattern: Vec<ConcreteTokenAndLoc>,   // parameter tokens (verbatim); TODO: retire this?
-    pub param_patterns: Vec<PatternExpr>,    // original parameter patterns
-    pub expr: Box<AExprAnnot>,               // body of lambda
+    pub pattern: Vec<ConcreteTokenAndLoc>, // parameter tokens (verbatim); TODO: retire this?
+    pub param_patterns: Vec<PatternExpr>,  // original parameter patterns
+    pub expr: Box<AExprAnnot>,             // body of lambda
     pub type_expr: Option<ATypeExprComplex>, // optional type annotation
 }
 
 impl DocPrinter for AbstractionExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_abstr = match &self.name {
-            Some(x) => {
-                let mut doc_name = x.to_doc();
-                if let Some(type_expr) = &self.type_expr {
-                    doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), type_expr.to_doc()));
-                }
-                cat_space(doc_name, mk_lit("= "))
-            }
-            _ => mk_nil(),
-        };
-        doc_abstr = mk_cat(doc_abstr, mk_lit("\\"));
+        let mut doc_abstr = mk_lit("\\");
         for (idx, pat_expr) in self.param_patterns.iter().enumerate() {
             if idx != 0 {
                 doc_abstr = cat_space(doc_abstr, pat_expr.to_doc());
@@ -432,10 +421,26 @@ impl DocPrinter for AbstractionExpr {
         let doc_body = self.expr.to_doc();
 
         doc_abstr = cat_space(doc_abstr, mk_nest(4, doc_body));
-        if self.name.is_none() {
-            doc_abstr = mk_cat(mk_cat(mk_lit("("), doc_abstr), mk_lit(")"));
-        }
+        doc_abstr = mk_cat(mk_cat(mk_lit("("), doc_abstr), mk_lit(")"));
         doc_abstr
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TopLevelFunction {
+    // top level function is always named
+    pub name: ConcreteTokenAndLoc,
+
+    pub abstraction: AbstractionExpr,
+}
+
+impl DocPrinter for TopLevelFunction {
+    fn to_doc(&self) -> Box<Doc> {
+        let mut doc_name = self.name.to_doc();
+        if let Some(ty_expr) = &self.abstraction.type_expr {
+            doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), ty_expr.to_doc()));
+        }
+        cat_space(cat_space(doc_name, mk_lit("=")), self.abstraction.to_doc())
     }
 }
 
@@ -720,7 +725,7 @@ pub(crate) enum TopLevelItem {
     DataRecord(DataRecord),
     DataSum(DataSum),
     FunctionSignature(FnSig),
-    FunctionDefinition(AbstractionExpr),
+    FunctionDefinition(TopLevelFunction),
 }
 
 impl DocPrinter for TopLevelItem {

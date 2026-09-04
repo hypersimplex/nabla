@@ -35,16 +35,16 @@ nested x = case x of
         parse_concrete_top_level(lexed).expect("parsing should succeed")
     }
 
-    fn find_function<'a>(items: &'a [TopLevelItem], name: &str) -> &'a AbstractionExpr {
+    fn find_function<'a>(items: &'a [TopLevelItem], name: &str) -> &'a TopLevelFunction {
         items
             .iter()
             .find_map(|item| match item {
-                TopLevelItem::FunctionDefinition(def)
-                    if def.name.as_ref().map(|tok| &tok.token)
-                        == Some(&ConcreteToken::Iden(name.to_string())) =>
-                {
-                    Some(def)
-                }
+                TopLevelItem::FunctionDefinition(
+                    def @ TopLevelFunction {
+                        name: function_name,
+                        ..
+                    },
+                ) if function_name.token == ConcreteToken::Iden(name.to_string()) => Some(def),
                 _ => None,
             })
             .unwrap_or_else(|| panic!("expected function `{name}`"))
@@ -66,7 +66,10 @@ nested x = case x of
     #[test]
     fn some_constructor_application() {
         let items = parse_top_level(CONSTRUCTOR_FIXTURE);
-        let make_some = find_function(&items.0, "makeSome");
+        let TopLevelFunction {
+            abstraction: make_some,
+            ..
+        } = find_function(&items.0, "makeSome");
 
         assert!(
             matches!(
@@ -103,7 +106,10 @@ nested x = case x of
     #[test]
     fn qualified_constructor_application() {
         let items = parse_top_level(CONSTRUCTOR_FIXTURE);
-        let make_qualified = find_function(&items.0, "makeQualified");
+        let TopLevelFunction {
+            abstraction: make_qualified,
+            ..
+        } = find_function(&items.0, "makeQualified");
 
         let application = match only_expression(make_qualified) {
             AExpr::ApplyExpression(app) => app,
@@ -137,7 +143,10 @@ nested x = case x of
     #[test]
     fn pair_constructor_application() {
         let items = parse_top_level(CONSTRUCTOR_FIXTURE);
-        let make_pair = find_function(&items.0, "makePair");
+        let TopLevelFunction {
+            abstraction: make_pair,
+            ..
+        } = find_function(&items.0, "makePair");
 
         assert_eq!(
             make_pair.param_patterns.len(),
@@ -170,7 +179,10 @@ nested x = case x of
     #[test]
     fn case_clause_patterns() {
         let items = parse_top_level(PATTERN_FIXTURE);
-        let unwrap_fn = find_function(&items.0, "unwrap");
+        let TopLevelFunction {
+            abstraction: unwrap_fn,
+            ..
+        } = find_function(&items.0, "unwrap");
         let case_expr = match only_expression(unwrap_fn) {
             AExpr::CaseExpression(case) => case,
             other => panic!("expected case expression, got {other:?}"),
@@ -214,7 +226,10 @@ nested x = case x of
     #[test]
     fn nested_some_none_pattern() {
         let items = parse_top_level(NESTED_FIXTURE);
-        let nested_fn = find_function(&items.0, "nested");
+        let TopLevelFunction {
+            abstraction: nested_fn,
+            ..
+        } = find_function(&items.0, "nested");
         let case_expr = match only_expression(nested_fn) {
             AExpr::CaseExpression(case) => case,
             other => panic!("expected case expression, got {other:?}"),
@@ -248,7 +263,10 @@ nested x = case x of
     #[test]
     fn nested_some_some_pattern() {
         let items = parse_top_level(NESTED_FIXTURE);
-        let nested_fn = find_function(&items.0, "nested");
+        let TopLevelFunction {
+            abstraction: nested_fn,
+            ..
+        } = find_function(&items.0, "nested");
         let case_expr = match only_expression(nested_fn) {
             AExpr::CaseExpression(case) => case,
             other => panic!("expected case expression, got {other:?}"),
