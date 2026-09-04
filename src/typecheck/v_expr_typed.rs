@@ -228,6 +228,11 @@ impl DocPrinter for TypedTopLevelFunction {
         let mut doc_name = self.name.to_doc();
         doc_name = mk_cat(mk_lit("("), doc_name);
         doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty_expr.to_doc()));
+
+        // include type schematic for debugging purposes
+        doc_name = mk_cat(doc_name, mk_lit("/"));
+        doc_name = mk_cat(doc_name, self.scheme.to_doc());
+
         doc_name = mk_cat(doc_name, mk_lit(")"));
         cat_space(
             cat_space(doc_name, mk_lit("=")),
@@ -394,6 +399,7 @@ impl DocPrinter for TypedVPattern {
                         mk_cat(mk_lit("("), cat_space(binder.to_doc(), mk_lit("::"))),
                         ty.to_doc(),
                     ),
+                    // include type schematic for debugging purposes
                     mk_cat(mk_lit("/"), ty_schematic.to_doc()),
                 ),
                 mk_lit(")"),
