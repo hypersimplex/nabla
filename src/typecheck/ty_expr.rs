@@ -44,6 +44,8 @@ pub(crate) enum FnBuiltin {
     Arrow,
     String,
     MatchFail,
+    ConvertI64FromF64,
+    ConvertF64FromI64,
 }
 
 impl From<&abstr_structures::BuiltinExprType> for FnBuiltin {

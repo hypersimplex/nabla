@@ -24,6 +24,8 @@ pub fn init_builtin_values(env: &mut EnvVVarToTyScheme, ns: &mut TyVarNameSupply
     init_v_var_ty_scheme_builtin_logical_and(env, ns);
     init_v_var_ty_scheme_builtin_logical_or(env, ns);
     init_v_var_ty_scheme_builtin_match_fail(env, ns);
+    init_v_var_ty_scheme_builtin_i64_from_f64(env, ns);
+    init_v_var_ty_scheme_builtin_f64_from_i64(env, ns);
 }
 
 // maps builtin value-level variable unary plus to type scheme ([tv_numeric] (tv_numeric -> tv_numeric))
@@ -360,6 +362,44 @@ pub fn init_v_var_ty_scheme_builtin_match_fail(
         TyScheme {
             ty_vars_schematic: vec![ty_var_any.clone()],
             ty_expr: Box::new(TyExpr::TyVar(ty_var_any)),
+        },
+    );
+}
+
+// maps `i64_from_f64` to a builtin function
+pub fn init_v_var_ty_scheme_builtin_i64_from_f64(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    ns: &mut TyVarNameSupply,
+) {
+    env_v_var_to_ty_scheme.0.insert(
+        VVar::Named(VVarName {
+            token: concrete_token::ConcreteToken::Iden("i64_from_f64".to_string()),
+            loc: None,
+            builtin: Some(FnBuiltin::ConvertI64FromF64),
+        }),
+        TyScheme {
+            ty_vars_schematic: vec![],
+            // maps to a function type expression: f64 -> i64
+            ty_expr: Box::new(mk_ty_arrow(mk_ty_f64(), mk_ty_i64())),
+        },
+    );
+}
+
+// maps `f64_from_i64` to a builtin function
+pub fn init_v_var_ty_scheme_builtin_f64_from_i64(
+    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    ns: &mut TyVarNameSupply,
+) {
+    env_v_var_to_ty_scheme.0.insert(
+        VVar::Named(VVarName {
+            token: concrete_token::ConcreteToken::Iden("f64_from_i64".to_string()),
+            loc: None,
+            builtin: Some(FnBuiltin::ConvertF64FromI64),
+        }),
+        TyScheme {
+            ty_vars_schematic: vec![],
+            // maps to a function type expression: i64 -> f64
+            ty_expr: Box::new(mk_ty_arrow(mk_ty_i64(), mk_ty_f64())),
         },
     );
 }
