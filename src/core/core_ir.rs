@@ -11,6 +11,20 @@ use crate::typecheck::ty_var_name::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
 
+use std::collections::BTreeMap;
+
+/// this represents a top level function
+#[derive(Clone, Debug)]
+pub(crate) struct CoreTopLevelBinding {
+    var_binder: CoreVar,
+
+    expr: CoreAbstr,
+}
+
+/// mutually recursive functions in a SCC is grouped together here
+#[derive(Clone, Debug)]
+pub(crate) struct CoreTopLevelBindingGroup(pub Vec<CoreTopLevelBinding>);
+
 #[derive(Clone, Debug)]
 pub(crate) enum CoreExpr {
     // this uniformly treats value and type level abstraction
@@ -192,6 +206,13 @@ pub(crate) struct CoreCaseAlt {
 pub(crate) enum CoreAltConPattern {
     Data(CoreTyCon),
     Literal(CoreLiteral),
+}
+
+/// transform from high level IR to the core IR
+pub(crate) fn core_typed_top_level_function_group(
+    group: &BTreeMap<usize, TypedTopLevelFunction>,
+) -> CoreTopLevelBindingGroup {
+    todo!("transform high level IR into core IR");
 }
 
 /// transform from high level IR to the core IR

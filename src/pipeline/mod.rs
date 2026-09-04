@@ -158,7 +158,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     let mut env_v_var_to_ty_scheme_binding_seed: EnvVVarToTyScheme = env_v_var_to_ty_scheme.clone();
 
-    let (_subst, typed_group_results) = ty_check_binding_group(
+    let (_subst, ordered_mutually_recursive_groups) = ty_check_binding_group(
         &mut env_v_var_to_ty_scheme_binding_seed,
         &mut env_outer,
         &ty_env,
@@ -166,85 +166,107 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &defs,
     )?;
 
-    let mut ty_check_results: BTreeMap<usize, TypedTopLevelFunction> = BTreeMap::new();
-    for (idx, def) in typed_group_results.into_iter() {
-        let orig_idx = def_indices[idx];
-        let (var_binder_to_fn, vexpr) = funcs.get(&orig_idx).unwrap().clone();
-        let ty_expr = def.typed_rhs.ty().clone();
-        ty_check_results.insert(
-            orig_idx,
-            TypedTopLevelFunction {
-                name: var_binder_to_fn.clone(),
-                vexpr,
-                ty_expr,
-                scheme: def.scheme,
-                typed_expr: def.typed_rhs,
-            },
-        );
+    // ordered in mutually dependent function groups
+    let mut ty_check_results: Vec<BTreeMap<usize, TypedTopLevelFunction>> = Vec::new();
+
+    for scc_group in ordered_mutually_recursive_groups.iter() {
+        let mut group: BTreeMap<usize, TypedTopLevelFunction> = BTreeMap::new();
+        for (idx, def) in scc_group.into_iter() {
+            let orig_idx = def_indices[*idx];
+            let (var_binder_to_fn, vexpr) = funcs.get(&orig_idx).unwrap().clone();
+            let ty_expr = def.typed_rhs.ty().clone();
+            group.insert(
+                orig_idx,
+                TypedTopLevelFunction {
+                    name: var_binder_to_fn.clone(),
+                    vexpr,
+                    ty_expr,
+                    scheme: def.scheme.clone(),
+                    typed_expr: def.typed_rhs.clone(),
+                },
+            );
+        }
+        ty_check_results.push(group);
     }
 
     println!("type checked functions --->>");
-    for (id, top_lvl_fn) in ty_check_results.iter() {
-        print!("{}", top_lvl_fn.to_doc());
-        println!();
+    for group in ty_check_results.iter() {
+        for (id, top_lvl_fn) in group.iter() {
+            print!("{}", top_lvl_fn.to_doc());
+            println!();
+        }
     }
     println!("<<--- type checked functions");
 
     // type preserving passes --->>
 
     println!("desugar patterns to appear only in case clause pattern binders..");
-    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
-        top_lvl_fn.typed_expr = desugar_pattern(&mut v_var_ns, &top_lvl_fn.typed_expr);
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = desugar_pattern(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
     }
 
     println!("desugar case literal range pattern to case guard expression");
-    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
-        top_lvl_fn.typed_expr = desugar_literal_range_pattern(
-            &mut v_var_ns,
-            &mut env_v_var_to_ty_scheme,
-            &top_lvl_fn.typed_expr,
-        );
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = desugar_literal_range_pattern(
+                &mut v_var_ns,
+                &mut env_v_var_to_ty_scheme,
+                &top_lvl_fn.typed_expr,
+            );
+        }
     }
 
     println!("desugar case literal pattern to case guard expression");
-    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
-        top_lvl_fn.typed_expr = desugar_literal_pattern(
-            &mut v_var_ns,
-            &mut env_v_var_to_ty_scheme,
-            &top_lvl_fn.typed_expr,
-        );
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = desugar_literal_pattern(
+                &mut v_var_ns,
+                &mut env_v_var_to_ty_scheme,
+                &top_lvl_fn.typed_expr,
+            );
+        }
     }
 
     println!("normalize case scrutinee to be simple variable..");
-    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
-        top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
     }
 
     println!("desugar case guard to case expressions without guard expressions..");
-    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
-        top_lvl_fn.typed_expr = desugar_case_guard(&mut v_var_ns, &top_lvl_fn.typed_expr);
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = desugar_case_guard(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
     }
 
     println!("normalize case scrutinee to be simple variable again after case guard desugaring..");
-    for (id, top_lvl_fn) in ty_check_results.iter_mut() {
-        top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
     }
 
     // <<--- type preserving passes
 
     println!("normalized/desugared --->>");
-    for (id, top_lvl_fn) in ty_check_results.iter() {
-        print!("{}", top_lvl_fn.to_doc());
-        println!();
+    for group in ty_check_results.iter() {
+        for (id, top_lvl_fn) in group.iter() {
+            print!("{}", top_lvl_fn.to_doc());
+            println!();
+        }
     }
     println!("<<--- normalized/desugared");
 
     // [WIP]
-    let top_level_core_exprs: Vec<_> = ty_check_results
+    let core_top_level_groups: Vec<_> = ty_check_results
         .iter()
-        .map(|(idx, x)| {
-            let core_expr = core_expr_from_typed_v_expr(&x.typed_expr);
-            core_expr
+        .map(|group| {
+            let core_top_level_group = core_typed_top_level_function_group(group);
+            core_top_level_group
         })
         .collect();
 

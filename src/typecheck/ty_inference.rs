@@ -798,8 +798,9 @@ pub(crate) struct TypedBindingGroupDef {
 /// shared binding-group type checking and inference engine used for both
 /// top-level functions and local `let` binding definitions
 ///
-/// returns (substitution, {id -> (binding, def group)})
+/// returns (substitution, [{id -> (binding, def group)}])
 /// where id is the index of input `defs`
+/// and the SCC groups are ordered by the order of the returned vector
 ///
 /// steps:
 /// - binder seeding with monomorphic placeholders and uniqueness validation
@@ -824,7 +825,7 @@ pub(crate) fn ty_check_binding_group(
     ty_env: &TyEnv,
     ty_var_ns: &mut TyVarNameSupply,
     defs: &[(VPattern, VExpr, Option<TyScheme>)],
-) -> Result<(Substitution, BTreeMap<usize, TypedBindingGroupDef>), TyError> {
+) -> Result<(Substitution, Vec<BTreeMap<usize, TypedBindingGroupDef>>), TyError> {
     // collect bindings for function/definition; for each of these: insert a monomorphic type variable for the 1st pass
     let mut original_seeded_lhs_binders = BTreeSet::new();
 
@@ -1246,7 +1247,18 @@ pub(crate) fn ty_check_binding_group(
         })
         .collect();
 
-    Ok((subst_accum, final_defs))
+    let ordered_mutually_recursive_groups = scc_groups
+        .iter()
+        .map(|scc_group| {
+            let functions_in_group = scc_group
+                .iter()
+                .map(|idx| (*idx, final_defs.get(idx).unwrap().clone()))
+                .collect();
+            functions_in_group
+        })
+        .collect();
+
+    Ok((subst_accum, ordered_mutually_recursive_groups))
 }
 
 /// type check let expression (implements let-polymorphism / generalization)
@@ -1296,7 +1308,7 @@ pub(crate) fn ty_check_let_typed(
     // environment accumulating info as type-checking progresses
     let mut env_working = env_var_to_ty_scheme.clone();
 
-    let (mut subst_accum, typed_binding_def_pairs) =
+    let (mut subst_accum, mut groups_of_typed_binding_def_pairs) =
         ty_check_binding_group(&mut env_working, &mut env_outer, ty_env, ty_var_ns, &defs)?;
 
     // typecheck body of let expression using accumulated env and substitutions
@@ -1309,14 +1321,19 @@ pub(crate) fn ty_check_let_typed(
     let typed_body_expr = apply_subst_typed_expr(&subst_accum, typed_body_expr);
     let ty_body = typed_body_expr.ty().clone();
 
-    let typed_defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs
-        .into_values()
-        .map(|def| {
-            let typed_pat = apply_subst_typed_pattern(&subst_accum, def.typed_pattern);
-            let typed_rhs = apply_subst_typed_expr(&subst_accum, def.typed_rhs);
-            (typed_pat, typed_rhs)
-        })
-        .collect();
+    let mut typed_defs = vec![];
+    for typed_binding_def_pairs in groups_of_typed_binding_def_pairs.into_iter() {
+        let defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs
+            .into_values()
+            .map(|def| {
+                let typed_pat = apply_subst_typed_pattern(&subst_accum, def.typed_pattern);
+                let typed_rhs = apply_subst_typed_expr(&subst_accum, def.typed_rhs);
+                (typed_pat, typed_rhs)
+            })
+            .collect();
+
+        typed_defs.extend(defs);
+    }
 
     Ok((
         subst_accum,
