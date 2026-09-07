@@ -2,11 +2,12 @@
 //! them as explicit arguments and parameters (eg: System F)
 //!
 //! we will follow the convention of putting types in front of value-level
-//! arguments and parameters
+//! arguments / parameters
 
 use crate::parse::concrete_token::*;
 use crate::parse::loc::*;
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_scheme::*;
 use crate::typecheck::ty_var_name::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
@@ -18,7 +19,7 @@ use std::collections::BTreeMap;
 pub(crate) struct CoreTopLevelBinding {
     var_binder: CoreVar,
 
-    expr: CoreAbstr,
+    abstraction: CoreAbstr,
 }
 
 /// mutually recursive functions in a SCC is grouped together here
@@ -40,6 +41,8 @@ pub(crate) enum CoreExpr {
     Literal(CoreLiteral),
 
     Variable(CoreVar),
+
+    Type(CoreTy),
 }
 
 /// this includes type level abstraction
@@ -65,15 +68,24 @@ pub(crate) struct CoreAbstr {
 #[derive(Clone, Debug)]
 pub(crate) enum CoreTy {
     // a placeholder type variable introduced by an outer `ForAll` construct
+    //
+    // eg: a polymorphic type
     Var(TyVarName),
 
     // concrete type/ADT would belong to this variant
     Constructor(CoreTyCon),
 
     // type application
+    //
+    // essentially a list like structure if there is more than one arguments
     App(CoreTyApp),
 
     // constructor for introducing a polymorphic placeholder
+    //
+    // esentially nests another inner CoreTy inside
+    //
+    // convention is to have all `ForAll` in the outer-most/front layer of a
+    // CoreTy expression
     ForAll(CoreTyForAll),
 }
 
