@@ -11,10 +11,6 @@ pub(crate) struct TypedTopLevelFunction {
     // analogous to LHS binding of let expression
     pub name: VVar,
 
-    pub vexpr: VExpr,
-
-    pub ty_expr: TyExpr,
-
     pub scheme: TyScheme,
 
     // this is guaranteed to be a lambda abstraction
@@ -57,6 +53,8 @@ pub(crate) struct TypedVLitString {
 pub(crate) struct TypedVVariable {
     pub var: VVar,
 
+    // this is the type that is the result of applying substitutions during type
+    // inference
     pub ty: TyExpr,
 
     // explicit type args at this use site
@@ -67,6 +65,8 @@ pub(crate) struct TypedVVariable {
     // e.g.: id @Int 3 where ty_args = [Int]
     pub ty_args: Vec<TyExpr>,
 
+    // note: this keep the original scheme of a function/let definition
+    // that is binded to the variable
     pub ty_schematic: TyScheme,
 }
 
@@ -146,7 +146,6 @@ pub(crate) enum TypedVPattern {
     Variable {
         binder: VVar,
         ty: TyExpr,
-        // note: order matters
         ty_schematic: TyScheme,
     },
     Literal {
@@ -227,12 +226,7 @@ impl DocPrinter for TypedTopLevelFunction {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc_name = self.name.to_doc();
         doc_name = mk_cat(mk_lit("("), doc_name);
-        doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.ty_expr.to_doc()));
-
-        // include type schematic for debugging purposes
-        doc_name = mk_cat(doc_name, mk_lit("/"));
-        doc_name = mk_cat(doc_name, self.scheme.to_doc());
-
+        doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.scheme.to_doc()));
         doc_name = mk_cat(doc_name, mk_lit(")"));
         cat_space(
             cat_space(doc_name, mk_lit("=")),

@@ -179,8 +179,6 @@ pub(crate) fn compile(content: &str) -> CompileResult {
                 orig_idx,
                 TypedTopLevelFunction {
                     name: var_binder_to_fn.clone(),
-                    vexpr,
-                    ty_expr,
                     scheme: def.scheme.clone(),
                     typed_expr: def.typed_rhs.clone(),
                 },
