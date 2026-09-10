@@ -1,4 +1,6 @@
+use crate::typecheck::subst::subst_ty;
 use crate::typecheck::ty_expr::*;
+use crate::typecheck::ty_inference::*;
 use crate::typecheck::ty_var_name::*;
 use crate::util::printer::*;
 
@@ -50,5 +52,29 @@ impl DocPrinter for TyScheme {
         doc = cat_space(doc, self.ty_expr.to_doc());
         doc = mk_cat(doc, mk_lit("}"));
         doc
+    }
+}
+
+/// apply substitution for a schematic type variable and remove that type
+/// variable from the schematic type variables
+///
+/// internally errors out if provided type variable is not a schematic type variable
+pub(crate) fn apply_ty_scheme(tvn: &TyVarName, ty_expr: &TyExpr, ty_scheme: &TyScheme) -> TyScheme {
+    // sanity check
+    // [todo]: fix complexity
+    if !ty_scheme.ty_vars_schematic.contains(tvn) {
+        panic!("schematic type variable does not contain {:?}", tvn);
+    }
+
+    // remove from schematic type variables
+    let mut ty_vars_schematic_new = ty_scheme.ty_vars_schematic.clone();
+    ty_vars_schematic_new.retain(|x| x != tvn);
+
+    let subst = subst_delta(tvn, ty_expr);
+
+    TyScheme {
+        ty_vars_schematic: ty_vars_schematic_new,
+        // apply substitution
+        ty_expr: Box::new(subst_ty(&subst, &ty_scheme.ty_expr)),
     }
 }

@@ -197,7 +197,7 @@ fn extend(subst: &Substitution, tvn: &TyVarName, other: &TyExpr) -> Result<Subst
 /// delta substition:
 ///   tvn => ty_expr
 ///   o/w => identity
-fn subst_delta(tvn: &TyVarName, ty_expr: &TyExpr) -> Substitution {
+pub(crate) fn subst_delta(tvn: &TyVarName, ty_expr: &TyExpr) -> Substitution {
     let tvn_clone = tvn.clone();
 
     let ty_expr_clone = ty_expr.clone();

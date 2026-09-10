@@ -268,6 +268,13 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         })
         .collect();
 
+    for core_top_level_group in core_top_level_groups.iter() {
+        for core_top_lvl_binding in core_top_level_group.0.iter() {
+            print!("{}", core_top_lvl_binding.to_doc());
+            println!();
+        }
+    }
+
     Ok(())
 }
 

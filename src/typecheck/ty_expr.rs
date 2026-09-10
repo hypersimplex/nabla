@@ -18,6 +18,22 @@ pub(crate) enum TyExpr {
 /// a polymorphic type
 ///
 /// this subsumes simple compound type
+///
+/// eg:
+///
+/// a -> b
+///
+/// equivalent to:
+///
+/// ((->) a) b
+/// (App (App (->) a) b)
+///
+///      App
+///      / \
+///   App   b
+///  /  \
+/// ->   a
+///
 #[derive(Clone, Debug)]
 pub(crate) struct TyApplication {
     pub ty_func: Box<TyExpr>,
