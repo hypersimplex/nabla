@@ -96,10 +96,10 @@ pub(crate) enum CoreTy {
     // eg: a polymorphic type
     Var(TyVarName),
 
-    // concrete type/ADT would belong to this variant
+    // type constructor
     //
     // this also includes builtin type
-    Constructor(CoreTyCon),
+    TyConstructor(CoreTyCon),
 
     // type application
     //
@@ -126,6 +126,7 @@ pub(crate) enum CoreTyConBuiltin {
     Int,
     Float,
     String,
+    Arrow,
 }
 
 // [todo,fix]: convert to ty con to start with, and remove this conversion
@@ -144,8 +145,8 @@ impl<'a> From<&'a TyVarNameBuiltin> for CoreTyConBuiltin {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CoreTyConUser {
-    pub ty_name: String,
-    pub constructor_name: String,
+    // type constructor name
+    pub name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -162,10 +163,10 @@ pub(crate) struct CoreTyApp {
 #[derive(Clone, Debug)]
 pub(crate) struct CoreTyForAll {
     // type variable introduced for the parameteric type
-    ty_var: TyVarName,
+    pub ty_var: TyVarName,
 
     // remaining type expression that may reference the introduced parameteric type
-    ty_expr: Box<CoreTy>,
+    pub ty_expr: Box<CoreTy>,
 }
 
 /// this includes type level application
@@ -255,7 +256,7 @@ pub(crate) struct CoreLitNumericIntegral {
 
 impl CoreLitNumericIntegral {
     fn ty(&self) -> CoreTy {
-        CoreTy::Constructor(CoreTyCon::Builtin(CoreTyConBuiltin::Int))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Int))
     }
 }
 
@@ -268,7 +269,7 @@ pub(crate) struct CoreLitNumericFloat {
 
 impl CoreLitNumericFloat {
     fn ty(&self) -> CoreTy {
-        CoreTy::Constructor(CoreTyCon::Builtin(CoreTyConBuiltin::Float))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Float))
     }
 }
 
@@ -281,7 +282,7 @@ pub(crate) struct CoreLitString {
 
 impl CoreLitString {
     fn ty(&self) -> CoreTy {
-        CoreTy::Constructor(CoreTyCon::Builtin(CoreTyConBuiltin::String))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::String))
     }
 }
 
@@ -735,7 +736,7 @@ impl DocPrinter for CoreTy {
         use CoreTy::*;
         match self {
             Var(x) => x.to_doc(),
-            Constructor(x) => x.to_doc(),
+            TyConstructor(x) => x.to_doc(),
             App(x) => x.to_doc(),
             ForAll(x) => x.to_doc(),
         }

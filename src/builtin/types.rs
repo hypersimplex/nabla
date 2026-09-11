@@ -6,6 +6,8 @@ use crate::typecheck::ty_var_name::*;
 
 /// resolve a builtin type name (as it appears in source) to a TyExpr
 /// Bool maps to the builtin ADT
+///
+/// [todo, fix]: these should be type constructors instead
 pub(crate) fn resolve_builtin_type(name: &str) -> Option<TyExpr> {
     match name {
         "i64" => Some(TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))),
@@ -17,6 +19,8 @@ pub(crate) fn resolve_builtin_type(name: &str) -> Option<TyExpr> {
 
 /// convert type annotation to internal TyExpr, resolving builtin type names
 /// and converting function arrows to builtin Arrow
+///
+/// [todo, fix]: these should be type constructors instead
 pub(crate) fn lower_type_annot_to_ty_expr(ty_expr: &abstr_structures::ATypeExprComplex) -> TyExpr {
     match ty_expr {
         abstr_structures::ATypeExprComplex::Iden(iden) => {
