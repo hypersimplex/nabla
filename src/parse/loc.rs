@@ -106,7 +106,7 @@ pub(crate) struct ConcreteTokenAndLoc {
 
 impl DocPrinter for ConcreteTokenAndLoc {
     fn to_doc(&self) -> Box<Doc> {
-        mk_lit(&format!("{}", self.token))
+        Doc::lit(&format!("{}", self.token))
     }
 }
 

@@ -46,7 +46,7 @@ impl DocPrinter for TyVarName {
         match self {
             UserDefined(ty_var_name_user_defined) => ty_var_name_user_defined.to_doc(),
             Builtin(ty_var_name_builtin) => ty_var_name_builtin.to_doc(),
-            Auto(auto_id) => mk_lit(&format!("TyAuto({})", auto_id)),
+            Auto(auto_id) => Doc::lit(&format!("TyAuto({})", auto_id)),
         }
     }
 }
@@ -66,10 +66,10 @@ impl DocPrinter for TyVarNameBuiltin {
     fn to_doc(&self) -> Box<Doc> {
         use TyVarNameBuiltin::*;
         match self {
-            I64 => mk_lit("i64"),
-            F64 => mk_lit("f64"),
-            String => mk_lit("String"),
-            Arrow => mk_lit("->"),
+            I64 => Doc::lit("i64"),
+            F64 => Doc::lit("f64"),
+            String => Doc::lit("String"),
+            Arrow => Doc::lit("->"),
         }
     }
 }

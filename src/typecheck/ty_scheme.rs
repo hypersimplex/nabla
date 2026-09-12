@@ -42,16 +42,13 @@ pub(crate) struct TyScheme {
 
 impl DocPrinter for TyScheme {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc = mk_nil();
-        doc = mk_cat(doc, mk_lit("Scheme{["));
+        let mut doc = Doc::lit("Scheme{[");
         for i in self.ty_vars_schematic.iter() {
-            doc = mk_cat(doc, i.to_doc());
-            doc = mk_cat(doc, mk_lit(","));
+            doc = doc.cat(i.to_doc()).cat_lit(",");
         }
-        doc = mk_cat(doc, mk_lit("]"));
-        doc = cat_space(doc, self.ty_expr.to_doc());
-        doc = mk_cat(doc, mk_lit("}"));
-        doc
+        doc.cat_lit("]")
+            .cat_space(self.ty_expr.to_doc())
+            .cat_lit("}")
     }
 }
 

@@ -224,14 +224,13 @@ impl TypedVPattern {
 
 impl DocPrinter for TypedTopLevelFunction {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_name = self.name.to_doc();
-        doc_name = mk_cat(mk_lit("("), doc_name);
-        doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), self.scheme.to_doc()));
-        doc_name = mk_cat(doc_name, mk_lit(")"));
-        cat_space(
-            cat_space(doc_name, mk_lit("=")),
-            mk_nest(4, self.typed_expr.to_doc()),
-        )
+        let doc_name = Doc::lit("(")
+            .cat(self.name.to_doc())
+            .cat(Doc::lit(" :: ").cat(self.scheme.to_doc()))
+            .cat_lit(")");
+        doc_name
+            .cat_space_lit("=")
+            .cat_space(self.typed_expr.to_doc().nest(4))
     }
 }
 
@@ -253,65 +252,65 @@ impl DocPrinter for TypedVExpr {
 
 impl DocPrinter for TypedVAbstrExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut rhs = mk_lit("\\");
+        let mut rhs = Doc::lit("\\");
         for param in self.params.iter() {
-            rhs = cat_space(rhs, param.to_doc());
+            rhs = rhs.cat_space(param.to_doc());
         }
-        rhs = cat_space(rhs, mk_lit("->"));
+        rhs = rhs.cat_space_lit("->");
         let doc_body = self.body.to_doc();
 
-        rhs = cat_space(rhs, mk_nest(4, doc_body));
-        mk_group(rhs)
+        rhs = rhs.cat_space(doc_body.nest(4));
+        rhs.group()
     }
 }
 
 impl DocPrinter for TypedVAbstrParam {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(
-            mk_cat(
-                mk_lit("("),
-                cat_space(
-                    cat_space(self.binder.to_doc(), mk_lit("::")),
-                    self.ty.to_doc(),
-                ),
-            ),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(
+                self.binder
+                    .to_doc()
+                    .cat_space_lit("::")
+                    .cat_space(self.ty.to_doc()),
+            )
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for TypedVAppExpr {
     fn to_doc(&self) -> Box<Doc> {
         let doc_app = self.callable.to_doc();
-        let mut doc_args = mk_nil();
+        let mut doc_args = Doc::nil();
         for (idx, arg) in self.args.iter().enumerate() {
             if idx != 0 {
-                doc_args = cat_space(doc_args, arg.to_doc());
+                doc_args = doc_args.cat_space(arg.to_doc());
             } else {
-                doc_args = mk_cat(doc_args, arg.to_doc());
+                doc_args = doc_args.cat(arg.to_doc());
             }
         }
 
-        mk_cat(
-            cat_space(mk_cat(mk_lit("("), doc_app), mk_nest(4, doc_args)),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(doc_app)
+            .cat_space(doc_args.nest(4))
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for TypedVCaseExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut header = cat_space(mk_lit("case"), self.arg.to_doc());
-        header = cat_space(header, mk_lit("of"));
+        let header = Doc::lit("case")
+            .cat_space(self.arg.to_doc())
+            .cat_space_lit("of");
 
-        let mut body = mk_nil();
+        let mut body = Doc::nil();
         for clause in self.clauses.iter() {
-            body = mk_cat(body, mk_line_force());
-            body = mk_cat(body, clause.to_doc());
+            body = body.cat_line_force().cat(clause.to_doc());
         }
 
-        let ret = mk_cat(mk_line_force(), mk_cat(header, mk_nest(4, body)));
-        mk_cat(ret, mk_line_force())
+        Doc::line_force()
+            .cat(header)
+            .cat(body.nest(4))
+            .cat_line_force()
     }
 }
 
@@ -320,61 +319,57 @@ impl DocPrinter for TypedVCaseClause {
         let mut doc_pat_and_guard = self.pattern.to_doc();
         if let Some(g) = &self.guard {
             let doc_guard = g.to_doc();
-            doc_pat_and_guard = cat_space(doc_pat_and_guard, mk_lit("|"));
-            doc_pat_and_guard = cat_space(doc_pat_and_guard, doc_guard);
+            doc_pat_and_guard = doc_pat_and_guard.cat_space_lit("|").cat_space(doc_guard);
         }
-        let doc_clause_lhs = cat_space(doc_pat_and_guard, mk_lit("->"));
-        cat_space(doc_clause_lhs, mk_nest(4, self.body.to_doc()))
+        let doc_clause_lhs = doc_pat_and_guard.cat_space_lit("->");
+        doc_clause_lhs.cat_space(self.body.to_doc().nest(4))
     }
 }
 
 impl DocPrinter for TypedVLetExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_defs = mk_nil();
+        let mut doc_defs = Doc::nil();
 
         for (idx, (lhs, rhs)) in self.defs.iter().enumerate() {
-            let mut doc_def = cat_space(
-                cat_space(lhs.to_doc(), mk_lit("=")),
-                mk_nest(4, rhs.to_doc()),
-            );
+            let mut doc_def = lhs
+                .to_doc()
+                .cat_space_lit("=")
+                .cat_space(rhs.to_doc().nest(4));
             if idx != 0 {
-                doc_def = mk_cat(mk_line_force(), doc_def);
+                doc_def = Doc::line_force().cat(doc_def);
             }
-            doc_defs = mk_cat(doc_defs, doc_def);
+            doc_defs = doc_defs.cat(doc_def);
         }
-        let mut doc = cat_space(mk_lit("let"), mk_nest(4, doc_defs));
-        doc = mk_cat(doc, mk_cat(mk_line_force(), mk_lit("in")));
-        doc = mk_cat(doc, mk_nest(4, mk_cat(mk_line_force(), self.body.to_doc())));
-        mk_cat(mk_line_force(), doc)
+        let doc = Doc::lit("let")
+            .cat_space(doc_defs.nest(4))
+            .cat(Doc::line_force().cat_lit("in"))
+            .cat(Doc::line_force().cat(self.body.to_doc()).nest(4));
+        Doc::line_force().cat(doc)
     }
 }
 
 impl DocPrinter for TypedVConstructorExpr {
     fn to_doc(&self) -> Box<Doc> {
-        // println!("printing for TypedVConstructorExpr: {:?}", self);
-        let mut doc = mk_nil();
-        doc = mk_cat(
-            doc,
-            mk_lit(&format!("{}.{}", self.ty_name, self.constructor_name)),
-        );
+        let mut doc = Doc::lit(&format!("{}.{}", self.ty_name, self.constructor_name));
         if let Some(x) = &self.record_fields {
-            doc = cat_space(doc, mk_lit("{"));
+            doc = doc.cat_space_lit("{");
             for (field, linear_index) in x.iter() {
-                doc = cat_space(doc, mk_lit(&format!("{}:", field)));
-                doc = cat_space(doc, self.args[*linear_index].to_doc());
-                doc = cat_space(doc, mk_lit(","));
+                doc = doc
+                    .cat_space(Doc::lit(&format!("{}:", field)))
+                    .cat_space(self.args[*linear_index].to_doc())
+                    .cat_space_lit(",");
             }
-            doc = mk_cat(doc, mk_lit("}"));
+            doc = doc.cat_lit("}");
         } else {
             for i in self.args.iter() {
-                doc = cat_space(doc, i.to_doc());
+                doc = doc.cat_space(i.to_doc());
             }
         }
-        doc = mk_cat(mk_lit("("), doc);
-        doc = cat_space(doc, mk_lit("::"));
-        doc = cat_space(doc, self.ty.to_doc());
-        doc = mk_cat(doc, mk_lit(")"));
-        doc
+        Doc::lit("(")
+            .cat(doc)
+            .cat_space_lit("::")
+            .cat_space(self.ty.to_doc())
+            .cat_lit(")")
     }
 }
 
@@ -382,26 +377,18 @@ impl DocPrinter for TypedVPattern {
     fn to_doc(&self) -> Box<Doc> {
         use TypedVPattern::*;
         match self {
-            Wild { ty: _ } => mk_lit("_"),
+            Wild { ty: _ } => Doc::lit("_"),
             Variable {
                 binder,
                 ty,
                 ty_schematic,
-            } => mk_cat(
-                mk_cat(
-                    mk_cat(
-                        mk_cat(mk_lit("("), cat_space(binder.to_doc(), mk_lit("::"))),
-                        ty.to_doc(),
-                    ),
-                    // include type schematic for debugging purposes
-                    mk_cat(mk_lit("/"), ty_schematic.to_doc()),
-                ),
-                mk_lit(")"),
-            ),
+            } => Doc::lit("(")
+                .cat(binder.to_doc().cat_space_lit("::"))
+                .cat(ty.to_doc())
+                .cat(Doc::lit("/").cat(ty_schematic.to_doc()))
+                .cat_lit(")"),
             Literal { literal, ty: _ } => literal.to_doc(),
-            Range { start, end, ty: _ } => {
-                mk_cat(mk_cat(start.to_doc(), mk_lit("..")), end.to_doc())
-            }
+            Range { start, end, ty: _ } => start.to_doc().cat_lit("..").cat(end.to_doc()),
             Constructor {
                 ty_name,
                 constructor,
@@ -409,21 +396,18 @@ impl DocPrinter for TypedVPattern {
                 ty: _,
                 ty_args,
             } => {
-                let mut doc = mk_nil();
-                doc = mk_cat(doc, mk_lit(&format!("{}.", ty_name)));
-                doc = mk_cat(doc, mk_lit(&constructor.to_string()));
+                let mut doc = Doc::lit(&format!("{}.{}", ty_name, constructor));
 
                 if !ty_args.is_empty() {
-                    doc = mk_cat(doc, mk_lit("<"));
+                    doc = doc.cat_lit("<");
                     for i in ty_args {
-                        doc = mk_cat(doc, i.to_doc());
-                        doc = mk_cat(doc, mk_lit(","));
+                        doc = doc.cat(i.to_doc()).cat_lit(",");
                     }
-                    doc = mk_cat(doc, mk_lit(">"));
+                    doc = doc.cat_lit(">");
                 }
 
                 for i in args.iter() {
-                    doc = cat_space(doc, i.to_doc());
+                    doc = doc.cat_space(i.to_doc());
                 }
                 doc
             }
@@ -435,40 +419,32 @@ impl DocPrinter for TypedVPattern {
                 ty: _,
                 ty_args,
             } => {
-                let mut doc = mk_nil();
+                let mut doc = Doc::nil();
                 if let Some(qualified_type) = ty_name {
-                    doc = mk_cat(doc, mk_lit(&format!("{}.", qualified_type)));
+                    doc = doc.cat(Doc::lit(&format!("{}.", qualified_type)));
                 }
-                doc = mk_cat(doc, mk_lit(&format!("{} {{", constructor)));
+                doc = doc.cat(Doc::lit(&format!("{} {{", constructor)));
 
                 if !ty_args.is_empty() {
-                    doc = mk_cat(doc, mk_lit("<"));
+                    doc = doc.cat_lit("<");
                     for i in ty_args {
-                        doc = mk_cat(doc, i.to_doc());
-                        doc = mk_cat(doc, mk_lit(","));
+                        doc = doc.cat(i.to_doc()).cat_lit(",");
                     }
-                    doc = mk_cat(doc, mk_lit(">"));
+                    doc = doc.cat_lit(">");
                 }
 
-                let mut doc_fields = mk_nil();
+                let mut doc_fields = Doc::nil();
                 for (field, pat) in fields.iter() {
-                    doc_fields = mk_cat(
-                        doc_fields,
-                        mk_cat(
-                            mk_line_force(),
-                            mk_cat(
-                                mk_cat(mk_lit(&format!("{}: ", field)), pat.to_doc()),
-                                mk_lit(","),
-                            ),
-                        ),
+                    doc_fields = doc_fields.cat_line_force().cat(
+                        Doc::lit(&format!("{}: ", field))
+                            .cat(pat.to_doc())
+                            .cat_lit(","),
                     );
                 }
                 if *rest {
-                    doc_fields = mk_cat(doc_fields, mk_cat(mk_line_force(), mk_lit("..")));
+                    doc_fields = doc_fields.cat(Doc::line_force().cat_lit(".."));
                 }
-                doc = mk_cat(doc, mk_nest(4, mk_group(doc_fields)));
-                doc = mk_cat(doc, mk_lit("}"));
-                doc
+                doc.cat(doc_fields.group().nest(4)).cat_lit("}")
             }
         }
     }
@@ -476,51 +452,50 @@ impl DocPrinter for TypedVPattern {
 
 impl DocPrinter for TypedVLitNumeric {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(
-            mk_cat(
-                mk_lit("("),
-                cat_space(cat_space(self.val.to_doc(), mk_lit("::")), self.ty.to_doc()),
-            ),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(
+                self.val
+                    .to_doc()
+                    .cat_space_lit("::")
+                    .cat_space(self.ty.to_doc()),
+            )
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for TypedVLitString {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(
-            mk_cat(
-                mk_lit("("),
-                cat_space(cat_space(self.val.to_doc(), mk_lit("::")), self.ty.to_doc()),
-            ),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(
+                self.val
+                    .to_doc()
+                    .cat_space_lit("::")
+                    .cat_space(self.ty.to_doc()),
+            )
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for TypedVVariable {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_ty_args = mk_nil();
+        let mut doc_ty_args = Doc::nil();
         if !self.ty_args.is_empty() {
-            doc_ty_args = mk_lit("<");
+            doc_ty_args = Doc::lit("<");
             for i in self.ty_args.iter() {
-                doc_ty_args = mk_cat(doc_ty_args, mk_cat(i.to_doc(), mk_lit(",")));
+                doc_ty_args = doc_ty_args.cat(i.to_doc()).cat_lit(",");
             }
-            doc_ty_args = mk_cat(doc_ty_args, mk_lit(">"));
+            doc_ty_args = doc_ty_args.cat_lit(">");
         }
-        mk_cat(
-            mk_cat(
-                mk_cat(
-                    mk_lit("("),
-                    cat_space(
-                        cat_space(mk_cat(self.var.to_doc(), doc_ty_args), mk_lit("::")),
-                        self.ty.to_doc(),
-                    ),
-                ),
-                mk_cat(mk_lit("/"), self.ty_schematic.to_doc()),
-            ),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(
+                self.var
+                    .to_doc()
+                    .cat(doc_ty_args)
+                    .cat_space_lit("::")
+                    .cat_space(self.ty.to_doc()),
+            )
+            .cat(Doc::lit("/").cat(self.ty_schematic.to_doc()))
+            .cat_lit(")")
     }
 }
 

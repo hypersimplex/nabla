@@ -46,37 +46,59 @@ pub(crate) trait DocPrinter {
     fn to_doc(&self) -> Box<Doc>;
 }
 
-pub(crate) fn cat_space(doc1: Box<Doc>, doc2: Box<Doc>) -> Box<Doc> {
-    use Doc::*;
-    let s = Box::new(Cat(doc1, Box::new(Text(" ".to_string()))));
-    Box::new(Cat(s, doc2))
-}
+impl Doc {
+    pub fn nil() -> Box<Doc> {
+        Box::new(Doc::Nil)
+    }
 
-pub(crate) fn mk_lit(s: &str) -> Box<Doc> {
-    Box::new(Doc::Text(s.into()))
-}
+    pub fn lit(s: &str) -> Box<Doc> {
+        Box::new(Doc::Text(s.into()))
+    }
 
-pub(crate) fn mk_line() -> Box<Doc> {
-    Box::new(Doc::Line)
-}
-pub(crate) fn mk_line_force() -> Box<Doc> {
-    Box::new(Doc::LineForce)
-}
+    pub fn line() -> Box<Doc> {
+        Box::new(Doc::Line)
+    }
 
-pub(crate) fn mk_cat(doc1: Box<Doc>, doc2: Box<Doc>) -> Box<Doc> {
-    Box::new(Doc::Cat(doc1, doc2))
-}
+    pub fn line_force() -> Box<Doc> {
+        Box::new(Doc::LineForce)
+    }
 
-pub(crate) fn mk_nil() -> Box<Doc> {
-    Box::new(Doc::Nil)
-}
+    // note: the `self` parameter is of type `Box<Doc>` and Rust allows
+    // arbitrary self type and Receiver trait to enable this
+    //
+    // some smart pointers (eg: Box<..>, Rc<..>, Arc<..>, Pin<..>)
+    // already have builtin support for this
+    pub fn cat(self: Box<Self>, other: Box<Doc>) -> Box<Doc> {
+        Box::new(Doc::Cat(self, other))
+    }
 
-pub(crate) fn mk_nest(indent: usize, doc: Box<Doc>) -> Box<Doc> {
-    Box::new(Doc::Nest(Indent(indent), doc))
-}
+    pub fn cat_space(self: Box<Self>, other: Box<Doc>) -> Box<Doc> {
+        self.cat(Doc::lit(" ")).cat(other)
+    }
 
-pub(crate) fn mk_group(doc: Box<Doc>) -> Box<Doc> {
-    Box::new(Doc::Group(doc))
+    pub fn nest(self: Box<Self>, indent: usize) -> Box<Doc> {
+        Box::new(Doc::Nest(Indent(indent), self))
+    }
+
+    pub fn group(self: Box<Self>) -> Box<Doc> {
+        Box::new(Doc::Group(self))
+    }
+
+    pub fn cat_lit(self: Box<Self>, s: &str) -> Box<Doc> {
+        self.cat(Doc::lit(s))
+    }
+
+    pub fn cat_space_lit(self: Box<Self>, s: &str) -> Box<Doc> {
+        self.cat_space(Doc::lit(s))
+    }
+
+    pub fn cat_line(self: Box<Self>) -> Box<Doc> {
+        self.cat(Doc::line())
+    }
+
+    pub fn cat_line_force(self: Box<Self>) -> Box<Doc> {
+        self.cat(Doc::line_force())
+    }
 }
 
 pub(crate) fn pretty_print(

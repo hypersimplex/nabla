@@ -751,25 +751,19 @@ impl DocPrinter for CoreTyCon {
 
 impl DocPrinter for CoreTyApp {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(
-            cat_space(
-                mk_cat(mk_lit("("), self.ty_fun.to_doc()),
-                self.ty_arg.to_doc(),
-            ),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(self.ty_fun.to_doc())
+            .cat_space(self.ty_arg.to_doc())
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for CoreTyForAll {
     fn to_doc(&self) -> Box<Doc> {
-        cat_space(
-            cat_space(
-                cat_space(mk_lit("forall"), self.ty_var.to_doc()),
-                mk_lit("."),
-            ),
-            self.ty_expr.to_doc(),
-        )
+        Doc::lit("forall")
+            .cat_space(self.ty_var.to_doc())
+            .cat_space_lit(".")
+            .cat_space(self.ty_expr.to_doc())
     }
 }
 

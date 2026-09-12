@@ -183,7 +183,7 @@ impl fmt::Display for ConcreteToken {
 
 impl DocPrinter for ConcreteToken {
     fn to_doc(&self) -> Box<Doc> {
-        mk_lit(&format!("{}", self))
+        Doc::lit(&format!("{}", self))
     }
 }
 

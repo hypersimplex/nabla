@@ -262,13 +262,9 @@ impl DocPrinter for TyExpr {
 
 impl DocPrinter for TyApplication {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(
-            mk_cat(
-                mk_lit("("),
-                cat_space(self.ty_func.to_doc(), self.ty_arg.to_doc()),
-            ),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(self.ty_func.to_doc().cat_space(self.ty_arg.to_doc()))
+            .cat_lit(")")
     }
 }
 

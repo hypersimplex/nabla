@@ -24,12 +24,11 @@ impl DocPrinter for ATypeExprIden {
         if self.type_parameters.is_empty() {
             return doc;
         }
-        doc = cat_space(mk_lit("("), doc);
+        doc = Doc::lit("(").cat_space(doc);
         for i in self.type_parameters.iter() {
-            doc = cat_space(doc, i.to_doc());
+            doc = doc.cat_space(i.to_doc());
         }
-        doc = cat_space(doc, mk_lit(")"));
-        doc
+        doc.cat_space_lit(")")
     }
 }
 
@@ -53,13 +52,9 @@ impl DocPrinter for ATypeExprFun {
             let guard = x.lock().unwrap();
             let content_tail = &*guard;
             let doc_tail = content_tail.to_doc();
-            return cat_space(
-                cat_space(
-                    mk_lit("("),
-                    cat_space(cat_space(doc_head, mk_lit("->")), doc_tail),
-                ),
-                mk_lit(")"),
-            );
+            return Doc::lit("(")
+                .cat_space(doc_head.cat_space_lit("->").cat_space(doc_tail))
+                .cat_space_lit(")");
         }
         doc_head
     }
@@ -94,10 +89,9 @@ pub(crate) struct FnSig {
 
 impl DocPrinter for FnSig {
     fn to_doc(&self) -> Box<Doc> {
-        cat_space(
-            self.identifier.to_doc(),
-            cat_space(mk_lit("::"), self.ty.to_doc()),
-        )
+        self.identifier
+            .to_doc()
+            .cat_space(Doc::lit("::").cat_space(self.ty.to_doc()))
     }
 }
 
@@ -107,14 +101,14 @@ pub(crate) struct BlockExpr(pub Vec<AExprAnnot>);
 
 impl DocPrinter for BlockExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc = mk_nil();
+        let mut doc = Doc::nil();
         let mut is_first = true;
         for i in self.0.iter() {
             if !is_first {
-                doc = mk_cat(doc, mk_line());
+                doc = doc.cat_line();
             }
             is_first = false;
-            doc = mk_cat(doc, i.to_doc());
+            doc = doc.cat(i.to_doc());
         }
         doc
     }
@@ -130,23 +124,23 @@ pub(crate) struct DataRecord {
 
 impl DocPrinter for DataRecord {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc = cat_space(mk_lit("data"), self.identifier.to_doc());
+        let mut doc = Doc::lit("data").cat_space(self.identifier.to_doc());
         for i in self.params.iter() {
-            doc = cat_space(doc, i.to_doc());
+            doc = doc.cat_space(i.to_doc());
         }
-        doc = cat_space(doc, mk_lit("{"));
+        doc = doc.cat_space_lit("{");
 
-        let mut doc_fields = mk_nil();
+        let mut doc_fields = Doc::nil();
         for (field_name, type_expr) in self.components.iter() {
-            doc_fields = mk_cat(doc_fields, mk_line_force());
-            doc_fields = mk_cat(doc_fields, field_name.to_doc());
-            doc_fields = cat_space(doc_fields, mk_lit("::"));
-            doc_fields = cat_space(doc_fields, type_expr.to_doc());
-            doc_fields = mk_cat(doc_fields, mk_lit(", "));
+            doc_fields = doc_fields
+                .cat_line_force()
+                .cat(field_name.to_doc())
+                .cat_space_lit("::")
+                .cat_space(type_expr.to_doc())
+                .cat_lit(", ");
         }
-        doc = mk_cat(doc, mk_nest(4, doc_fields));
-        doc = mk_cat(doc, mk_cat(mk_line_force(), mk_lit("}")));
-        doc
+        doc.cat(doc_fields.nest(4))
+            .cat(Doc::line_force().cat_lit("}"))
     }
 }
 
@@ -160,23 +154,26 @@ pub(crate) struct DataSum {
 
 impl DocPrinter for DataSum {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc = mk_lit("data");
-        doc = cat_space(doc, self.identifier.to_doc());
+        let mut doc = Doc::lit("data").cat_space(self.identifier.to_doc());
         for i in self.params.iter() {
-            doc = cat_space(doc, i.to_doc());
+            doc = doc.cat_space(i.to_doc());
         }
 
-        let mut doc_variants = mk_nil();
+        let mut doc_variants = Doc::nil();
         for (idx, (constructor_name, type_exprs)) in self.variants.iter().enumerate() {
-            let mut doc_variant = if idx == 0 { mk_lit("=") } else { mk_lit("|") };
-            doc_variant = cat_space(doc_variant, constructor_name.to_doc());
+            let mut doc_variant = if idx == 0 {
+                Doc::lit("=")
+            } else {
+                Doc::lit("|")
+            };
+            doc_variant = doc_variant.cat_space(constructor_name.to_doc());
             for i in type_exprs.iter() {
-                doc_variant = cat_space(doc_variant, i.to_doc());
+                doc_variant = doc_variant.cat_space(i.to_doc());
             }
-            doc_variant = mk_cat(mk_line_force(), doc_variant);
-            doc_variants = mk_cat(doc_variants, doc_variant);
+            doc_variant = Doc::line_force().cat(doc_variant);
+            doc_variants = doc_variants.cat(doc_variant);
         }
-        mk_cat(doc, mk_nest(4, doc_variants))
+        doc.cat(doc_variants.nest(4))
     }
 }
 
@@ -334,7 +331,7 @@ pub(crate) struct LiteralStringExpr {
 
 impl DocPrinter for LiteralStringExpr {
     fn to_doc(&self) -> Box<Doc> {
-        mk_lit(&format!("\"{}\"", self.literal.token))
+        Doc::lit(&format!("\"{}\"", self.literal.token))
     }
 }
 
@@ -370,22 +367,23 @@ pub(crate) struct LetExpr {
 
 impl DocPrinter for LetExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_defs = mk_nil();
+        let mut doc_defs = Doc::nil();
 
         for (idx, (lhs, rhs)) in self.defs.iter().enumerate() {
-            let mut doc_def = cat_space(
-                cat_space(lhs.to_doc(), mk_lit("=")),
-                mk_nest(4, rhs.to_doc()),
-            );
+            let mut doc_def = lhs
+                .to_doc()
+                .cat_space_lit("=")
+                .cat_space(rhs.to_doc().nest(4));
             if idx != 0 {
-                doc_def = mk_cat(mk_line_force(), doc_def);
+                doc_def = Doc::line_force().cat(doc_def);
             }
-            doc_defs = mk_cat(doc_defs, doc_def);
+            doc_defs = doc_defs.cat(doc_def);
         }
-        let mut doc = cat_space(mk_lit("let"), mk_nest(4, doc_defs));
-        doc = mk_cat(doc, mk_cat(mk_line_force(), mk_lit("in")));
-        doc = mk_cat(doc, mk_nest(4, mk_cat(mk_line_force(), self.expr.to_doc())));
-        mk_cat(mk_line_force(), doc)
+        let doc = Doc::lit("let")
+            .cat_space(doc_defs.nest(4))
+            .cat(Doc::line_force().cat_lit("in"))
+            .cat(Doc::line_force().cat(self.expr.to_doc()).nest(4));
+        Doc::line_force().cat(doc)
     }
 }
 
@@ -409,20 +407,19 @@ pub(crate) struct AbstractionExpr {
 
 impl DocPrinter for AbstractionExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_abstr = mk_lit("\\");
+        let mut doc_abstr = Doc::lit("\\");
         for (idx, pat_expr) in self.param_patterns.iter().enumerate() {
             if idx != 0 {
-                doc_abstr = cat_space(doc_abstr, pat_expr.to_doc());
+                doc_abstr = doc_abstr.cat_space(pat_expr.to_doc());
             } else {
-                doc_abstr = mk_cat(doc_abstr, pat_expr.to_doc());
+                doc_abstr = doc_abstr.cat(pat_expr.to_doc());
             }
         }
-        doc_abstr = cat_space(doc_abstr, mk_lit("->"));
+        doc_abstr = doc_abstr.cat_space_lit("->");
         let doc_body = self.expr.to_doc();
 
-        doc_abstr = cat_space(doc_abstr, mk_nest(4, doc_body));
-        doc_abstr = mk_cat(mk_cat(mk_lit("("), doc_abstr), mk_lit(")"));
-        doc_abstr
+        doc_abstr = doc_abstr.cat_space(doc_body.nest(4));
+        Doc::lit("(").cat(doc_abstr).cat_lit(")")
     }
 }
 
@@ -438,9 +435,11 @@ impl DocPrinter for TopLevelFunction {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc_name = self.name.to_doc();
         if let Some(ty_expr) = &self.abstraction.type_expr {
-            doc_name = mk_cat(doc_name, mk_cat(mk_lit(" :: "), ty_expr.to_doc()));
+            doc_name = doc_name.cat(Doc::lit(" :: ").cat(ty_expr.to_doc()));
         }
-        cat_space(cat_space(doc_name, mk_lit("=")), self.abstraction.to_doc())
+        doc_name
+            .cat_space_lit("=")
+            .cat_space(self.abstraction.to_doc())
     }
 }
 
@@ -465,47 +464,33 @@ impl DocPrinter for PatternExpr {
     fn to_doc(&self) -> Box<Doc> {
         use PatternExpr::*;
         match self {
-            Wild => mk_lit("_"),
+            Wild => Doc::lit("_"),
             Variable(x) => x.to_doc(),
             Literal(x) => x.to_doc(), // 42, "hello" (literal value)
             Range { start, end } => {
                 match (start, end) {
                     // use shorthand syntax for inclusive start: start..end / start..=end
-                    (PatternRangeBound::Inclusive(_), PatternRangeBound::Inclusive(_)) => {
-                        cat_space(
-                            cat_space(start.to_doc(), mk_lit("..")),
-                            mk_cat(mk_lit("="), end.to_doc()),
-                        )
-                    }
+                    (PatternRangeBound::Inclusive(_), PatternRangeBound::Inclusive(_)) => start
+                        .to_doc()
+                        .cat_space_lit("..")
+                        .cat_space(Doc::lit("=").cat(end.to_doc())),
                     (PatternRangeBound::Inclusive(_), PatternRangeBound::Exclusive(_)) => {
-                        cat_space(cat_space(start.to_doc(), mk_lit("..")), end.to_doc())
+                        start.to_doc().cat_space_lit("..").cat_space(end.to_doc())
                     }
                     // TODO: support explicit syntax during parsing
                     (PatternRangeBound::Exclusive(_), PatternRangeBound::Inclusive(_)) => {
-                        let doc_start =
-                            mk_cat(mk_cat(mk_lit("Excluded("), start.to_doc()), mk_lit(")"));
-                        let doc_end =
-                            mk_cat(mk_cat(mk_lit("Included("), end.to_doc()), mk_lit(")"));
-                        mk_cat(
-                            mk_lit("("),
-                            mk_cat(
-                                mk_cat(mk_cat(doc_start, mk_lit(", ")), doc_end),
-                                mk_lit(")"),
-                            ),
-                        )
+                        let doc_start = Doc::lit("Excluded(").cat(start.to_doc()).cat_lit(")");
+                        let doc_end = Doc::lit("Included(").cat(end.to_doc()).cat_lit(")");
+                        Doc::lit("(")
+                            .cat(doc_start.cat_lit(", ").cat(doc_end))
+                            .cat_lit(")")
                     }
                     (PatternRangeBound::Exclusive(_), PatternRangeBound::Exclusive(_)) => {
-                        let doc_start =
-                            mk_cat(mk_cat(mk_lit("Excluded("), start.to_doc()), mk_lit(")"));
-                        let doc_end =
-                            mk_cat(mk_cat(mk_lit("Excluded("), end.to_doc()), mk_lit(")"));
-                        mk_cat(
-                            mk_lit("("),
-                            mk_cat(
-                                mk_cat(mk_cat(doc_start, mk_lit(", ")), doc_end),
-                                mk_lit(")"),
-                            ),
-                        )
+                        let doc_start = Doc::lit("Excluded(").cat(start.to_doc()).cat_lit(")");
+                        let doc_end = Doc::lit("Excluded(").cat(end.to_doc()).cat_lit(")");
+                        Doc::lit("(")
+                            .cat(doc_start.cat_lit(", ").cat(doc_end))
+                            .cat_lit(")")
                     }
                 }
             }
@@ -514,14 +499,11 @@ impl DocPrinter for PatternExpr {
                 constructor,
                 args,
             } => {
-                let mut doc = mk_nil();
+                let mut doc = Doc::nil();
                 if let Some(x) = &qualified {
-                    doc = mk_cat(doc, x.to_doc());
-                    doc = mk_cat(doc, mk_lit("."));
+                    doc = doc.cat(x.to_doc()).cat_lit(".");
                 }
-                doc = mk_cat(doc, constructor.to_doc());
-                doc = mk_cat(doc, args.to_doc());
-                doc
+                doc.cat(constructor.to_doc()).cat(args.to_doc())
             }
         }
     }
@@ -557,35 +539,32 @@ impl DocPrinter for PatternConstructorArgs {
         match self {
             Positional(x) => {
                 if x.is_empty() {
-                    mk_nil()
+                    Doc::nil()
                 } else {
-                    let mut doc = mk_nil();
-                    doc = mk_cat(doc, mk_lit("("));
+                    let mut doc = Doc::lit("(");
                     for (idx, pat_expr) in x.iter().enumerate() {
                         if idx > 0 {
-                            doc = mk_cat(doc, mk_lit(" "));
+                            doc = doc.cat_lit(" ");
                         }
-                        doc = mk_cat(doc, pat_expr.to_doc());
+                        doc = doc.cat(pat_expr.to_doc());
                     }
-                    doc = mk_cat(doc, mk_lit(")"));
-                    doc
+                    doc.cat_lit(")")
                 }
             }
             Record { fields, rest } => {
-                let mut doc = mk_lit("{");
-                doc = mk_cat(doc, mk_line());
+                let mut doc = Doc::lit("{").cat_line();
                 for (field, pat) in fields.iter() {
-                    let mut entry = mk_cat(field.to_doc(), mk_lit(":"));
-                    entry = cat_space(entry, pat.to_doc());
-                    entry = mk_cat(entry, mk_lit(","));
-                    doc = mk_cat(mk_cat(doc, mk_line()), entry);
+                    let entry = field
+                        .to_doc()
+                        .cat_lit(":")
+                        .cat_space(pat.to_doc())
+                        .cat_lit(",");
+                    doc = doc.cat_line().cat(entry);
                 }
                 if *rest {
-                    doc = mk_cat(doc, mk_lit(" .."));
+                    doc = doc.cat_lit(" ..");
                 }
-                doc = mk_cat(doc, mk_line());
-                doc = mk_cat(doc, mk_lit("}"));
-                doc
+                doc.cat_line().cat_lit("}")
             }
         }
     }
@@ -605,11 +584,10 @@ impl DocPrinter for CaseClause {
         let mut doc_pat_and_guard = self.pattern.to_doc();
         if let Some(g) = &self.guard {
             let doc_guard = g.to_doc();
-            doc_pat_and_guard = cat_space(doc_pat_and_guard, mk_lit("|"));
-            doc_pat_and_guard = cat_space(doc_pat_and_guard, doc_guard);
+            doc_pat_and_guard = doc_pat_and_guard.cat_space_lit("|").cat_space(doc_guard);
         }
-        let doc_clause_lhs = cat_space(doc_pat_and_guard, mk_lit("->"));
-        cat_space(doc_clause_lhs, mk_nest(4, self.body.to_doc()))
+        let doc_clause_lhs = doc_pat_and_guard.cat_space_lit("->");
+        doc_clause_lhs.cat_space(self.body.to_doc().nest(4))
     }
 }
 
@@ -625,18 +603,19 @@ pub(crate) struct CaseExpr {
 
 impl DocPrinter for CaseExpr {
     fn to_doc(&self) -> Box<Doc> {
-        use Doc::*;
-        let mut header = cat_space(mk_lit("case"), self.argument.expr.to_doc());
-        header = cat_space(header, mk_lit("of"));
+        let header = Doc::lit("case")
+            .cat_space(self.argument.expr.to_doc())
+            .cat_space_lit("of");
 
-        let mut body = mk_nil();
+        let mut body = Doc::nil();
         for clause in self.clauses.iter() {
-            body = mk_cat(body, mk_line_force());
-            body = mk_cat(body, clause.to_doc());
+            body = body.cat_line_force().cat(clause.to_doc());
         }
 
-        let ret = mk_cat(mk_line_force(), mk_cat(header, mk_nest(4, body)));
-        mk_cat(ret, mk_line_force())
+        Doc::line_force()
+            .cat(header)
+            .cat(body.nest(4))
+            .cat_line_force()
     }
 }
 
@@ -651,29 +630,28 @@ pub(crate) struct ConstructorExpr {
 
 impl DocPrinter for ConstructorExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc = mk_nil();
+        let mut doc = Doc::nil();
         if let Some(x) = &self.qualified {
-            doc = mk_cat(doc, x.to_doc());
-            doc = mk_cat(doc, mk_lit("."));
+            doc = doc.cat(x.to_doc()).cat_lit(".");
         }
-        doc = mk_cat(doc, self.constructor.to_doc());
+        doc = doc.cat(self.constructor.to_doc());
 
         if let Some(x) = &self.record_fields {
-            doc = cat_space(doc, mk_lit("{"));
+            doc = doc.cat_space_lit("{");
             for (field, field_expr) in x.iter() {
-                doc = cat_space(doc, field.to_doc());
-                doc = mk_cat(doc, mk_lit(":"));
-                doc = cat_space(doc, field_expr.to_doc());
-                doc = cat_space(doc, mk_lit(","));
+                doc = doc
+                    .cat_space(field.to_doc())
+                    .cat_lit(":")
+                    .cat_space(field_expr.to_doc())
+                    .cat_space_lit(",");
             }
-            doc = mk_cat(doc, mk_lit("}"));
-            doc
+            doc.cat_lit("}")
         } else {
             if self.args.is_empty() {
                 return doc;
             }
             for i in self.args.iter() {
-                doc = cat_space(doc, i.to_doc());
+                doc = doc.cat_space(i.to_doc());
             }
             doc
         }
@@ -689,20 +667,20 @@ pub(crate) struct AppExpr {
 
 impl DocPrinter for AppExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc_app = self.fun.to_doc();
-        let mut doc_args = mk_nil();
+        let doc_app = self.fun.to_doc();
+        let mut doc_args = Doc::nil();
         for (idx, arg) in self.arguments.iter().enumerate() {
             if idx != 0 {
-                doc_args = cat_space(doc_args, arg.to_doc());
+                doc_args = doc_args.cat_space(arg.to_doc());
             } else {
-                doc_args = mk_cat(doc_args, arg.to_doc());
+                doc_args = doc_args.cat(arg.to_doc());
             }
         }
 
-        mk_cat(
-            cat_space(mk_cat(mk_lit("("), doc_app), mk_nest(4, doc_args)),
-            mk_lit(")"),
-        )
+        Doc::lit("(")
+            .cat(doc_app)
+            .cat_space(doc_args.nest(4))
+            .cat_lit(")")
     }
 }
 
@@ -712,9 +690,9 @@ pub(crate) struct TopLevelItems(pub Vec<TopLevelItem>);
 
 impl DocPrinter for TopLevelItems {
     fn to_doc(&self) -> Box<Doc> {
-        let mut doc = mk_nil();
+        let mut doc = Doc::nil();
         for i in self.0.iter() {
-            doc = mk_cat(doc, mk_cat(mk_line_force(), i.to_doc()));
+            doc = doc.cat(Doc::line_force().cat(i.to_doc()));
         }
         doc
     }
@@ -751,13 +729,9 @@ impl DocPrinter for AExprAnnot {
     fn to_doc(&self) -> Box<Doc> {
         let doc_expr = self.expr.to_doc();
         if let Some(x) = &self.type_expr {
-            return mk_cat(
-                mk_cat(
-                    mk_lit("("),
-                    cat_space(cat_space(doc_expr, mk_lit("::")), x.to_doc()),
-                ),
-                mk_lit(")"),
-            );
+            return Doc::lit("(")
+                .cat(doc_expr.cat_space_lit("::").cat_space(x.to_doc()))
+                .cat_lit(")");
         }
         doc_expr
     }

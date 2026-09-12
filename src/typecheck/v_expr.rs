@@ -399,15 +399,15 @@ impl DocPrinter for NumericLiteralValue {
     fn to_doc(&self) -> Box<Doc> {
         use NumericLiteralValue::*;
         match self {
-            Int { parsed, .. } => mk_lit(&format!("{}", parsed.as_ref().unwrap())),
-            Float { parsed, .. } => mk_lit(&format!("{}", parsed.as_ref().unwrap())),
+            Int { parsed, .. } => Doc::lit(&format!("{}", parsed.as_ref().unwrap())),
+            Float { parsed, .. } => Doc::lit(&format!("{}", parsed.as_ref().unwrap())),
         }
     }
 }
 
 impl DocPrinter for VLitString {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(mk_cat(mk_lit("\""), self.token.to_doc()), mk_lit("\""))
+        Doc::lit("\"").cat(self.token.to_doc()).cat_lit("\"")
     }
 }
 
@@ -416,7 +416,7 @@ impl DocPrinter for VVar {
         use VVar::*;
         match self {
             Named(vvar_name) => vvar_name.to_doc(),
-            Anon(anon_id) => mk_lit(&format!("VAuto({})", anon_id)),
+            Anon(anon_id) => Doc::lit(&format!("VAuto({})", anon_id)),
             Renamed(vvar_name_uniqued) => vvar_name_uniqued.to_doc(),
         }
     }
@@ -439,18 +439,19 @@ where
     fn to_doc(&self) -> Box<Doc> {
         use RangeBound::*;
         match self {
-            Inclusive(x) => mk_cat(mk_cat(mk_lit("Inclusive("), x.to_doc()), mk_lit(")")),
-            Exclusive(x) => mk_cat(mk_cat(mk_lit("Exclusive("), x.to_doc()), mk_lit(")")),
+            Inclusive(x) => Doc::lit("Inclusive(").cat(x.to_doc()).cat_lit(")"),
+            Exclusive(x) => Doc::lit("Exclusive(").cat(x.to_doc()).cat_lit(")"),
         }
     }
 }
 
 impl DocPrinter for VVarNameUniqued {
     fn to_doc(&self) -> Box<Doc> {
-        mk_cat(
-            mk_cat(self.original.token.to_doc(), mk_lit("_")),
-            mk_lit(&format!("{}", self.unique)),
-        )
+        self.original
+            .token
+            .to_doc()
+            .cat_lit("_")
+            .cat_lit(&format!("{}", self.unique))
     }
 }
 
