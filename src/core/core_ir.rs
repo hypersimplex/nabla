@@ -4,6 +4,8 @@
 //! we will follow the convention of putting types in front of value-level
 //! arguments / parameters
 
+use crate::core::core_err::*;
+use crate::core::core_ty_con_env::*;
 use crate::parse::concrete_token::*;
 use crate::parse::loc::*;
 use crate::typecheck::subst::*;
@@ -347,7 +349,7 @@ pub(crate) enum CoreAltConPattern {
 /// mechanical translation
 ///
 /// [todo, fix]: convert builtin ty var to type constructor from the start
-fn core_ty_from_ty_expr(ty_expr: &TyExpr) -> CoreTy {
+pub(crate) fn core_ty_from_ty_expr(ty_expr: &TyExpr) -> CoreTy {
     match ty_expr {
         TyExpr::TyVar(ty_var_name) => match ty_var_name {
             TyVarName::Builtin(builtin) => {
@@ -378,15 +380,17 @@ fn core_ty_from_ty_scheme(ty_scheme: &TyScheme) -> CoreTy {
 
 /// transform from high level IR to the core IR
 pub(crate) fn core_typed_top_level_function_group(
+    core_ty_con_env: &CoreTyConEnv,
     group: &BTreeMap<usize, TypedTopLevelFunction>,
-) -> CoreTopLevelBindingGroup {
+) -> CoreResult<CoreTopLevelBindingGroup> {
     let mut ret = vec![];
     for (id, top_lvl_function) in group.iter() {
         ret.push(core_top_level_binding_from_typed_top_level_function(
+            core_ty_con_env,
             top_lvl_function,
-        ));
+        )?);
     }
-    CoreTopLevelBindingGroup(ret)
+    Ok(CoreTopLevelBindingGroup(ret))
 }
 
 /// transform from high level IR to the core IR
@@ -394,9 +398,10 @@ pub(crate) fn core_typed_top_level_function_group(
 /// note: take schematic type variables in the type scheme of the binder of
 /// the function and construct explicit core IR type parameters
 pub(crate) fn core_top_level_binding_from_typed_top_level_function(
+    core_ty_con_env: &CoreTyConEnv,
     top_lvl_fn: &TypedTopLevelFunction,
-) -> CoreTopLevelBinding {
-    let core_expr = core_expr_from_typed_v_expr(&top_lvl_fn.typed_expr);
+) -> CoreResult<CoreTopLevelBinding> {
+    let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &top_lvl_fn.typed_expr)?;
 
     let mut core_abstraction = match core_expr {
         CoreExpr::Abstraction(abstr) => abstr,
@@ -414,34 +419,40 @@ pub(crate) fn core_top_level_binding_from_typed_top_level_function(
         ty: core_ty_from_ty_scheme(&top_lvl_fn.scheme),
     });
 
-    CoreTopLevelBinding {
+    Ok(CoreTopLevelBinding {
         var_binder: top_level_fn_binder,
         abstraction: core_abstraction,
-    }
+    })
 }
 
 /// transform from high level IR to the core IR
-pub(crate) fn core_expr_from_typed_v_expr(expr: &TypedVExpr) -> CoreExpr {
+pub(crate) fn core_expr_from_typed_v_expr(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVExpr,
+) -> CoreResult<CoreExpr> {
     use TypedVExpr::*;
     match expr {
-        Abstraction(x) => core_expr_from_abstraction(x),
-        Application(x) => core_expr_from_application(x),
-        Case(x) => core_expr_from_case(x),
-        Let(x) => core_expr_from_let(x),
-        LitNumeric(x) => core_expr_from_lit_num(x),
-        LitString(x) => core_expr_from_lit_string(x),
-        Variable(x) => core_expr_from_variable(x),
-        Constructor(x) => core_expr_from_constructor(x),
+        Abstraction(x) => core_expr_from_abstraction(core_ty_con_env, x),
+        Application(x) => core_expr_from_application(core_ty_con_env, x),
+        Case(x) => core_expr_from_case(core_ty_con_env, x),
+        Let(x) => core_expr_from_let(core_ty_con_env, x),
+        LitNumeric(x) => core_expr_from_lit_num(core_ty_con_env, x),
+        LitString(x) => core_expr_from_lit_string(core_ty_con_env, x),
+        Variable(x) => core_expr_from_variable(core_ty_con_env, x),
+        Constructor(x) => core_expr_from_constructor(core_ty_con_env, x),
     }
 }
 
 /// core lambda abstraction contains 1 parameter; original abstractions with
 /// multiple parameters are converted to a nested form
-pub(crate) fn core_expr_from_abstraction(expr: &TypedVAbstrExpr) -> CoreExpr {
+pub(crate) fn core_expr_from_abstraction(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVAbstrExpr,
+) -> CoreResult<CoreExpr> {
     let TypedVAbstrExpr { params, body, ty } = expr;
 
     let mut ty_abstraction = body.ty().clone();
-    let mut core_expr = core_expr_from_typed_v_expr(body);
+    let mut core_expr = core_expr_from_typed_v_expr(core_ty_con_env, body)?;
     // note: process in reverse order since the arrow type is right associative
     for param in params.iter().rev() {
         ty_abstraction = mk_ty_arrow(param.ty.clone(), ty_abstraction);
@@ -454,7 +465,7 @@ pub(crate) fn core_expr_from_abstraction(expr: &TypedVAbstrExpr) -> CoreExpr {
             ty: core_ty_from_ty_expr(&ty_abstraction),
         });
     }
-    core_expr
+    Ok(core_expr)
 }
 
 /// perform value-level application
@@ -475,12 +486,15 @@ pub(crate) fn core_expr_from_abstraction(expr: &TypedVAbstrExpr) -> CoreExpr {
 ///
 /// apply a, then the result is `b->c`
 /// which corresponds to taking the right subtree of the root
-pub(crate) fn core_expr_from_application(expr: &TypedVAppExpr) -> CoreExpr {
-    let mut core_expr = core_expr_from_typed_v_expr(&expr.callable);
+pub(crate) fn core_expr_from_application(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVAppExpr,
+) -> CoreResult<CoreExpr> {
+    let mut core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &expr.callable)?;
     for arg in expr.args.iter() {
         // [todo]: maybe check type of argument against expected parameter type
         // of the callable
-        let core_expr_arg = core_expr_from_typed_v_expr(arg);
+        let core_expr_arg = core_expr_from_typed_v_expr(core_ty_con_env, arg)?;
 
         let core_ty = core_expr.ty().clone();
         // this is the resulting type after the application
@@ -500,17 +514,28 @@ pub(crate) fn core_expr_from_application(expr: &TypedVAppExpr) -> CoreExpr {
             ty: core_ty_result,
         });
     }
-    core_expr
+    Ok(core_expr)
 }
 
-pub(crate) fn core_expr_from_case(expr: &TypedVCaseExpr) -> CoreExpr {
+pub(crate) fn core_expr_from_case(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVCaseExpr,
+) -> CoreResult<CoreExpr> {
     // this is guaranteed to be a simple variable
-    let core_expr_scrutinee = core_expr_from_typed_v_expr(&*expr.arg);
+    let core_expr_scrutinee = core_expr_from_typed_v_expr(core_ty_con_env, &*expr.arg)?;
 
     let scrutinee_var = match &core_expr_scrutinee {
         CoreExpr::Variable(scrutinee_var) => scrutinee_var.clone(),
         _ => unreachable!(),
     };
+
+    let mut alts = vec![];
+    for x in expr.clauses.iter() {
+        match core_case_alt_from_typed_v_case_alt(core_ty_con_env, x) {
+            Ok(y) => alts.push(y),
+            Err(e) => return Err(e),
+        }
+    }
 
     let core_expr = CoreCase {
         scrutinee: Box::new(core_expr_scrutinee),
@@ -518,21 +543,20 @@ pub(crate) fn core_expr_from_case(expr: &TypedVCaseExpr) -> CoreExpr {
         // binder to result of evaluating the scrutinee
         result: scrutinee_var,
 
-        alts: expr
-            .clauses
-            .iter()
-            .map(|x| core_case_alt_from_typed_v_case_alt(x))
-            .collect(), // convert TypedVCaseClause to CoreCaseAlt
+        alts,
 
         ty: core_ty_from_ty_expr(&expr.ty),
     };
-    CoreExpr::Case(core_expr)
+    Ok(CoreExpr::Case(core_expr))
 }
 
 /// [todo]: for each let definition, take the schematic type variables in the scheme
 /// of the LHS variable binder and construct explicit core IR type parameters
-pub(crate) fn core_expr_from_let(expr: &TypedVLetExpr) -> CoreExpr {
-    let defs = expr
+pub(crate) fn core_expr_from_let(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVLetExpr,
+) -> CoreResult<CoreExpr> {
+    let defs_with_result: Vec<(CoreVar, CoreResult<CoreExpr>)> = expr
         .defs
         .iter()
         .map(|(lhs, rhs)| match lhs {
@@ -554,7 +578,7 @@ pub(crate) fn core_expr_from_let(expr: &TypedVLetExpr) -> CoreExpr {
                     vvar: binder.clone(),
                     ty: ty_expr,
                 });
-                (lhs_var, core_expr_from_typed_v_expr(rhs))
+                (lhs_var, core_expr_from_typed_v_expr(core_ty_con_env, rhs))
             }
             _ => {
                 unreachable!();
@@ -562,47 +586,64 @@ pub(crate) fn core_expr_from_let(expr: &TypedVLetExpr) -> CoreExpr {
         })
         .collect();
 
-    CoreExpr::Let(CoreLet {
+    let mut defs: Vec<(CoreVar, CoreExpr)> = vec![];
+    for (v, expr) in defs_with_result {
+        match expr {
+            Ok(x) => defs.push((v, x)),
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(CoreExpr::Let(CoreLet {
         // defs: Vec<(CoreVar, CoreExpr)>,
         defs,
-        body: Box::new(core_expr_from_typed_v_expr(&*expr.body)),
+        body: Box::new(core_expr_from_typed_v_expr(core_ty_con_env, &*expr.body)?),
         ty: core_ty_from_ty_expr(&expr.ty),
-    })
+    }))
 }
 
-pub(crate) fn core_expr_from_lit_num(expr: &TypedVLitNumeric) -> CoreExpr {
+pub(crate) fn core_expr_from_lit_num(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVLitNumeric,
+) -> CoreResult<CoreExpr> {
     match &expr.val.value {
-        NumericLiteralValue::Int { raw, parsed } => {
-            CoreExpr::Literal(CoreLiteral::LitNumericIntegral(CoreLitNumericIntegral {
+        NumericLiteralValue::Int { raw, parsed } => Ok(CoreExpr::Literal(
+            CoreLiteral::LitNumericIntegral(CoreLitNumericIntegral {
                 loc: expr.val.loc.clone(),
                 value: parsed.unwrap(),
-            }))
-        }
-        NumericLiteralValue::Float { raw, parsed } => {
-            CoreExpr::Literal(CoreLiteral::LitNumericFloat(CoreLitNumericFloat {
+            }),
+        )),
+        NumericLiteralValue::Float { raw, parsed } => Ok(CoreExpr::Literal(
+            CoreLiteral::LitNumericFloat(CoreLitNumericFloat {
                 loc: expr.val.loc.clone(),
                 value: parsed.unwrap(),
-            }))
-        }
+            }),
+        )),
     }
 }
 
-pub(crate) fn core_expr_from_lit_string(expr: &TypedVLitString) -> CoreExpr {
+pub(crate) fn core_expr_from_lit_string(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVLitString,
+) -> CoreResult<CoreExpr> {
     let value = match &expr.val.token {
         ConcreteToken::LiteralString(x) => x.clone(),
         _ => {
             unreachable!();
         }
     };
-    CoreExpr::Literal(CoreLiteral::LitString(CoreLitString {
+    Ok(CoreExpr::Literal(CoreLiteral::LitString(CoreLitString {
         loc: expr.val.loc.clone(),
         value,
-    }))
+    })))
 }
 
 /// note: a variable at a use site may have specific types applied
 /// and we explicitly encode these as type arguments
-fn core_expr_from_variable(expr: &TypedVVariable) -> CoreExpr {
+fn core_expr_from_variable(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVVariable,
+) -> CoreResult<CoreExpr> {
     let TypedVVariable {
         var,
         ty_schematic, // original schematic type of the thing the variable is binded to
@@ -642,16 +683,34 @@ fn core_expr_from_variable(expr: &TypedVVariable) -> CoreExpr {
         });
     }
 
-    core_expr
+    Ok(core_expr)
 }
 
 /// transform constructor expression to an application of constructor function
 /// with constructor arguments
-fn core_expr_from_constructor(expr: &TypedVConstructorExpr) -> CoreExpr {
-    todo!("core_expr_from_constructor")
+fn core_expr_from_constructor(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVConstructorExpr,
+) -> CoreResult<CoreExpr> {
+    todo!("core_expr_from_constructor");
+    let TypedVConstructorExpr {
+        ty_name,
+        constructor_name,
+        args,
+        ty,
+        ty_args,
+        ..
+    } = expr;
+
+    let core_adt_def = core_ty_con_env.get_adt(ty_name)?;
+
+    todo!()
 }
 
-fn core_case_alt_from_typed_v_case_alt(expr: &TypedVCaseClause) -> CoreCaseAlt {
+fn core_case_alt_from_typed_v_case_alt(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVCaseClause,
+) -> CoreResult<CoreCaseAlt> {
     todo!("core_case_alt_from_typed_v_case_alt")
 }
 

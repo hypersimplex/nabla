@@ -1,6 +1,8 @@
 use crate::builtin::types::*;
 use crate::builtin::values::*;
+use crate::core::core_err::*;
 use crate::core::core_ir::*;
+use crate::core::core_ty_con_env::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
 use crate::normalize::literal_pattern::*;
@@ -39,6 +41,7 @@ use std::path::Path;
 pub(crate) enum CompileError {
     Parse(ParseError),
     Type(TyError),
+    Core(CoreError),
     Other,
 }
 
@@ -51,6 +54,12 @@ impl From<ParseError> for CompileError {
 impl From<TyError> for CompileError {
     fn from(e: TyError) -> Self {
         Self::Type(e)
+    }
+}
+
+impl From<CoreError> for CompileError {
+    fn from(e: CoreError) -> Self {
+        Self::Core(e)
     }
 }
 
@@ -259,14 +268,20 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     }
     println!("<<--- normalized/desugared");
 
+    println!("conversion to core --->>");
+
     // [WIP]
-    let core_top_level_groups: Vec<_> = ty_check_results
-        .iter()
-        .map(|group| {
-            let core_top_level_group = core_typed_top_level_function_group(group);
-            core_top_level_group
-        })
-        .collect();
+
+    let core_ty_con_env: CoreTyConEnv = (&ty_env).into();
+
+    let mut core_top_level_groups: Vec<CoreTopLevelBindingGroup> = vec![];
+    for group in ty_check_results.iter() {
+        let core_top_level_group = core_typed_top_level_function_group(&core_ty_con_env, group);
+        match core_top_level_group {
+            Ok(x) => core_top_level_groups.push(x),
+            Err(e) => return Err(e)?,
+        }
+    }
 
     for core_top_level_group in core_top_level_groups.iter() {
         for core_top_lvl_binding in core_top_level_group.0.iter() {
@@ -274,6 +289,8 @@ pub(crate) fn compile(content: &str) -> CompileResult {
             println!();
         }
     }
+
+    println!("<<--- conversion to core");
 
     Ok(())
 }
