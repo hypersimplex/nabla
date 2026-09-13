@@ -5,7 +5,7 @@ pub(crate) mod env_v_var_to_ty_scheme;
 pub(crate) mod pat_binder_uniqueness;
 pub(crate) mod subst;
 pub(crate) mod subst_persistent;
-pub(crate) mod ty_env;
+pub(crate) mod ty_con_env;
 pub(crate) mod ty_err;
 pub(crate) mod ty_expr;
 pub(crate) mod ty_inference;

@@ -2,7 +2,7 @@ use crate::builtin::types::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
 use crate::parse::loc::*;
-use crate::typecheck::ty_env::*;
+use crate::typecheck::ty_con_env::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
@@ -214,9 +214,9 @@ fn build_sum_type_definition(sum: &DataSum, params: &DataParams) -> Result<ADTDe
 pub(crate) fn register_adt_into_type_env(
     ty_var_ns: &mut TyVarNameSupply,
     items: &[TopLevelItem],
-) -> Result<TyEnv, TyError> {
+) -> Result<TyConEnv, TyError> {
     validate_no_builtin_type_shadowing(items)?;
-    let mut env = TyEnv::new();
+    let mut env = TyConEnv::new();
 
     // pass 1: register skeletons
     for item in items.iter() {

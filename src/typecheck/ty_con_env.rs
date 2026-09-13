@@ -4,7 +4,7 @@ use crate::typecheck::adt::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_var_name::*;
 
-pub struct TyEnv {
+pub struct TyConEnv {
     adts: HashMap<String, ADTDef>,
 }
 
@@ -17,9 +17,9 @@ pub(crate) struct ResolvedConstructor<'a> {
     pub ctor: &'a ConstructorDef,
 }
 
-impl TyEnv {
+impl TyConEnv {
     pub fn new() -> Self {
-        TyEnv {
+        TyConEnv {
             adts: HashMap::new(),
         }
     }

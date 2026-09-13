@@ -4,7 +4,7 @@ use crate::typecheck::algos::*;
 use crate::typecheck::env_v_var_to_ty_scheme::*;
 use crate::typecheck::subst::*;
 use crate::typecheck::subst_persistent::*;
-use crate::typecheck::ty_env::*;
+use crate::typecheck::ty_con_env::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_scheme::*;
@@ -65,7 +65,10 @@ pub(crate) fn free_ty_vars(ty_expr: &TyExpr) -> BTreeSet<TyVarName> {
 
 // compute free type variables for the type expression, but ignore ADT type
 // constructors; only true type variables should be generalized
-pub(crate) fn free_ty_vars_excluding_adts(ty_expr: &TyExpr, ty_env: &TyEnv) -> BTreeSet<TyVarName> {
+pub(crate) fn free_ty_vars_excluding_adts(
+    ty_expr: &TyExpr,
+    ty_env: &TyConEnv,
+) -> BTreeSet<TyVarName> {
     free_ty_vars(ty_expr)
         .into_iter()
         .filter(|tvn: &TyVarName| !is_adt_type_var(ty_env, tvn))
@@ -389,7 +392,7 @@ pub(crate) fn apply_subst_typed_pattern(
 /// type check value-level expression with type annotation
 pub(crate) fn ty_check_vexpr_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
@@ -450,7 +453,7 @@ pub(crate) fn ty_check_vexpr_typed(
 /// write curried lambdas, but this helper handles the general case
 pub(crate) fn ty_check_abstraction_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     v_abstr_expr: &VAbstrExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
@@ -563,7 +566,7 @@ pub(crate) fn ty_check_abstraction_typed(
 /// - return the final result type
 pub(crate) fn ty_check_application_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VAppExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
@@ -628,7 +631,7 @@ pub(crate) fn ty_check_application_typed(
 ///
 pub(crate) fn ty_check_case_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VCaseExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
@@ -822,7 +825,7 @@ pub(crate) fn ty_check_binding_group(
     // environment accumulating info as type-checking progresses
     env_v_var_to_ty_scheme_binding_seed: &mut EnvVVarToTyScheme,
     env_outer: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     defs: &[(VPattern, VExpr, Option<TyScheme>)],
 ) -> Result<(Substitution, Vec<BTreeMap<usize, TypedBindingGroupDef>>), TyError> {
@@ -1281,7 +1284,7 @@ pub(crate) fn ty_check_binding_group(
 /// - pattern-bound variables are monomorphic
 pub(crate) fn ty_check_let_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VLetExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
@@ -1368,7 +1371,7 @@ pub(crate) fn ty_check_let_typed(
 ///   - result: Option I64
 pub(crate) fn ty_check_constructor_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VConstructorExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
@@ -1666,7 +1669,7 @@ pub(crate) fn ty_check_variable(
 /// this also augments the environment
 pub(crate) fn ty_check_pattern_typed(
     env: &mut EnvVVarToTyScheme,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     pattern: &VPattern,
 ) -> Result<(Substitution, Vec<VVar>, TypedVPattern), TyError> {
@@ -1685,7 +1688,7 @@ pub(crate) fn ty_check_pattern_typed(
 pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
     env: &mut EnvVVarToTyScheme,
     original_seeded_lhs_binders: &BTreeSet<VVar>,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     pattern: &VPattern,
 ) -> Result<(Substitution, Vec<VVar>, TypedVPattern), TyError> {
@@ -1967,7 +1970,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
     }
 }
 
-fn is_adt_type_var(type_env: &TyEnv, tvn: &TyVarName) -> bool {
+fn is_adt_type_var(type_env: &TyConEnv, tvn: &TyVarName) -> bool {
     match tvn {
         TyVarName::UserDefined(ud) => match &ud.token {
             ConcreteToken::Iden(name) => type_env.get_adt(name).is_ok(),
@@ -2274,7 +2277,7 @@ fn set_scheme_ty_vars_for_binder_in_pattern(
 /// - build a substitution from ADT params to fresh vars
 /// - return the instantiated constructor info and substitution
 fn instantiate_constructor<'a>(
-    type_env: &'a TyEnv,
+    type_env: &'a TyConEnv,
     ns: &mut TyVarNameSupply,
     ctor_ref: &ConstructorRef,
 ) -> Result<ConstructorInstance<'a>, TyError> {
@@ -2311,7 +2314,7 @@ fn instantiate_constructor<'a>(
 /// - instantiate the constructor with fresh type variables
 /// - apply the instantiation substitution to constructor field types
 fn instantiate_pattern_constructor<'a>(
-    type_env: &'a TyEnv,
+    type_env: &'a TyConEnv,
     ns: &mut TyVarNameSupply,
     type_name: &Option<String>,
     constructor: &String,
@@ -2344,7 +2347,7 @@ fn instantiate_pattern_constructor<'a>(
 fn unify_nested_pattern_typed(
     env: &mut EnvVVarToTyScheme,
     original_seeded_lhs_binders: &BTreeSet<VVar>,
-    type_env: &TyEnv,
+    type_env: &TyConEnv,
     ns: &mut TyVarNameSupply,
     subst: &mut Substitution,
     pattern: &VPattern,
@@ -2480,13 +2483,13 @@ fn schematic_info_without_binders(
 /// in the type environment
 pub(crate) fn build_scheme_from_ty_expr(
     ty_expr: &TyExpr,
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     ns: &mut TyVarNameSupply,
 ) -> TyScheme {
     fn collect_user_vars<'a>(
         ty: &'a TyExpr,
         out: &mut BTreeSet<&'a TyVarNameUserDefined>,
-        te: &TyEnv,
+        te: &TyConEnv,
     ) {
         match ty {
             TyExpr::TyVar(TyVarName::UserDefined(u)) => {

@@ -19,7 +19,7 @@ use crate::typecheck::env_v_var_to_ty_scheme::*;
 use crate::typecheck::pat_binder_uniqueness::*;
 use crate::typecheck::subst::*;
 use crate::typecheck::subst_persistent::*;
-use crate::typecheck::ty_env::*;
+use crate::typecheck::ty_con_env::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_inference::*;
@@ -280,7 +280,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
 fn insert_declared_fun_signatures(
     items: &[TopLevelItem],
-    ty_env: &TyEnv,
+    ty_env: &TyConEnv,
     env: &mut EnvVVarToTyScheme,
     declared_function_type_schemes: &mut BTreeMap<String, TyScheme>,
     ty_var_ns: &mut TyVarNameSupply,
@@ -304,7 +304,11 @@ fn insert_declared_fun_signatures(
 /// build a type scheme from a declared function signature
 /// by generalizing free user-defined type variables that are not ADT names
 /// in the type environment
-fn build_scheme_from_signature(sig: &FnSig, ty_env: &TyEnv, ns: &mut TyVarNameSupply) -> TyScheme {
+fn build_scheme_from_signature(
+    sig: &FnSig,
+    ty_env: &TyConEnv,
+    ns: &mut TyVarNameSupply,
+) -> TyScheme {
     let ty_expr = lower_type_annot_to_ty_expr(&sig.ty);
     build_scheme_from_ty_expr(&ty_expr, ty_env, ns)
 }
