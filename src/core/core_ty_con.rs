@@ -1,5 +1,6 @@
 use crate::core::core_ir::*;
 use crate::parse::concrete_token::*;
+use crate::typecheck::adt::*;
 use crate::typecheck::ty_var_name::*;
 
 /// this provides a blueprint for instantiations of ADT
@@ -38,7 +39,7 @@ impl CoreADTDef {
     /// parameters with `ForAll` for each of the generic/placeholder types
     ///
     /// eg: Maybe would be `(TyApp Maybe a)` where `a` is generic
-    fn ty(&self) -> CoreTy {
+    pub(crate) fn ty(&self) -> CoreTy {
         let core_ty_constructor = CoreTy::TyConstructor(CoreTyCon::User(CoreTyConUser {
             name: self.name.clone(),
         }));
@@ -75,7 +76,10 @@ pub(crate) struct CoreConDef {
 ///
 /// eg: `Just` constructor function has the type `ForAll a. a -> Maybe a`
 ///     `None` constructor function has the type `ForAll a. Maybe a`
-fn get_ty_for_adt_constructor_fn(adt_def: &CoreADTDef, constructor_def: &CoreConDef) -> CoreTy {
+pub(crate) fn get_ty_for_adt_constructor_fn(
+    adt_def: &CoreADTDef,
+    constructor_def: &CoreConDef,
+) -> CoreTy {
     // final return type is the ADT type
     let mut core_ty = adt_def.ty();
 
@@ -101,3 +105,36 @@ fn get_ty_for_adt_constructor_fn(adt_def: &CoreADTDef, constructor_def: &CoreCon
 
     core_ty
 }
+
+// helper conversion functions --->>
+impl<'a> From<&'a ConstructorDef> for CoreConDef {
+    fn from(constructor_def: &'a ConstructorDef) -> Self {
+        let ConstructorDef {
+            name, field_types, ..
+        } = constructor_def;
+        CoreConDef {
+            name: name.clone(),
+            field_types: field_types
+                .iter()
+                .map(|x| core_ty_from_ty_expr(x))
+                .collect(),
+        }
+    }
+}
+
+impl<'a> From<&'a ADTDef> for CoreADTDef {
+    fn from(adt_def: &'a ADTDef) -> Self {
+        let ADTDef {
+            name,
+            ty_params,
+            constructors,
+        } = adt_def;
+        CoreADTDef {
+            name: name.clone(),
+            ty_params: ty_params.clone(),
+            constructors: constructors.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+// <<--- helper conversion functions
