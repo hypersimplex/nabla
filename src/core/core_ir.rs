@@ -714,12 +714,19 @@ fn core_case_alt_from_typed_v_case_alt(
     todo!("core_case_alt_from_typed_v_case_alt")
 }
 
-// [todo]
 // helper impl. for doc printer trait --->>
 
 impl DocPrinter for CoreTopLevelBinding {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        let Self {
+            var_binder,
+            abstraction,
+        } = self;
+
+        var_binder
+            .to_doc()
+            .cat_space_lit("=")
+            .cat_space(abstraction.to_doc())
     }
 }
 
@@ -740,31 +747,128 @@ impl DocPrinter for CoreExpr {
 
 impl DocPrinter for CoreAbstr {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        let Self { param, body, ty } = self;
+        Doc::lit("\\")
+            .cat_space(param.to_doc())
+            .cat_space_lit("->")
+            .cat_lit("(")
+            .cat_space(body.to_doc().nest(4))
+            .cat_lit(")")
+            .cat_space_lit("::")
+            .cat_space(ty.to_doc())
     }
 }
 
 impl DocPrinter for CoreApp {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        let Self { callable, arg, ty } = self;
+
+        Doc::lit("(")
+            .cat(Doc::lit("("))
+            .cat(callable.to_doc())
+            .cat_space(arg.to_doc())
+            .cat(Doc::lit(")"))
+            .cat_space_lit("::")
+            .cat_space(ty.to_doc())
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for CoreCase {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        let Self {
+            scrutinee,
+            result,
+            alts,
+            ty,
+        } = self;
+
+        let mut doc = Doc::line_force()
+            .cat_lit("case")
+            .cat_space(scrutinee.to_doc())
+            .cat_space_lit("of")
+            .cat_space(result.to_doc());
+
+        let mut doc_alts = Doc::nil();
+        for alt in alts.iter() {
+            doc_alts = doc_alts.cat_line_force().cat(alt.to_doc());
+        }
+
+        doc.cat(doc_alts.nest(4)).cat_line_force()
+    }
+}
+
+impl DocPrinter for CoreCaseAlt {
+    fn to_doc(&self) -> Box<Doc> {
+        let Self { pattern, expr } = self;
+
+        pattern
+            .to_doc()
+            .cat_space_lit("->")
+            .cat_space(expr.to_doc().nest(4))
+    }
+}
+
+impl DocPrinter for CoreAltConPattern {
+    fn to_doc(&self) -> Box<Doc> {
+        use CoreAltConPattern::*;
+        match self {
+            Data(x) => x.to_doc(),
+            Literal(x) => x.to_doc(),
+        }
     }
 }
 
 impl DocPrinter for CoreLet {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        let Self { defs, body, ty } = self;
+
+        let mut doc_defs = Doc::nil();
+        for (idx, (var, def)) in defs.iter().enumerate() {
+            if idx != 0 {
+                doc_defs = doc_defs.cat_line_force();
+            }
+            doc_defs = doc_defs
+                .cat(var.to_doc())
+                .cat_space_lit("=")
+                .cat_space(def.to_doc());
+        }
+
+        Doc::lit("let")
+            .cat_space(doc_defs.nest(4))
+            .cat_line_force()
+            .cat_lit("in")
+            .cat_line_force()
+            .cat(body.to_doc())
     }
 }
 
 impl DocPrinter for CoreLiteral {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        use CoreLiteral::*;
+        match self {
+            LitNumericIntegral(x) => x.to_doc(),
+            LitNumericFloat(x) => x.to_doc(),
+            LitString(x) => x.to_doc(),
+        }
+    }
+}
+
+impl DocPrinter for CoreLitNumericIntegral {
+    fn to_doc(&self) -> Box<Doc> {
+        Doc::lit(&format!("{}", self.value))
+    }
+}
+
+impl DocPrinter for CoreLitNumericFloat {
+    fn to_doc(&self) -> Box<Doc> {
+        Doc::lit(&format!("{}", self.value))
+    }
+}
+
+impl DocPrinter for CoreLitString {
+    fn to_doc(&self) -> Box<Doc> {
+        Doc::lit(&format!("\"{}\"", self.value))
     }
 }
 
@@ -780,13 +884,19 @@ impl DocPrinter for CoreVar {
 
 impl DocPrinter for CoreVVar {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        let Self { vvar, ty } = self;
+
+        Doc::lit("(")
+            .cat(vvar.to_doc())
+            .cat_space_lit("::")
+            .cat_space(ty.to_doc())
+            .cat_lit(")")
     }
 }
 
 impl DocPrinter for CoreTyVar {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        self.ty.to_doc()
     }
 }
 
@@ -804,7 +914,29 @@ impl DocPrinter for CoreTy {
 
 impl DocPrinter for CoreTyCon {
     fn to_doc(&self) -> Box<Doc> {
-        todo!()
+        use CoreTyCon::*;
+        match self {
+            Builtin(x) => x.to_doc(),
+            User(x) => x.to_doc(),
+        }
+    }
+}
+
+impl DocPrinter for CoreTyConBuiltin {
+    fn to_doc(&self) -> Box<Doc> {
+        use CoreTyConBuiltin::*;
+        match self {
+            Int => Doc::lit("Int"),
+            Float => Doc::lit("Float"),
+            String => Doc::lit("String"),
+            Arrow => Doc::lit("->"),
+        }
+    }
+}
+
+impl DocPrinter for CoreTyConUser {
+    fn to_doc(&self) -> Box<Doc> {
+        Doc::lit(&format!("{}", self.name))
     }
 }
 
@@ -819,10 +951,12 @@ impl DocPrinter for CoreTyApp {
 
 impl DocPrinter for CoreTyForAll {
     fn to_doc(&self) -> Box<Doc> {
-        Doc::lit("forall")
+        Doc::lit("(")
+            .cat_lit("forall")
             .cat_space(self.ty_var.to_doc())
-            .cat_space_lit(".")
+            .cat_lit(".")
             .cat_space(self.ty_expr.to_doc())
+            .cat_lit(")")
     }
 }
 
