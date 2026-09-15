@@ -252,15 +252,12 @@ impl DocPrinter for TypedVExpr {
 
 impl DocPrinter for TypedVAbstrExpr {
     fn to_doc(&self) -> Box<Doc> {
-        let mut rhs = Doc::lit("\\");
-        for param in self.params.iter() {
-            rhs = rhs.cat_space(param.to_doc());
-        }
-        rhs = rhs.cat_space_lit("->");
-        let doc_body = self.body.to_doc();
-
-        rhs = rhs.cat_space(doc_body.nest(4));
-        rhs.group()
+        self.params
+            .iter()
+            .fold(Doc::lit("\\"), |acc, param| acc.cat_space(param.to_doc()))
+            .cat_space_lit("->")
+            .cat_space(self.body.to_doc().nest(4))
+            .group()
     }
 }
 
@@ -302,10 +299,9 @@ impl DocPrinter for TypedVCaseExpr {
             .cat_space(self.arg.to_doc())
             .cat_space_lit("of");
 
-        let mut body = Doc::nil();
-        for clause in self.clauses.iter() {
-            body = body.cat_line_force().cat(clause.to_doc());
-        }
+        let body = self.clauses.iter().fold(Doc::nil(), |acc, clause| {
+            acc.cat_line_force().cat(clause.to_doc())
+        });
 
         Doc::line_force()
             .cat(header)
@@ -351,19 +347,20 @@ impl DocPrinter for TypedVLetExpr {
 impl DocPrinter for TypedVConstructorExpr {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc = Doc::lit(&format!("{}.{}", self.ty_name, self.constructor_name));
-        if let Some(x) = &self.record_fields {
-            doc = doc.cat_space_lit("{");
-            for (field, linear_index) in x.iter() {
-                doc = doc
-                    .cat_space(Doc::lit(&format!("{}:", field)))
-                    .cat_space(self.args[*linear_index].to_doc())
-                    .cat_space_lit(",");
-            }
-            doc = doc.cat_lit("}");
+        if let Some(fields) = &self.record_fields {
+            doc = fields
+                .iter()
+                .fold(doc.cat_space_lit("{"), |acc, (field, linear_index)| {
+                    acc.cat_space(Doc::lit(&format!("{}:", field)))
+                        .cat_space(self.args[*linear_index].to_doc())
+                        .cat_space_lit(",")
+                })
+                .cat_lit("}");
         } else {
-            for i in self.args.iter() {
-                doc = doc.cat_space(i.to_doc());
-            }
+            doc = self
+                .args
+                .iter()
+                .fold(doc, |acc, arg| acc.cat_space(arg.to_doc()));
         }
         Doc::lit("(")
             .cat(doc)
@@ -399,17 +396,16 @@ impl DocPrinter for TypedVPattern {
                 let mut doc = Doc::lit(&format!("{}.{}", ty_name, constructor));
 
                 if !ty_args.is_empty() {
-                    doc = doc.cat_lit("<");
-                    for i in ty_args {
-                        doc = doc.cat(i.to_doc()).cat_lit(",");
-                    }
-                    doc = doc.cat_lit(">");
+                    doc = ty_args
+                        .iter()
+                        .fold(doc.cat_lit("<"), |acc, ty| {
+                            acc.cat(ty.to_doc()).cat_lit(",")
+                        })
+                        .cat_lit(">");
                 }
 
-                for i in args.iter() {
-                    doc = doc.cat_space(i.to_doc());
-                }
-                doc
+                args.iter()
+                    .fold(doc, |acc, arg| acc.cat_space(arg.to_doc()))
             }
             Record {
                 ty_name,
@@ -426,23 +422,23 @@ impl DocPrinter for TypedVPattern {
                 doc = doc.cat(Doc::lit(&format!("{} {{", constructor)));
 
                 if !ty_args.is_empty() {
-                    doc = doc.cat_lit("<");
-                    for i in ty_args {
-                        doc = doc.cat(i.to_doc()).cat_lit(",");
-                    }
-                    doc = doc.cat_lit(">");
+                    doc = ty_args
+                        .iter()
+                        .fold(doc.cat_lit("<"), |acc, ty| {
+                            acc.cat(ty.to_doc()).cat_lit(",")
+                        })
+                        .cat_lit(">");
                 }
 
-                let mut doc_fields = Doc::nil();
-                for (field, pat) in fields.iter() {
-                    doc_fields = doc_fields.cat_line_force().cat(
+                let mut doc_fields = fields.iter().fold(Doc::nil(), |acc, (field, pat)| {
+                    acc.cat_line_force().cat(
                         Doc::lit(&format!("{}: ", field))
                             .cat(pat.to_doc())
                             .cat_lit(","),
-                    );
-                }
+                    )
+                });
                 if *rest {
-                    doc_fields = doc_fields.cat(Doc::line_force().cat_lit(".."));
+                    doc_fields = doc_fields.cat_line_force().cat_lit("..");
                 }
                 doc.cat(doc_fields.group().nest(4)).cat_lit("}")
             }
@@ -480,11 +476,11 @@ impl DocPrinter for TypedVVariable {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc_ty_args = Doc::nil();
         if !self.ty_args.is_empty() {
-            doc_ty_args = Doc::lit("<");
-            for i in self.ty_args.iter() {
-                doc_ty_args = doc_ty_args.cat(i.to_doc()).cat_lit(",");
-            }
-            doc_ty_args = doc_ty_args.cat_lit(">");
+            doc_ty_args = self
+                .ty_args
+                .iter()
+                .fold(Doc::lit("<"), |acc, ty| acc.cat(ty.to_doc()).cat_lit(","))
+                .cat_lit(">");
         }
         Doc::lit("(")
             .cat(
