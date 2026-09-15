@@ -896,11 +896,7 @@ impl DocPrinter for CoreAbstr {
         Doc::lit("\\")
             .cat_space(param.to_doc())
             .cat_space_lit("->")
-            .cat_lit("(")
             .cat_space(body.to_doc().nest(4))
-            .cat_lit(")")
-            .cat_space_lit("::")
-            .cat_space(ty.to_doc())
     }
 }
 
@@ -979,12 +975,13 @@ impl DocPrinter for CoreLet {
                 .cat_space(def.to_doc());
         }
 
-        Doc::lit("let")
+        let doc = Doc::lit("let")
             .cat_space(doc_defs.nest(4))
             .cat_line_force()
             .cat_lit("in")
-            .cat_line_force()
-            .cat(body.to_doc())
+            .cat(Doc::line_force().cat(body.to_doc()).nest(4));
+
+        Doc::line_force().cat(doc)
     }
 }
 
