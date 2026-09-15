@@ -443,6 +443,26 @@ fn core_ty_from_ty_scheme(core_ty_con_env: &CoreTyConEnv, ty_scheme: &TyScheme) 
     core_ty
 }
 
+/// wrap type abstractions around a core expression for schematic type variables
+fn wrap_type_abstractions(mut core_expr: CoreExpr, schematic_vars: &[TyVarName]) -> CoreExpr {
+    for ty_var_name in schematic_vars.iter().rev() {
+        let new_ty = CoreTy::ForAll(CoreTyForAll {
+            ty_var: ty_var_name.clone(),
+            ty_expr: Box::new(core_expr.ty()),
+        });
+        let type_param = CoreVar::TypeVariable(CoreTyVar {
+            ty_var: ty_var_name.clone(),
+            ty: CoreTy::Var(ty_var_name.clone()),
+        });
+        core_expr = CoreExpr::Abstraction(CoreAbstr {
+            param: type_param,
+            body: Box::new(core_expr),
+            ty: new_ty,
+        });
+    }
+    core_expr
+}
+
 /// transform from high level IR to the core IR
 pub(crate) fn core_typed_top_level_function_group(
     core_ty_con_env: &CoreTyConEnv,
@@ -468,7 +488,10 @@ pub(crate) fn core_top_level_binding_from_typed_top_level_function(
 ) -> CoreResult<CoreTopLevelBinding> {
     let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &top_lvl_fn.typed_expr)?;
 
-    let mut core_abstraction = match core_expr {
+    // introduce type parameter(s) for type abstraction
+    let core_expr = wrap_type_abstractions(core_expr, &top_lvl_fn.scheme.ty_vars_schematic);
+
+    let core_abstraction = match core_expr {
         CoreExpr::Abstraction(abstr) => abstr,
         _ => {
             unreachable!()
@@ -643,7 +666,10 @@ pub(crate) fn core_expr_from_let(
                     vvar: binder.clone(),
                     ty: ty_expr,
                 });
-                (lhs_var, core_expr_from_typed_v_expr(core_ty_con_env, rhs))
+                let rhs_core_expr = core_expr_from_typed_v_expr(core_ty_con_env, rhs)
+                    .map(|expr| wrap_type_abstractions(expr, &ty_schematic.ty_vars_schematic));
+
+                (lhs_var, rhs_core_expr)
             }
             _ => {
                 unreachable!();
