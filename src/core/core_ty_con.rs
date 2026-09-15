@@ -143,8 +143,11 @@ pub(crate) fn get_vvar_for_adt_constructor_fn(
 }
 
 // helper conversion functions --->>
-impl<'a> From<&'a ConstructorDef> for CoreConDef {
-    fn from(constructor_def: &'a ConstructorDef) -> Self {
+impl CoreConDef {
+    pub(crate) fn from_constructor_def(
+        core_ty_con_env: &crate::core::core_ty_con_env::CoreTyConEnv,
+        constructor_def: &ConstructorDef,
+    ) -> Self {
         let ConstructorDef {
             name, field_types, ..
         } = constructor_def;
@@ -152,23 +155,8 @@ impl<'a> From<&'a ConstructorDef> for CoreConDef {
             name: name.clone(),
             field_types: field_types
                 .iter()
-                .map(|x| core_ty_from_ty_expr(x))
+                .map(|x| core_ty_from_ty_expr(core_ty_con_env, x))
                 .collect(),
-        }
-    }
-}
-
-impl<'a> From<&'a ADTDef> for CoreADTDef {
-    fn from(adt_def: &'a ADTDef) -> Self {
-        let ADTDef {
-            name,
-            ty_params,
-            constructors,
-        } = adt_def;
-        CoreADTDef {
-            name: name.clone(),
-            ty_params: ty_params.clone(),
-            constructors: constructors.iter().map(|x| x.into()).collect(),
         }
     }
 }
