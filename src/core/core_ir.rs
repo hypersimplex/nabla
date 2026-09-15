@@ -5,6 +5,7 @@
 //! arguments / parameters
 
 use crate::core::core_err::*;
+use crate::core::core_ty_con::*;
 use crate::core::core_ty_con_env::*;
 use crate::parse::concrete_token::*;
 use crate::parse::loc::*;
@@ -115,6 +116,64 @@ pub(crate) enum CoreTy {
     // convention is to have all `ForAll` in the outer-most/front layer of a
     // CoreTy expression
     ForAll(CoreTyForAll),
+}
+
+/// substitute `ty_var` with `ty_arg` in `ty_expr`
+fn core_ty_subst(ty_expr: &CoreTy, ty_var: &TyVarName, ty_arg: &CoreTy) -> CoreTy {
+    use CoreTy::*;
+
+    match ty_expr {
+        Var(ty_var_name) => {
+            if ty_var_name == ty_var {
+                // match and replace
+                ty_arg.clone()
+            } else {
+                ty_expr.clone()
+            }
+        }
+        TyConstructor(ty_con) => ty_expr.clone(),
+        App(ty_app) => {
+            let CoreTyApp {
+                ty_fun,
+                ty_arg: ty_arg_inner,
+            } = ty_app;
+
+            let ty_fun_updated = core_ty_subst(&*ty_fun, ty_var, ty_arg);
+            let ty_arg_updated = core_ty_subst(&*ty_arg_inner, ty_var, ty_arg);
+
+            App(CoreTyApp {
+                ty_fun: Box::new(ty_fun_updated),
+                ty_arg: Box::new(ty_arg_updated),
+            })
+        }
+        ForAll(for_all) => {
+            let CoreTyForAll {
+                ty_var: ty_var_inner,
+                ty_expr: ty_expr_inner,
+            } = for_all;
+
+            let ty_expr_updated = core_ty_subst(ty_expr_inner, ty_var, ty_arg);
+
+            ForAll(CoreTyForAll {
+                ty_var: ty_var_inner.clone(),
+                ty_expr: Box::new(ty_expr_updated),
+            })
+        }
+    }
+}
+
+/// substitute `ty_arg` for `a` in `ty_expr` of `(ForAll a. ty_expr)`
+/// and peel the outermost `ForAll`
+fn apply_ty_argument(ty: &CoreTy, ty_arg: &CoreTy) -> CoreTy {
+    match ty {
+        CoreTy::ForAll(for_all) => {
+            let CoreTyForAll { ty_var, ty_expr } = for_all;
+            core_ty_subst(ty_expr, ty_var, ty_arg)
+        }
+        _ => {
+            panic!("expect for all when doing type application")
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -692,7 +751,6 @@ fn core_expr_from_constructor(
     core_ty_con_env: &CoreTyConEnv,
     expr: &TypedVConstructorExpr,
 ) -> CoreResult<CoreExpr> {
-    todo!("core_expr_from_constructor");
     let TypedVConstructorExpr {
         ty_name,
         constructor_name,
@@ -704,7 +762,62 @@ fn core_expr_from_constructor(
 
     let core_adt_def = core_ty_con_env.get_adt(ty_name)?;
 
-    todo!()
+    if let Some(core_constructor_def) = core_adt_def
+        .constructors
+        .iter()
+        .find(|x| x.name == *constructor_name)
+    {
+        let vvar_binder_to_constructor_function =
+            get_vvar_for_adt_constructor_fn(core_adt_def, core_constructor_def);
+
+        let mut core_expr = vvar_binder_to_constructor_function;
+
+        // apply type arguments to binder from left to right
+        for ty_arg in ty_args.iter() {
+            let core_ty_arg = core_ty_from_ty_expr(ty_arg);
+
+            let ty_callable = core_expr.ty();
+
+            let ty_after_application = apply_ty_argument(&ty_callable, &core_ty_arg);
+
+            core_expr = CoreExpr::Application(CoreApp {
+                callable: Box::new(core_expr),
+                arg: Box::new(CoreExpr::Type(core_ty_arg)),
+                ty: ty_after_application,
+            });
+        }
+
+        // apply value level arguments
+        for arg in args.iter() {
+            let core_arg = core_expr_from_typed_v_expr(core_ty_con_env, arg)?;
+
+            let core_ty = core_expr.ty().clone();
+
+            // this is the resulting type after the application
+            let core_ty_result = match core_ty {
+                CoreTy::App(app) => {
+                    let CoreTyApp { ty_fun, ty_arg } = app;
+                    (*ty_arg).clone()
+                }
+                _ => {
+                    unreachable!("expected CoreTyApp, but got {:?}", &core_ty);
+                }
+            };
+
+            core_expr = CoreExpr::Application(CoreApp {
+                callable: Box::new(core_expr),
+                arg: Box::new(core_arg),
+                ty: core_ty_result,
+            });
+        }
+
+        Ok(core_expr)
+    } else {
+        return Err(CoreError::AdtError(format!(
+            "constructor {} not found in ADT {}",
+            constructor_name, ty_name,
+        )));
+    }
 }
 
 fn core_case_alt_from_typed_v_case_alt(

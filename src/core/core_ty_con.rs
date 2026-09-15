@@ -84,11 +84,17 @@ pub(crate) fn get_ty_for_adt_constructor_fn(
     let mut core_ty = adt_def.ty();
 
     // make the arrow type for the constructor function based on the fields
+    // note: process in reverse order
     for field_ty in constructor_def.field_types.iter().rev() {
-        core_ty = CoreTy::App(CoreTyApp {
+        let app = CoreTy::App(CoreTyApp {
             ty_fun: Box::new(CoreTy::TyConstructor(CoreTyCon::Builtin(
                 CoreTyConBuiltin::Arrow,
             ))),
+            ty_arg: Box::new(field_ty.clone()),
+        });
+
+        core_ty = CoreTy::App(CoreTyApp {
+            ty_fun: Box::new(app),
             ty_arg: Box::new(core_ty),
         });
     }
@@ -104,6 +110,36 @@ pub(crate) fn get_ty_for_adt_constructor_fn(
     }
 
     core_ty
+}
+
+pub(crate) fn get_name_for_adt_constructor_fn(
+    adt_def: &CoreADTDef,
+    constructor_def: &CoreConDef,
+) -> String {
+    format!("{}.{}", adt_def.name, constructor_def.name)
+}
+
+pub(crate) fn get_vvar_for_adt_constructor_fn(
+    adt_def: &CoreADTDef,
+    constructor_def: &CoreConDef,
+) -> CoreExpr {
+    let constructor_name = get_name_for_adt_constructor_fn(adt_def, constructor_def);
+    let constructor_ty = get_ty_for_adt_constructor_fn(adt_def, constructor_def);
+
+    use crate::typecheck::v_expr::VVar;
+    use crate::typecheck::v_var_name::VVarName;
+
+    // [todo]: get proper span from source instead of constructing this thing
+    let vvar = VVar::Named(VVarName {
+        token: ConcreteToken::Iden(constructor_name),
+        loc: None,
+        builtin: None,
+    });
+
+    CoreExpr::Variable(CoreVar::ValueVariable(CoreVVar {
+        vvar,
+        ty: constructor_ty,
+    }))
 }
 
 // helper conversion functions --->>
