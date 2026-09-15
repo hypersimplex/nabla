@@ -252,6 +252,8 @@ impl CoreApp {
     }
 }
 
+/// [todo]: review design of this construct
+///
 /// case construct in core IR introduces explicit variable binder for the result
 /// of scrutinee evaluation
 #[derive(Clone, Debug)]
@@ -391,6 +393,7 @@ impl CoreTyVar {
     }
 }
 
+/// [todo]: review design of this construct
 #[derive(Clone, Debug)]
 pub(crate) struct CoreCaseAlt {
     pub pattern: CoreAltConPattern,
@@ -398,6 +401,8 @@ pub(crate) struct CoreCaseAlt {
     pub expr: CoreExpr,
 }
 
+/// [todo]: review design of this construct
+///
 /// note: after desugaring to core, supported patterns are quite restricted
 #[derive(Clone, Debug)]
 pub(crate) enum CoreAltConPattern {
