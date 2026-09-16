@@ -295,9 +295,11 @@ impl CoreApp {
 /// of scrutinee evaluation
 #[derive(Clone, Debug)]
 pub(crate) struct CoreCase {
+    // note: this can be an aribrary expression in general
     pub scrutinee: Box<CoreExpr>,
 
-    // binder to result of evaluating the scrutinee
+    // binder to result of evaluating the scrutinee, guaranteed to be a simple
+    // variable binder
     pub result: CoreVar,
 
     pub alts: Vec<CoreCaseAlt>,
@@ -438,7 +440,8 @@ pub(crate) struct CoreCaseAlt {
     pub expr: CoreExpr,
 }
 
-/// [todo]: review design of this construct
+/// [todo]: - review design of this construct
+///         - add support for wild/default variant
 ///
 /// note: after desugaring to core, supported patterns are quite restricted
 #[derive(Clone, Debug)]
@@ -644,7 +647,10 @@ pub(crate) fn core_expr_from_case(
     core_ty_con_env: &CoreTyConEnv,
     expr: &TypedVCaseExpr,
 ) -> CoreResult<CoreExpr> {
-    // this is guaranteed to be a simple variable
+    // note: this is expected to be a simple variable from previous
+    // transformation phase in the pipeline
+    //
+    // [todo]: relax this assumption and let it be an arbitrary core expression
     let core_expr_scrutinee = core_expr_from_typed_v_expr(core_ty_con_env, &*expr.arg)?;
 
     let scrutinee_var = match &core_expr_scrutinee {
@@ -663,7 +669,8 @@ pub(crate) fn core_expr_from_case(
     let core_expr = CoreCase {
         scrutinee: Box::new(core_expr_scrutinee),
 
-        // binder to result of evaluating the scrutinee
+        // note: binder to result of evaluating the scrutinee is guaranteed
+        // to a simple variable binder
         result: scrutinee_var,
 
         alts,
