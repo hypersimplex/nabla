@@ -86,30 +86,13 @@ pub(crate) fn get_ty_for_adt_constructor_fn(
     // make the arrow type for the constructor function based on the fields
     // note: process in reverse order
     for field_ty in constructor_def.field_types.iter().rev() {
-        let app = CoreTy::App(CoreTyApp {
-            ty_fun: Box::new(CoreTy::TyConstructor(CoreTyCon::Builtin(
-                CoreTyConBuiltin::Arrow,
-            ))),
-            ty_arg: Box::new(field_ty.clone()),
-        });
-
-        core_ty = CoreTy::App(CoreTyApp {
-            ty_fun: Box::new(app),
-            ty_arg: Box::new(core_ty),
-        });
+        core_ty = CoreTy::mk_arrow(field_ty.clone(), core_ty);
     }
 
     // introduce `ForAll`s for each generic/placeholder type of the ADT
     //
     // note: left most `ty_param` correspond to outermost `ForAll`
-    for ty_param in adt_def.ty_params.iter().rev() {
-        core_ty = CoreTy::ForAll(CoreTyForAll {
-            ty_var: ty_param.clone(),
-            ty_expr: Box::new(core_ty),
-        });
-    }
-
-    core_ty
+    core_ty.wrap_foralls(&adt_def.ty_params)
 }
 
 pub(crate) fn get_name_for_adt_constructor_fn(

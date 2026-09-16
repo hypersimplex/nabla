@@ -118,6 +118,43 @@ pub(crate) enum CoreTy {
     ForAll(CoreTyForAll),
 }
 
+impl CoreTy {
+    /// wrap `self` with nested `ForAll`s for each type variable in `ty_vars`
+    pub(crate) fn wrap_foralls(mut self, ty_vars: &[TyVarName]) -> Self {
+        // note: process in reverse order so the leftmost type variable
+        // corresponds to the outermost `ForAll`
+        for ty_var in ty_vars.iter().rev() {
+            self = CoreTy::ForAll(CoreTyForAll {
+                ty_var: ty_var.clone(),
+                ty_expr: Box::new(self),
+            });
+        }
+        self
+    }
+
+    /// return the result type, `TyRet`, of an arrow type application
+    /// `((-> TyParam) TyRet)`
+    pub(crate) fn get_arrow_codomain(&self) -> &CoreTy {
+        match self {
+            CoreTy::App(app) => &app.ty_arg,
+            _ => unreachable!("expected CoreTyApp, but got {:?}", self),
+        }
+    }
+
+    /// construct an arrow function type `ty_from -> ty_to`
+    pub(crate) fn mk_arrow(ty_from: CoreTy, ty_to: CoreTy) -> Self {
+        CoreTy::App(CoreTyApp {
+            ty_fun: Box::new(CoreTy::App(CoreTyApp {
+                ty_fun: Box::new(CoreTy::TyConstructor(CoreTyCon::Builtin(
+                    CoreTyConBuiltin::Arrow,
+                ))),
+                ty_arg: Box::new(ty_from),
+            })),
+            ty_arg: Box::new(ty_to),
+        })
+    }
+}
+
 /// substitute `ty_var` with `ty_arg` in `ty_expr`
 fn core_ty_subst(ty_expr: &CoreTy, ty_var: &TyVarName, ty_arg: &CoreTy) -> CoreTy {
     use CoreTy::*;
@@ -437,15 +474,9 @@ pub(crate) fn core_ty_from_ty_expr(core_ty_con_env: &CoreTyConEnv, ty_expr: &TyE
 /// note: schematic type variables are translated to `ForAll`s and these
 /// schematic type variables are wrapped outside by convention
 fn core_ty_from_ty_scheme(core_ty_con_env: &CoreTyConEnv, ty_scheme: &TyScheme) -> CoreTy {
-    let mut core_ty = core_ty_from_ty_expr(core_ty_con_env, &ty_scheme.ty_expr);
     // note: right associative so process in reverse order
-    for ty_var_name in ty_scheme.ty_vars_schematic.iter().rev() {
-        core_ty = CoreTy::ForAll(CoreTyForAll {
-            ty_var: ty_var_name.clone(),
-            ty_expr: Box::new(core_ty),
-        });
-    }
-    core_ty
+    core_ty_from_ty_expr(core_ty_con_env, &ty_scheme.ty_expr)
+        .wrap_foralls(&ty_scheme.ty_vars_schematic)
 }
 
 /// wrap type abstractions around a core expression for schematic type variables
@@ -579,27 +610,18 @@ pub(crate) fn core_expr_from_abstraction(
 ///
 /// apply a, then the result is `b->c`
 /// which corresponds to taking the right subtree of the root
-pub(crate) fn core_expr_from_application(
+fn apply_value_arguments(
     core_ty_con_env: &CoreTyConEnv,
-    expr: &TypedVAppExpr,
+    mut core_expr: CoreExpr,
+    args: &[TypedVExpr],
 ) -> CoreResult<CoreExpr> {
-    let mut core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &expr.callable)?;
-    for arg in expr.args.iter() {
+    for arg in args.iter() {
         // [todo]: maybe check type of argument against expected parameter type
         // of the callable
         let core_expr_arg = core_expr_from_typed_v_expr(core_ty_con_env, arg)?;
 
-        let core_ty = core_expr.ty().clone();
         // this is the resulting type after the application
-        let core_ty_result = match core_ty {
-            CoreTy::App(app) => {
-                let CoreTyApp { ty_fun, ty_arg } = app;
-                (*ty_arg).clone()
-            }
-            _ => {
-                unreachable!("expected CoreTyApp, but got {:?}", &core_ty);
-            }
-        };
+        let core_ty_result = core_expr.ty().get_arrow_codomain().clone();
 
         core_expr = CoreExpr::Application(CoreApp {
             callable: Box::new(core_expr),
@@ -608,6 +630,14 @@ pub(crate) fn core_expr_from_application(
         });
     }
     Ok(core_expr)
+}
+
+pub(crate) fn core_expr_from_application(
+    core_ty_con_env: &CoreTyConEnv,
+    expr: &TypedVAppExpr,
+) -> CoreResult<CoreExpr> {
+    let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &expr.callable)?;
+    apply_value_arguments(core_ty_con_env, core_expr, &expr.args)
 }
 
 pub(crate) fn core_expr_from_case(
@@ -659,13 +689,8 @@ pub(crate) fn core_expr_from_let(
                 ty_schematic,
             } => {
                 // explicitly include generic/parameteric types in type expr
-                let mut ty_expr = core_ty_from_ty_expr(core_ty_con_env, ty);
-                for ty_var_name in ty_schematic.ty_vars_schematic.iter().rev() {
-                    ty_expr = CoreTy::ForAll(CoreTyForAll {
-                        ty_var: ty_var_name.clone(),
-                        ty_expr: Box::new(ty_expr),
-                    });
-                }
+                let ty_expr = core_ty_from_ty_expr(core_ty_con_env, ty)
+                    .wrap_foralls(&ty_schematic.ty_vars_schematic);
 
                 let lhs_var = CoreVar::ValueVariable(CoreVVar {
                     vvar: binder.clone(),
@@ -825,30 +850,7 @@ fn core_expr_from_constructor(
         }
 
         // apply value level arguments
-        for arg in args.iter() {
-            let core_arg = core_expr_from_typed_v_expr(core_ty_con_env, arg)?;
-
-            let core_ty = core_expr.ty().clone();
-
-            // this is the resulting type after the application
-            let core_ty_result = match core_ty {
-                CoreTy::App(app) => {
-                    let CoreTyApp { ty_arg, .. } = app;
-                    (*ty_arg).clone()
-                }
-                _ => {
-                    unreachable!("expected CoreTyApp, but got {:?}", &core_ty);
-                }
-            };
-
-            core_expr = CoreExpr::Application(CoreApp {
-                callable: Box::new(core_expr),
-                arg: Box::new(core_arg),
-                ty: core_ty_result,
-            });
-        }
-
-        Ok(core_expr)
+        apply_value_arguments(core_ty_con_env, core_expr, args)
     } else {
         return Err(CoreError::AdtError(format!(
             "constructor {} not found in ADT {}",
