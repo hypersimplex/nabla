@@ -1,5 +1,5 @@
 /// persistent map
-use std::sync::*;
+use std::sync::Arc;
 
 #[cfg(test)]
 use std::collections::*;
@@ -56,8 +56,8 @@ impl<K: Clone + Ord, V: Clone> PersistentMap<K, V> {
 pub(crate) struct PersistentMapInner<K, V> {
     key: K,
     value: V,
-    left: Option<Arc<Mutex<PersistentMapInner<K, V>>>>,
-    right: Option<Arc<Mutex<PersistentMapInner<K, V>>>>,
+    left: Option<Arc<PersistentMapInner<K, V>>>,
+    right: Option<Arc<PersistentMapInner<K, V>>>,
 }
 
 impl<K: PartialOrd + Ord, V> PartialOrd for PersistentMapInner<K, V> {
@@ -83,53 +83,38 @@ impl<K: Eq, V> Eq for PersistentMapInner<K, V> {}
 impl<K: Clone + Ord, V: Clone> PersistentMapInner<K, V> {
     pub(crate) fn new(key: K, value: V) -> Self {
         Self {
-            key: key,
-            value: value,
+            key,
+            value,
             left: None,
             right: None,
         }
     }
+
     pub(crate) fn insert(&self, key: K, value: V) -> PersistentMapInner<K, V> {
         match key.cmp(&self.key) {
             std::cmp::Ordering::Less => {
-                let mut node = self.clone();
-                match node.left.as_ref() {
-                    Some(l) => {
-                        let mut guard = l.lock().unwrap();
-                        let n = &*guard;
-                        let new_n = n.insert(key, value);
-                        *guard = new_n;
-                    }
-                    None => {
-                        node.left = Some(Arc::new(Mutex::new(PersistentMapInner {
-                            key,
-                            value,
-                            left: None,
-                            right: None,
-                        })));
-                    }
+                let new_left = match &self.left {
+                    Some(l) => Arc::new(l.insert(key, value)),
+                    None => Arc::new(PersistentMapInner::new(key, value)),
+                };
+                PersistentMapInner {
+                    key: self.key.clone(),
+                    value: self.value.clone(),
+                    left: Some(new_left),
+                    right: self.right.clone(),
                 }
-                node
             }
             std::cmp::Ordering::Greater => {
-                let mut node = self.clone();
-                match node.right.as_ref() {
-                    Some(l) => {
-                        let mut guard = l.lock().unwrap();
-                        let n = &*guard;
-                        let new_n = n.insert(key, value);
-                        *guard = new_n;
-                    }
-                    None => {
-                        node.right = Some(Arc::new(Mutex::new(PersistentMapInner {
-                            key,
-                            value,
-                            left: None,
-                            right: None,
-                        })));
-                    }
+                let new_right = match &self.right {
+                    Some(r) => Arc::new(r.insert(key, value)),
+                    None => Arc::new(PersistentMapInner::new(key, value)),
+                };
+                PersistentMapInner {
+                    key: self.key.clone(),
+                    value: self.value.clone(),
+                    left: self.left.clone(),
+                    right: Some(new_right),
                 }
-                node
             }
             std::cmp::Ordering::Equal => PersistentMapInner {
                 key,
@@ -139,46 +124,42 @@ impl<K: Clone + Ord, V: Clone> PersistentMapInner<K, V> {
             },
         }
     }
+
     pub(crate) fn get(&self, key: &K) -> Option<V>
     where
         V: Clone,
     {
         match key.cmp(&self.key) {
-            std::cmp::Ordering::Less => self.left.as_ref().map_or(None, |x| {
-                let guard = x.lock().unwrap();
-                let node = &*guard;
-                node.get(key)
-            }),
-            std::cmp::Ordering::Greater => self.right.as_ref().map_or(None, |x| {
-                let guard = x.lock().unwrap();
-                let node = &*guard;
-                node.get(key)
-            }),
+            std::cmp::Ordering::Less => self.left.as_ref().and_then(|x| x.get(key)),
+            std::cmp::Ordering::Greater => self.right.as_ref().and_then(|x| x.get(key)),
             std::cmp::Ordering::Equal => Some(self.value.clone()),
         }
     }
+
     pub(crate) fn in_order(&self) -> Vec<(K, V)> {
         let mut items = vec![];
         if let Some(branch) = self.left.as_ref() {
-            items.append(&mut branch.lock().unwrap().in_order());
+            items.append(&mut branch.in_order());
         }
         items.push((self.key.clone(), self.value.clone()));
         if let Some(branch) = self.right.as_ref() {
-            items.append(&mut branch.lock().unwrap().in_order());
+            items.append(&mut branch.in_order());
         }
         items
     }
+
     pub(crate) fn len(&self) -> usize {
         let mut count = 0;
         if let Some(branch) = self.left.as_ref() {
-            count += branch.lock().unwrap().len();
+            count += branch.len();
         }
         count += 1;
         if let Some(branch) = self.right.as_ref() {
-            count += branch.lock().unwrap().len();
+            count += branch.len();
         }
         count
     }
+
     pub(crate) fn iter(&self) -> PersistentMapInnerIter<K, V> {
         PersistentMapInnerIter {
             stack_traversal: self.in_order(),
@@ -265,4 +246,34 @@ fn test_persist_map_size() {
     let keys: Vec<_> = n.iter().map(|x| x.0).collect();
     assert_eq!(keys, vec![-10, 0, 10]);
     assert_eq!(n.len(), 3);
+}
+
+#[test]
+fn test_persist_map_branching_immutability() {
+    type PersistentMapInnerInt = PersistentMapInner<i32, i32>;
+    let root_v0 = PersistentMapInnerInt::new(10, 100);
+    let root_v1 = root_v0.insert(5, 50);
+    let root_branch_a = root_v1.insert(2, 20);
+    let root_branch_b = root_v1.insert(7, 70);
+
+    // root_v0 must not see subsequent insertions
+    assert_eq!(root_v0.get(&5), None);
+    assert_eq!(root_v0.get(&2), None);
+    assert_eq!(root_v0.get(&7), None);
+    assert_eq!(root_v0.len(), 1);
+
+    // root_v1 must not see insertions from diverged branches
+    assert_eq!(root_v1.get(&2), None);
+    assert_eq!(root_v1.get(&7), None);
+    assert_eq!(root_v1.len(), 2);
+
+    // root_branch_a must see 2 but not 7
+    assert_eq!(root_branch_a.get(&2), Some(20));
+    assert_eq!(root_branch_a.get(&7), None);
+    assert_eq!(root_branch_a.len(), 3);
+
+    // root_branch_b must see 7 but not 2
+    assert_eq!(root_branch_b.get(&7), Some(70));
+    assert_eq!(root_branch_b.get(&2), None);
+    assert_eq!(root_branch_b.len(), 3);
 }
