@@ -15,14 +15,6 @@ pub(crate) enum ParseError {
     UnexpectedEof {
         context: &'static str,
     },
-    Indentation {
-        message: String,
-        token: Option<ConcreteTokenAndLoc>,
-    },
-    DelimiterMismatch {
-        delimiter: &'static str,
-        token: ConcreteTokenAndLoc,
-    },
     Message {
         message: String,
         token: Option<ConcreteTokenAndLoc>,
@@ -48,20 +40,6 @@ impl ParseError {
 
     pub(crate) fn unexpected_eof(context: &'static str) -> Self {
         Self::UnexpectedEof { context }
-    }
-
-    pub(crate) fn indentation<S: Into<String>>(
-        message: S,
-        token: Option<ConcreteTokenAndLoc>,
-    ) -> Self {
-        Self::Indentation {
-            message: message.into(),
-            token,
-        }
-    }
-
-    pub(crate) fn delimiter(delimiter: &'static str, token: ConcreteTokenAndLoc) -> Self {
-        Self::DelimiterMismatch { delimiter, token }
     }
 
     pub(crate) fn message<S: Into<String>>(message: S, token: Option<ConcreteTokenAndLoc>) -> Self {
@@ -95,16 +73,6 @@ impl fmt::Display for ParseError {
             }
             ParseError::UnexpectedEof { context } => {
                 write!(f, "unexpected end of input while parsing {context}")
-            }
-            ParseError::Indentation { message, token } => {
-                if let Some(tok) = token {
-                    write!(f, "indentation error: {message} at {:?}", tok.loc)
-                } else {
-                    write!(f, "indentation error: {message}")
-                }
-            }
-            ParseError::DelimiterMismatch { delimiter, token } => {
-                write!(f, "unmatched {delimiter} at {:?}", token.loc)
             }
             ParseError::Message { message, token } => {
                 if let Some(tok) = token {

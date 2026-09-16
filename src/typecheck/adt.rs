@@ -389,7 +389,7 @@ fn validate_no_builtin_type_shadowing(items: &[TopLevelItem]) -> Result<(), TyEr
         };
         let name: String = get_data_type_name(identifier)?;
         if resolve_builtin_type(&name).is_some() {
-            return Err(TyError::TypeConflict(format!(
+            return Err(TyError::AdtError(format!(
                 "type name `{name}` conflicts with builtin type at {:?}",
                 identifier.loc
             )));

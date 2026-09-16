@@ -10,7 +10,6 @@ use super::parser::{LayoutFeedback, LayoutItemParser, ParseError, Parser};
 pub enum PatternParseError {
     EmptyPattern,
     InvalidPattern(String),
-    UnexpectedToken { expected: String, got: String },
 }
 
 /// constructor need to start with an uppercase
@@ -247,10 +246,10 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
         // expect closing `)`
         match self.next()? {
             Some(token) if matches!(token.token, ConcreteToken::ParenR) => Ok(inner),
-            Some(token) => Err(PatternParseError::UnexpectedToken {
-                expected: ")".to_string(),
-                got: format!("{:?}", token.token),
-            }),
+            Some(token) => Err(PatternParseError::InvalidPattern(format!(
+                "expected ')', got {:?}",
+                token.token
+            ))),
             None => Err(PatternParseError::InvalidPattern(
                 "unclosed parenthesized pattern".to_string(),
             )),
@@ -379,10 +378,10 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
                     match self.next()? {
                         Some(token) if matches!(token.token, ConcreteToken::BraceR) => break,
                         Some(token) => {
-                            return Err(PatternParseError::UnexpectedToken {
-                                expected: "}".to_string(),
-                                got: format!("{:?}", token.token),
-                            });
+                            return Err(PatternParseError::InvalidPattern(format!(
+                                "expected '}}', got {:?}",
+                                token.token
+                            )));
                         }
                         None => {
                             return Err(PatternParseError::InvalidPattern(

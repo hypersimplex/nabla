@@ -43,7 +43,6 @@ pub(crate) enum CompileError {
     Parse(ParseError),
     Type(TyError),
     Core(CoreError),
-    Other,
 }
 
 impl From<ParseError> for CompileError {

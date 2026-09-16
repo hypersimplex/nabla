@@ -109,38 +109,34 @@ pub(crate) fn unify_ty_exprs(
                         (TyVarName::Builtin(b1), TyExpr::TyVar(TyVarName::Builtin(b2)))
                             if b1 != b2 =>
                         {
-                            Err(TyError::TypeConflict(
-                                format!(
-                                    "Cannot unify incompatible builtin types: {:?} and {:?}",
-                                    b1, b2
-                                )
-                                .to_string(),
-                            ))
+                            Err(TyError::TypeConflict {
+                                ty1: ty_expr1.clone(),
+                                ty2: ty_expr2.clone(),
+                                msg: Some("incompatible builtin types".to_string()),
+                            })
                         }
 
                         // UserDefined vs UserDefined: must have the same name
                         (TyVarName::UserDefined(u1), TyExpr::TyVar(TyVarName::UserDefined(u2)))
                             if u1.token != u2.token =>
                         {
-                            Err(TyError::TypeConflict(
-                                format!(
-                                    "Cannot unify incompatible user-defined types: {:?} and {:?}",
-                                    u1.token, u2.token
-                                )
-                                .to_string(),
-                            ))
+                            Err(TyError::TypeConflict {
+                                ty1: ty_expr1.clone(),
+                                ty2: ty_expr2.clone(),
+                                msg: Some("incompatible user-defined types".to_string()),
+                            })
                         }
 
                         // Builtin vs UserDefined: incompatible
                         (TyVarName::Builtin(_), TyExpr::TyVar(TyVarName::UserDefined(_)))
                         | (TyVarName::UserDefined(_), TyExpr::TyVar(TyVarName::Builtin(_))) => {
-                            Err(TyError::TypeConflict(
-                                format!(
-                                    "Cannot unify type {:?} with type {:?}",
-                                    ty_expr1, ty_expr2
-                                )
-                                .to_string(),
-                            ))
+                            Err(TyError::TypeConflict {
+                                ty1: ty_expr1.clone(),
+                                ty2: ty_expr2.clone(),
+                                msg: Some(
+                                    "cannot unify builtin type with user-defined type".to_string(),
+                                ),
+                            })
                         }
 
                         // Auto vs. Concrete type: substitute the Auto variable
@@ -148,10 +144,23 @@ pub(crate) fn unify_ty_exprs(
                             TyVarName::Builtin(_) | TyVarName::UserDefined(_),
                             TyExpr::TyVar(TyVarName::Auto(_)),
                         ) => unify_ty_exprs(subst, ty_expr2, ty_expr1),
+
                         (
                             TyVarName::Auto(_),
                             TyExpr::TyVar(TyVarName::Builtin(_) | TyVarName::UserDefined(_)),
                         ) => extend(subst, x, other),
+
+                        // concrete type vs type application: incompatible
+                        (TyVarName::Builtin(_) | TyVarName::UserDefined(_), TyExpr::TyApp(_)) => {
+                            Err(TyError::TypeConflict {
+                                ty1: ty_expr1.clone(),
+                                ty2: ty_expr2.clone(),
+                                msg: Some(
+                                    "cannot unify concrete type constructor with type application"
+                                        .to_string(),
+                                ),
+                            })
+                        }
 
                         // same type variable or Auto vs Auto: proceed with standard unification
                         _ => extend(subst, x, other),
@@ -164,13 +173,16 @@ pub(crate) fn unify_ty_exprs(
                 }
             }
         }
+
         // symmetry
         (TyExpr::TyApp(_), TyExpr::TyVar(_)) => unify_ty_exprs(subst, ty_expr2, ty_expr1),
+
         // structural unification for type applications, eg:
         //   T1<A1> ~ T2<A2> <=> T1 ~ T2 and A1 ~ A2
         (TyExpr::TyApp(ty_app1), TyExpr::TyApp(ty_app2)) => {
             // unify the type constructors (function parts)
             let subst_func = unify_ty_exprs(subst, &ty_app1.ty_func, &ty_app2.ty_func)?;
+
             // unify the type arguments with updated substitution
             unify_ty_exprs(&subst_func, &ty_app1.ty_arg, &ty_app2.ty_arg)
         }
@@ -183,13 +195,11 @@ fn extend(subst: &Substitution, tvn: &TyVarName, other: &TyExpr) -> Result<Subst
         TyExpr::TyVar(tvn_other) if tvn == tvn_other => Ok(subst.clone()), // success
         _ => {
             if free_ty_vars(other).contains(tvn) {
-                return Err(TyError::TypeConflict(
-                    format!(
-                        "extend: infinite type detected: type variable {:?} present in other TyExpr {:?}",
-                        tvn, other
-                    )
-                    .to_string(),
-                ));
+                return Err(TyError::InfiniteType {
+                    var: tvn.clone(),
+                    ty: other.clone(),
+                    msg: Some("occurs check failed in substitution extension".to_string()),
+                });
             }
             // compose {tvn -> other} in top of `subst`
             Ok(subst_compose(&subst_delta(tvn, other), subst))
@@ -518,14 +528,11 @@ pub(crate) fn ty_check_abstraction_typed(
                 typed_body = apply_subst_typed_expr(&phi, typed_body);
             }
             Err(_) => {
-                return Err(TyError::TypeConflict(
-                    format!(
-                        "type checked body expression does not match type annotation: {:?} != {:?}",
-                        typed_body.ty(),
-                        ty_annot_body,
-                    )
-                    .to_string(),
-                ));
+                return Err(TyError::TypeConflict {
+                    ty1: annot_resolved,
+                    ty2: typed_body.ty().clone(),
+                    msg: Some("body expression does not match type annotation".to_string()),
+                });
             }
         }
     }
@@ -710,12 +717,12 @@ pub(crate) fn ty_check_case_typed(
     // [todo] check case expression coverage over its matching patterns
     // if let Some(cov) = compute_constructor_coverage_for_case(ty_env, &ty_scrutinee_updated, vexpr) {
     //     for &idx in &cov.redundant {
-    //         return Err(TyError::UnexpectedPattern(
+    //         return Err(TyError::Unexpected(
     //             format!("warning: redundant pattern at alt {:?}", idx).to_string(),
     //         ));
     //     }
     //     for &idx in &cov.unreachable {
-    //         return Err(TyError::UnexpectedPattern(
+    //         return Err(TyError::Unexpected(
     //             format!("warning: unreachable pattern at alt {:?}", idx).to_string(),
     //         ));
     //     }
@@ -738,7 +745,7 @@ pub(crate) fn ty_check_case_typed(
     // unify types of bodies
     let first_body_ty = typed_bodies
         .first()
-        .ok_or_else(|| TyError::UnexpectedExpr("case expr missing an alt body".to_string()))?
+        .ok_or_else(|| TyError::Unexpected("case expr missing an alt body".to_string()))?
         .ty()
         .clone();
     for typed_body in typed_bodies.iter().skip(1) {
@@ -754,7 +761,7 @@ pub(crate) fn ty_check_case_typed(
     let typed_arg = apply_subst_typed_expr(&subst_final, typed_scrutinee);
     let ty_result = subst_ty(&subst_final, &first_body_ty);
     if alt_infos.len() != typed_bodies.len() {
-        return Err(TyError::UnexpectedExpr(
+        return Err(TyError::Unexpected(
             format_args!(
                 "case expr body count mismatch: alt_infos={:?} typed_bodies={:?}",
                 alt_infos.len(),
@@ -1000,14 +1007,10 @@ pub(crate) fn ty_check_binding_group(
                     &sig_scheme.ty_expr,
                 );
                 subst_accum = unify_ty_exprs(&subst_accum, typed_rhs_vexpr.ty(), &sig_type_inst)
-                    .map_err(|e| {
-                        TyError::TypeConflict(format!(
-                            "annotation/signature mismatch for binder `{:?}`: inferred: {:?}, annotation: {:?}, detail: {:?}",
-                            var,
-                            typed_rhs_vexpr.ty(),
-                            sig_type_inst,
-                            e
-                        ).to_string())
+                    .map_err(|_| TyError::TypeConflict {
+                        ty1: sig_type_inst.clone(),
+                        ty2: typed_rhs_vexpr.ty().clone(),
+                        msg: Some(format!("signature mismatch for binder `{:?}`", var)),
                     })?;
 
                 // keep typed nodes in sync after annotation unification
@@ -1116,7 +1119,7 @@ pub(crate) fn ty_check_binding_group(
                         .iter()
                         .map(|tvn| {
                             scc_scheme_var_map.get(tvn).cloned().ok_or_else(|| {
-                                TyError::TypeConflict(
+                                TyError::InternalError(
                                     format_args!("def_idx={:?} missing_tvn={:?}", idx, tvn)
                                         .to_string(),
                                 )
@@ -1427,7 +1430,7 @@ pub(crate) fn ty_check_constructor_typed(
         // case: a record => map fields to positions
 
         let expected_field_names = ctor_def.field_names.as_ref().ok_or_else(|| {
-            TyError::UnexpectedSyntax(
+            TyError::Unexpected(
                 format!(
                     "Constructor {} is not a record, but record syntax was used",
                     qualified_ctor.constructor
@@ -1444,7 +1447,7 @@ pub(crate) fn ty_check_constructor_typed(
                 .insert(field_name, vexpr_and_ty_annot)
                 .is_some()
             {
-                return Err(TyError::UnexpectedField(
+                return Err(TyError::Unexpected(
                     format!(
                         "Duplicate field {} in record constructor {}",
                         field_name, qualified_ctor.constructor
@@ -1458,7 +1461,7 @@ pub(crate) fn ty_check_constructor_typed(
         for fname in expected_field_names.iter() {
             let (vexpr, optional_ty_annot) =
                 vexpr_fieldname_mapping.get(fname).ok_or_else(|| {
-                    TyError::UnexpectedSyntax(
+                    TyError::Unexpected(
                         format!(
                             "Missing field {} in record constructor {}",
                             fname, qualified_ctor.constructor
@@ -1469,7 +1472,7 @@ pub(crate) fn ty_check_constructor_typed(
             ordered.push((vexpr.clone(), optional_ty_annot.clone()));
         }
         if vexpr_fieldname_mapping.len() != expected_field_names.len() {
-            return Err(TyError::UnexpectedField(
+            return Err(TyError::Unexpected(
                 format!(
                     "Unknown field in record constructor {}",
                     qualified_ctor.constructor
@@ -1484,19 +1487,19 @@ pub(crate) fn ty_check_constructor_typed(
     };
 
     let mut subst = subst_id();
+    let expected_field_len = expected_field_types.len();
     let mut remaining_expected_field_types = expected_field_types;
     let mut typed_args = Vec::new();
 
     // type infer and check each positional argument
     for (arg_expr, _) in positional_args.iter() {
         if remaining_expected_field_types.is_empty() {
-            return Err(TyError::UnexpectedPattern(
-                format!(
-                    "Constructor {} is over-applied (too many arguments)",
-                    qualified_ctor.constructor
-                )
-                .to_string(),
-            ));
+            return Err(TyError::ArityMismatch {
+                constructor: qualified_ctor.constructor.clone(),
+                expected: expected_field_len,
+                got: positional_args.len(),
+                msg: Some("over-applied constructor expression".to_string()),
+            });
         }
 
         let expected = remaining_expected_field_types.remove(0);
@@ -1568,7 +1571,7 @@ pub(crate) fn ty_check_lit_numeric(
         NumericLiteralValue::Int { parsed, raw } => {
             match parsed.to_owned().or_else(|| raw.parse::<i64>().ok()) {
                 Some(_) => Ok((subst_id(), mk_ty_i64())),
-                None => Err(TyError::TypeConflict(
+                None => Err(TyError::Unexpected(
                     format!("type checking literal (int) failed for {:?}", vexpr).to_string(),
                 )),
             }
@@ -1576,7 +1579,7 @@ pub(crate) fn ty_check_lit_numeric(
         NumericLiteralValue::Float { parsed, raw } => {
             match parsed.to_owned().or_else(|| raw.parse::<f64>().ok()) {
                 Some(_) => Ok((subst_id(), mk_ty_f64())),
-                None => Err(TyError::TypeConflict(
+                None => Err(TyError::Unexpected(
                     format!("type checking literal (float) failed for {:?}", vexpr).to_string(),
                 )),
             }
@@ -1591,7 +1594,7 @@ pub(crate) fn ty_check_lit_string(
 ) -> Result<(Substitution, TyExpr), TyError> {
     match &vexpr.token {
         ConcreteToken::LiteralString(_string) => Ok((subst_id(), mk_ty_string())),
-        _ => Err(TyError::TypeConflict(
+        _ => Err(TyError::Unexpected(
             format!("type checking literal (string) failed for {:?}", vexpr).to_string(),
         )),
     }
@@ -1613,18 +1616,13 @@ pub(crate) fn ty_check_variable(
         .get(vexpr)
         .ok_or_else(|| match vexpr {
             VVar::Renamed(named_uniqued) => {
-                let name = format!("{}", named_uniqued.original.token);
-                let loc = named_uniqued
-                    .original
-                    .loc
-                    .as_ref()
-                    .map(|l| format!("{:?}", l))
-                    .unwrap_or_else(|| "<unknown location>".to_string());
-                TyError::UnboundVariable(format!("unbound variable `{name}` at {loc}").to_string())
+                let name = &named_uniqued.original.token;
+                match &named_uniqued.original.loc {
+                    Some(loc) => TyError::UnboundVariable(format!("`{name}` at {loc:?}")),
+                    None => TyError::UnboundVariable(format!("`{name}`")),
+                }
             }
-            VVar::Anon(id) => TyError::UnboundVariable(
-                format!("unbound anonymous variable anon_{id}").to_string(),
-            ),
+            VVar::Anon(id) => TyError::UnboundVariable(format!("anon_{id}")),
             VVar::Named(named) => TyError::InternalError(
                 format!(
                     "encountered variable {:?} that is not renamed; ensure renamer pass is ran",
@@ -1803,6 +1801,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                     constructor: constructor.clone(),
                     expected: ctor_def.field_types.len(),
                     got: args.len(),
+                    msg: Some("pattern constructor arity mismatch".to_string()),
                 });
             }
 
@@ -1865,7 +1864,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
             } = instantiate_pattern_constructor(ty_env, ty_var_ns, ty_name, constructor)?;
 
             let expected_field_names = ctor_def.field_names.as_ref().ok_or_else(|| {
-                TyError::TypeConflict(
+                TyError::Unexpected(
                     format!(
                         "Constructor {} is not a record, but record pattern syntax was used",
                         ctor_def.name
@@ -1886,7 +1885,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
 
             for (field_name, field_pattern) in fields {
                 if seen.contains(field_name) {
-                    return Err(TyError::UnexpectedField(
+                    return Err(TyError::Unexpected(
                         format!(
                             "Duplicate field {} in record pattern {}",
                             field_name, constructor
@@ -1897,7 +1896,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                 seen.insert(field_name);
 
                 let expected_field_ty = expected_field_map.get(field_name).ok_or_else(|| {
-                    TyError::UnexpectedField(
+                    TyError::Unexpected(
                         format!(
                             "Unknown field {} in pattern for constructor {}",
                             field_name, constructor
@@ -1927,7 +1926,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                     .copied()
                     .collect();
                 if !missing.is_empty() {
-                    return Err(TyError::TypeConflict(
+                    return Err(TyError::Unexpected(
                         format!(
                             "Record pattern for constructor {} missing fields {:?}",
                             constructor, missing
@@ -2119,15 +2118,11 @@ pub(crate) fn fill_missing_ty_args(
                 // sanity check for matching the binder scheme against
                 // this call-site type
                 let instantiation_subst = unify_ty_exprs(&subst_id(), &scheme.ty_expr, &ty)
-                            .map_err(|err| {
-                                TyError::TypeConflict(
-                                    format_args!(
-                                        "unification error for binder=`{:?}` scheme_type={:?} use_type={:?} detail={:?}",
-                                        var, scheme.ty_expr, ty, err
-                                    )
-                                    .to_string(),
-                                )
-                            })?;
+                    .map_err(|_| TyError::TypeConflict {
+                        ty1: (*scheme.ty_expr).clone(),
+                        ty2: ty.clone(),
+                        msg: Some(format!("unification error for binder `{:?}`", var)),
+                    })?;
                 ty_args = scheme
                     .ty_vars_schematic
                     .iter()
@@ -2140,7 +2135,7 @@ pub(crate) fn fill_missing_ty_args(
                 let used_ty_vars: BTreeSet<_> = ty_args.iter().flat_map(free_ty_vars).collect();
                 let in_scope_ty_vars = free_ty_vars(&ty);
                 if !used_ty_vars.is_subset(&in_scope_ty_vars) {
-                    return Err(TyError::TypeConflict(
+                    return Err(TyError::Unexpected(
                         format_args!(
                             "recursive ty_args introduce new type vars for {:?}: {:?} not in {:?}",
                             var, used_ty_vars, in_scope_ty_vars
@@ -2519,5 +2514,84 @@ pub(crate) fn build_scheme_from_ty_expr(
     TyScheme {
         ty_vars_schematic,
         ty_expr: Box::new(ty_expr_generalized),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unify_incompatible_builtins_yields_type_conflict() {
+        let subst = subst_id();
+        let ty_int = mk_ty_i64();
+        let ty_str = mk_ty_string();
+
+        let res = unify_ty_exprs(&subst, &ty_int, &ty_str);
+        match res {
+            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
+                assert!(matches!(
+                    ty1,
+                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+                ));
+                assert!(matches!(
+                    ty2,
+                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
+                ));
+                assert_eq!(msg, Some("incompatible builtin types".to_string()));
+            }
+            other => panic!("expected TypeConflict, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_unify_concrete_vs_type_app_yields_type_conflict() {
+        let subst = subst_id();
+        let ty_int = mk_ty_i64();
+        let ty_app = mk_ty_arrow(mk_ty_i64(), mk_ty_i64());
+
+        let res = unify_ty_exprs(&subst, &ty_int, &ty_app);
+        match res {
+            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
+                assert!(matches!(
+                    ty1,
+                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+                ));
+                assert!(matches!(ty2, TyExpr::TyApp(_)));
+                assert!(msg.is_some());
+            }
+            other => panic!("expected TypeConflict, got {:?}", other),
+        }
+
+        // symmetric call
+        let res_rev = unify_ty_exprs(&subst, &ty_app, &ty_int);
+        match res_rev {
+            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
+                assert!(matches!(
+                    ty1,
+                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+                ));
+                assert!(matches!(ty2, TyExpr::TyApp(_)));
+                assert!(msg.is_some());
+            }
+            other => panic!("expected TypeConflict, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_unify_occurs_check_yields_infinite_type() {
+        let subst = subst_id();
+        let auto_var = TyVarName::Auto(100);
+        let ty_var = TyExpr::TyVar(auto_var.clone());
+        let ty_app = mk_ty_arrow(ty_var.clone(), mk_ty_i64());
+
+        let res = unify_ty_exprs(&subst, &ty_var, &ty_app);
+        match res {
+            Err(TyError::InfiniteType { var, ty: _, msg }) => {
+                assert_eq!(var, auto_var);
+                assert!(msg.is_some());
+            }
+            other => panic!("expected InfiniteType, got {:?}", other),
+        }
     }
 }
