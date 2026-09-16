@@ -129,6 +129,8 @@ pub(crate) struct TypedVConstructorExpr {
     pub args: Vec<TypedVExpr>,
 
     // for record, this associates field name to linear indexing
+    //
+    // this is erased to none when desugaring record to product constructor expression
     pub record_fields: Option<Vec<(String, usize)>>,
 
     pub ty: TyExpr,

@@ -8,6 +8,7 @@ use crate::normalize::case_scrutinee::*;
 use crate::normalize::literal_pattern::*;
 use crate::normalize::literal_range_pattern::*;
 use crate::normalize::pattern::*;
+use crate::normalize::record_to_product::*;
 use crate::normalize::variable_renamer::*;
 use crate::parse::abstr::*;
 use crate::parse::abstr_structures::*;
@@ -254,6 +255,14 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
+    }
+
+    // desugar record patterns and record constructor expressions to positional product forms
+    println!("desugar record to product type");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = desugar_record_to_product(&ty_env, &top_lvl_fn.typed_expr);
         }
     }
 

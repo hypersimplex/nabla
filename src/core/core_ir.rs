@@ -816,6 +816,11 @@ fn core_expr_from_variable(
 
 /// transform constructor expression to an application of constructor function
 /// with constructor arguments
+///
+/// note: any record constructor expression has already been desugared to a
+/// positional product constructor expression in normalization pass
+///
+/// core ir constructor definitions only use positional arguments
 fn core_expr_from_constructor(
     core_ty_con_env: &CoreTyConEnv,
     expr: &TypedVConstructorExpr,

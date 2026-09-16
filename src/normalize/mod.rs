@@ -3,4 +3,5 @@ pub mod case_scrutinee;
 pub mod literal_pattern;
 pub mod literal_range_pattern;
 pub mod pattern;
+pub mod record_to_product;
 pub mod variable_renamer;
