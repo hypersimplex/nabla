@@ -261,15 +261,13 @@ pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> 
         }),
         TypedVExpr::Case(case) => TypedVExpr::Case(TypedVCaseExpr {
             arg: Box::new(apply_subst_typed_expr(subst, *case.arg)),
-            clauses: case
-                .clauses
+            alts: case
+                .alts
                 .into_iter()
-                .map(|clause| TypedVCaseClause {
-                    pattern: apply_subst_typed_pattern(subst, clause.pattern),
-                    guard: clause
-                        .guard
-                        .map(|guard| apply_subst_typed_expr(subst, guard)),
-                    body: apply_subst_typed_expr(subst, clause.body),
+                .map(|alt| TypedVCaseAlt {
+                    pattern: apply_subst_typed_pattern(subst, alt.pattern),
+                    guard: alt.guard.map(|guard| apply_subst_typed_expr(subst, guard)),
+                    body: apply_subst_typed_expr(subst, alt.body),
                 })
                 .collect(),
             ty: subst_ty(subst, &case.ty),
@@ -621,8 +619,8 @@ pub(crate) fn ty_check_application_typed(
 ///   ...
 ///
 ///   - type check scrutinee e to get type t_scrutinee
-///   - for each clause i (pattern p_i, body e_i, optional guard g_i):
-///     - type check pattern p_i, binding variables into the clause environment
+///   - for each alt i (pattern p_i, body e_i, optional guard g_i):
+///     - type check pattern p_i, binding variables into the alt environment
 ///     - unify scrutinee type with pattern type
 ///     - if guard exists, type check g_i and unify with Bool
 ///     - type check body e_i in the environment enriched with bindings
@@ -644,7 +642,7 @@ pub(crate) fn ty_check_case_typed(
 
     let env_augmented = env_var_to_ty_scheme.apply_subst_to_env(&phi);
 
-    struct ClauseInfo {
+    struct AltInfo {
         body_expr: VExpr,
         env: EnvVVarToTyScheme,
         typed_pattern: TypedVPattern,
@@ -652,58 +650,58 @@ pub(crate) fn ty_check_case_typed(
         subst: Substitution,
     }
 
-    // for each clause, get: (body expr, env, typed pattern, typed guard, substitution)
-    let mut clause_infos: Vec<ClauseInfo> = Vec::new();
-    for clause in vexpr.clauses.iter() {
-        let mut env_clause = env_augmented.clone();
+    // for each alt, get: (body expr, env, typed pattern, typed guard, substitution)
+    let mut alt_infos: Vec<AltInfo> = Vec::new();
+    for alt in vexpr.alts.iter() {
+        let mut env_alt = env_augmented.clone();
         let (subst_pattern, _bound_vars, typed_pattern) =
-            ty_check_pattern_typed(&mut env_clause, ty_env, ty_var_ns, &clause.pattern)?;
+            ty_check_pattern_typed(&mut env_alt, ty_env, ty_var_ns, &alt.pattern)?;
 
-        // unify typed_scrutinee with clause's pattern
+        // unify typed_scrutinee with alt's pattern
         let subst_pattern_unified =
             unify_ty_exprs(&subst_pattern, typed_scrutinee.ty(), typed_pattern.ty())?;
 
-        env_clause = env_clause.apply_subst_to_env(&subst_pattern_unified);
+        env_alt = env_alt.apply_subst_to_env(&subst_pattern_unified);
 
-        let (subst_clause, typed_guard) = match &clause.guard {
+        let (subst_alt, typed_guard) = match &alt.guard {
             Some((guard_expr, _)) => {
                 let (subst_guard, typed_guard_raw) =
-                    ty_check_vexpr_typed(&mut env_clause, ty_env, ty_var_ns, guard_expr)?;
-                let mut subst_clause = subst_compose(&subst_guard, &subst_pattern_unified);
-                let typed_guard_subst = apply_subst_typed_expr(&subst_clause, typed_guard_raw);
+                    ty_check_vexpr_typed(&mut env_alt, ty_env, ty_var_ns, guard_expr)?;
+                let mut subst_alt = subst_compose(&subst_guard, &subst_pattern_unified);
+                let typed_guard_subst = apply_subst_typed_expr(&subst_alt, typed_guard_raw);
                 let subst_guard_bool =
-                    unify_ty_exprs(&subst_clause, typed_guard_subst.ty(), &mk_ty_bool())?;
-                subst_clause = subst_guard_bool;
+                    unify_ty_exprs(&subst_alt, typed_guard_subst.ty(), &mk_ty_bool())?;
+                subst_alt = subst_guard_bool;
 
-                env_clause = env_clause.apply_subst_to_env(&subst_clause);
+                env_alt = env_alt.apply_subst_to_env(&subst_alt);
 
-                (subst_clause, Some(typed_guard_subst))
+                (subst_alt, Some(typed_guard_subst))
             }
             _ => (subst_pattern_unified, None),
         };
 
-        let vexpr = clause.body.0.clone();
-        clause_infos.push(ClauseInfo {
+        let vexpr = alt.body.0.clone();
+        alt_infos.push(AltInfo {
             body_expr: vexpr,
-            env: env_clause,
+            env: env_alt,
             typed_pattern,
             typed_guard,
-            subst: subst_clause,
+            subst: subst_alt,
         });
     }
 
     // compose substitutions
-    let substs_pattern = clause_infos.iter().map(|x| &x.subst);
+    let substs_pattern = alt_infos.iter().map(|x| &x.subst);
     let mut subst_patterns_unified =
         substs_pattern.fold(subst_id(), |acc, s| subst_compose(s, &acc));
 
     // apply substitution to scrutinee
     let mut ty_scrutinee_updated = subst_ty(&subst_patterns_unified, typed_scrutinee.ty());
 
-    // enforce a single scrutinee type across all clause patterns
+    // enforce a single scrutinee type across all alt patterns
     // wildcard/variable patterns are typed as fresh auto type variables so they should be compatible
-    for clause_info in clause_infos.iter() {
-        let ty_pat = subst_ty(&subst_patterns_unified, clause_info.typed_pattern.ty());
+    for alt_info in alt_infos.iter() {
+        let ty_pat = subst_ty(&subst_patterns_unified, alt_info.typed_pattern.ty());
         subst_patterns_unified =
             unify_ty_exprs(&subst_patterns_unified, &ty_scrutinee_updated, &ty_pat)?;
         ty_scrutinee_updated = subst_ty(&subst_patterns_unified, typed_scrutinee.ty());
@@ -713,29 +711,25 @@ pub(crate) fn ty_check_case_typed(
     // if let Some(cov) = compute_constructor_coverage_for_case(ty_env, &ty_scrutinee_updated, vexpr) {
     //     for &idx in &cov.redundant {
     //         return Err(TyError::UnexpectedPattern(
-    //             format!("warning: redundant pattern at clause {:?}", idx).to_string(),
+    //             format!("warning: redundant pattern at alt {:?}", idx).to_string(),
     //         ));
     //     }
     //     for &idx in &cov.unreachable {
     //         return Err(TyError::UnexpectedPattern(
-    //             format!("warning: unreachable pattern at clause {:?}", idx).to_string(),
+    //             format!("warning: unreachable pattern at alt {:?}", idx).to_string(),
     //         ));
     //     }
     // }
 
-    // type check each clause's body
+    // type check each alt's body
     let mut subst_bodies = subst_id();
     let mut typed_bodies = Vec::new();
     {
-        for clause_info in clause_infos.iter() {
-            let mut env_with_subst = clause_info.env.apply_subst_to_env(&subst_bodies);
+        for alt_info in alt_infos.iter() {
+            let mut env_with_subst = alt_info.env.apply_subst_to_env(&subst_bodies);
 
-            let (subst_body, typed_body) = ty_check_vexpr_typed(
-                &mut env_with_subst,
-                ty_env,
-                ty_var_ns,
-                &clause_info.body_expr,
-            )?;
+            let (subst_body, typed_body) =
+                ty_check_vexpr_typed(&mut env_with_subst, ty_env, ty_var_ns, &alt_info.body_expr)?;
             subst_bodies = subst_compose(&subst_body, &subst_bodies);
             typed_bodies.push(typed_body);
         }
@@ -744,7 +738,7 @@ pub(crate) fn ty_check_case_typed(
     // unify types of bodies
     let first_body_ty = typed_bodies
         .first()
-        .ok_or_else(|| TyError::UnexpectedExpr("case expr missing a clause body".to_string()))?
+        .ok_or_else(|| TyError::UnexpectedExpr("case expr missing an alt body".to_string()))?
         .ty()
         .clone();
     for typed_body in typed_bodies.iter().skip(1) {
@@ -759,20 +753,20 @@ pub(crate) fn ty_check_case_typed(
     let subst_final = subst_compose(&subst_updated, &phi);
     let typed_arg = apply_subst_typed_expr(&subst_final, typed_scrutinee);
     let ty_result = subst_ty(&subst_final, &first_body_ty);
-    if clause_infos.len() != typed_bodies.len() {
+    if alt_infos.len() != typed_bodies.len() {
         return Err(TyError::UnexpectedExpr(
             format_args!(
-                "case expr body count mismatch: clause_infos={:?} typed_bodies={:?}",
-                clause_infos.len(),
+                "case expr body count mismatch: alt_infos={:?} typed_bodies={:?}",
+                alt_infos.len(),
                 typed_bodies.len()
             )
             .to_string(),
         ));
     }
-    let typed_clauses: Vec<TypedVCaseClause> = clause_infos
+    let typed_alts: Vec<TypedVCaseAlt> = alt_infos
         .into_iter()
         .zip(typed_bodies)
-        .map(|(info, body)| TypedVCaseClause {
+        .map(|(info, body)| TypedVCaseAlt {
             pattern: apply_subst_typed_pattern(&subst_final, info.typed_pattern),
             guard: info
                 .typed_guard
@@ -785,7 +779,7 @@ pub(crate) fn ty_check_case_typed(
         subst_final,
         TypedVExpr::Case(TypedVCaseExpr {
             arg: Box::new(typed_arg),
-            clauses: typed_clauses,
+            alts: typed_alts,
             ty: ty_result,
         }),
     ))
@@ -2009,7 +2003,7 @@ fn is_adt_type_var(type_env: &TyConEnv, tvn: &TyVarName) -> bool {
 ///       `scheme_info_for_scc` map to handle shadowing, recurse into body
 /// - case:
 ///     - recurse into the scrutinee with the current `scheme_info_for_scc` map
-///     - for each clause, drop binders from the clause pattern to handle
+///     - for each alt, drop binders from the alt pattern to handle
 ///       shadowing before recursing into guard and body
 /// - let:
 ///     - collect binders from all defs, drop them from the `scheme_info_for_scc`
@@ -2053,28 +2047,28 @@ pub(crate) fn fill_missing_ty_args(
         })),
         TypedVExpr::Case(case_expr) => {
             let arg = Box::new(fill_missing_ty_args(*case_expr.arg, scheme_info_for_scc)?);
-            let clauses = case_expr
-                .clauses
+            let alts = case_expr
+                .alts
                 .into_iter()
-                .map(|clause| {
+                .map(|alt| {
                     let mut shadowed_binders = Vec::new();
-                    collect_pattern_binders(&clause.pattern, &mut shadowed_binders);
-                    // filter shadowed binders before recursing into clause
-                    let clause_scheme_info_for_scc =
+                    collect_pattern_binders(&alt.pattern, &mut shadowed_binders);
+                    // filter shadowed binders before recursing into alt
+                    let alt_scheme_info_for_scc =
                         schematic_info_without_binders(scheme_info_for_scc, &shadowed_binders);
-                    Ok(TypedVCaseClause {
-                        pattern: clause.pattern,
-                        guard: clause
+                    Ok(TypedVCaseAlt {
+                        pattern: alt.pattern,
+                        guard: alt
                             .guard
-                            .map(|guard| fill_missing_ty_args(guard, &clause_scheme_info_for_scc))
+                            .map(|guard| fill_missing_ty_args(guard, &alt_scheme_info_for_scc))
                             .transpose()?,
-                        body: fill_missing_ty_args(clause.body, &clause_scheme_info_for_scc)?,
+                        body: fill_missing_ty_args(alt.body, &alt_scheme_info_for_scc)?,
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(TypedVExpr::Case(TypedVCaseExpr {
                 arg,
-                clauses,
+                alts,
                 ty: case_expr.ty,
             }))
         }

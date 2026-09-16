@@ -36,24 +36,21 @@ fn desugar_pattern_app(ns: &mut VVarNameSupply, app: &TypedVAppExpr) -> TypedVEx
     })
 }
 
-/// recursively desugar scrutinee, guards, and clause bodies inside a case
+/// recursively desugar scrutinee, guards, and alt bodies inside a case
 fn desugar_pattern_case(ns: &mut VVarNameSupply, case_expr: &TypedVCaseExpr) -> TypedVExpr {
     let arg = desugar_pattern(ns, &case_expr.arg);
-    let clauses = case_expr
-        .clauses
+    let alts = case_expr
+        .alts
         .iter()
-        .map(|clause| TypedVCaseClause {
-            pattern: clause.pattern.clone(), // leave these patterns intact
-            guard: clause
-                .guard
-                .as_ref()
-                .map(|guard| desugar_pattern(ns, guard)),
-            body: desugar_pattern(ns, &clause.body),
+        .map(|alt| TypedVCaseAlt {
+            pattern: alt.pattern.clone(), // leave these patterns intact
+            guard: alt.guard.as_ref().map(|guard| desugar_pattern(ns, guard)),
+            body: desugar_pattern(ns, &alt.body),
         })
         .collect();
     TypedVExpr::Case(TypedVCaseExpr {
         arg: Box::new(arg),
-        clauses,
+        alts,
         ty: case_expr.ty.clone(),
     })
 }
@@ -94,7 +91,7 @@ fn desugar_pattern_abstr(ns: &mut VVarNameSupply, abstr: &TypedVAbstrExpr) -> Ty
     for param in params.iter().rev() {
         if !is_irrefutable_variable(param) {
             let ty_body = body_expr.ty().clone();
-            body_expr = mk_case_with_single_clause(
+            body_expr = mk_case_with_single_alt(
                 &param.binder,
                 &param.ty,
                 &param.pattern,
@@ -203,7 +200,7 @@ fn desugar_pattern_let_expr(ns: &mut VVarNameSupply, let_expr: &TypedVLetExpr) -
             // construct a case binding,
             // eg: binder' = case temp_scrutinee of
             //                 pat -> binder
-            let selector_rhs = mk_case_with_single_clause(
+            let selector_rhs = mk_case_with_single_alt(
                 &binder_scrutinee,
                 &ty_scrutinee,
                 pattern,
@@ -270,8 +267,8 @@ fn is_irrefutable_variable(param: &TypedVAbstrParam) -> bool {
     )
 }
 
-/// helper to create a typed case expression with 1 clause
-fn mk_case_with_single_clause(
+/// helper to create a typed case expression with 1 alt
+fn mk_case_with_single_alt(
     binder_scrutinee: &VVar,
     ty_scrutinee: &TyExpr,
     pattern: &TypedVPattern,
@@ -280,7 +277,7 @@ fn mk_case_with_single_clause(
 ) -> TypedVExpr {
     TypedVExpr::Case(TypedVCaseExpr {
         arg: Box::new(mk_typed_vexpr_var(binder_scrutinee, ty_scrutinee)),
-        clauses: vec![TypedVCaseClause {
+        alts: vec![TypedVCaseAlt {
             pattern: pattern.clone(),
             guard: None,
             body: body.clone(),

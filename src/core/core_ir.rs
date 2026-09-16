@@ -659,7 +659,7 @@ pub(crate) fn core_expr_from_case(
     };
 
     let mut alts = vec![];
-    for x in expr.clauses.iter() {
+    for x in expr.alts.iter() {
         match core_case_alt_from_typed_v_case_alt(core_ty_con_env, x) {
             Ok(y) => alts.push(y),
             Err(e) => return Err(e),
@@ -873,7 +873,7 @@ fn core_expr_from_constructor(
 
 fn core_case_alt_from_typed_v_case_alt(
     core_ty_con_env: &CoreTyConEnv,
-    expr: &TypedVCaseClause,
+    expr: &TypedVCaseAlt,
 ) -> CoreResult<CoreCaseAlt> {
     todo!("core_case_alt_from_typed_v_case_alt")
 }

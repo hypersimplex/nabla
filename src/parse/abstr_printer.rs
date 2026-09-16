@@ -10,9 +10,9 @@ fn to_doc(expr: &CaseExpr) -> Box<Doc> {
         .cat_line();
 
     let mut body = Doc::nil();
-    for clause in expr.clauses.iter() {
-        let doc_clause = to_doc(clause);
-        body = body.cat_line().cat(doc_clause);
+    for alt in expr.alts.iter() {
+        let doc_alt = to_doc(alt);
+        body = body.cat_line().cat(doc_alt);
     }
     header.cat(body.nest(4))
 }

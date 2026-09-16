@@ -141,7 +141,7 @@ fn v_expr_from_case_expr(
     let abstr_structures::CaseExpr {
         keyword,
         argument,
-        clauses,
+        alts,
     } = case_expr;
     let (vexpr_arg, texpr_arg_annot) = vexpr_and_ty_annot_from_aexpr(&argument.expr, v_var_supply);
 
@@ -154,11 +154,11 @@ fn v_expr_from_case_expr(
             .or(texpr_arg_annot),
     ));
 
-    let clauses = clauses
+    let alts = alts
         .iter()
-        .map(|clause| {
-            let v_pattern = to_v_pattern(&clause.pattern);
-            let guard = clause.guard.as_ref().map(|guard_expr| {
+        .map(|alt| {
+            let v_pattern = to_v_pattern(&alt.pattern);
+            let guard = alt.guard.as_ref().map(|guard_expr| {
                 let (vexpr_guard, texpr_guard_annot) =
                     vexpr_and_ty_annot_from_aexpr(&guard_expr.expr, v_var_supply);
                 (
@@ -171,18 +171,18 @@ fn v_expr_from_case_expr(
                 )
             });
 
-            let abstr_structures::AExprAnnot { expr, type_expr } = &*clause.body;
-            let (vexpr_clause_body, texpr_clause_body_annot) =
+            let abstr_structures::AExprAnnot { expr, type_expr } = &*alt.body;
+            let (vexpr_alt_body, texpr_alt_body_annot) =
                 vexpr_and_ty_annot_from_aexpr(expr, v_var_supply);
-            VCaseClause {
+            VCaseAlt {
                 pattern: v_pattern,
                 guard,
                 body: Box::new((
-                    vexpr_clause_body,
+                    vexpr_alt_body,
                     type_expr
                         .as_ref()
                         .map(lower_type_annot_to_ty_expr)
-                        .or(texpr_clause_body_annot),
+                        .or(texpr_alt_body_annot),
                 )),
             }
         })
@@ -191,7 +191,7 @@ fn v_expr_from_case_expr(
         VExpr::Case(VCaseExpr {
             keyword: keyword.clone(),
             arg,
-            clauses,
+            alts,
         }),
         None,
     )

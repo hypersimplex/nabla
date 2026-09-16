@@ -57,11 +57,11 @@ pub(crate) struct VCaseExpr {
 
     pub arg: Box<(VExpr, Option<TyExpr>)>,
 
-    pub clauses: Vec<VCaseClause>,
+    pub alts: Vec<VCaseAlt>,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct VCaseClause {
+pub(crate) struct VCaseAlt {
     pub pattern: VPattern,
     pub guard: Option<VExprAndTyAnnot>,
     pub body: Box<VExprAndTyAnnot>,
@@ -146,7 +146,7 @@ pub(crate) enum RangeBound<T> {
     Exclusive(T),
 }
 
-/// pattern expressions used across case clauses, lambda parameters, and let bindings
+/// pattern expressions used across case alts, lambda parameters, and let bindings
 #[derive(Clone, Debug)]
 pub(crate) enum VPattern {
     // _ wildcard
@@ -312,17 +312,17 @@ impl VAppExpr {
 impl VCaseExpr {
     pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
         let mut out = self.arg.0.get_free_vars(bound);
-        for clause in &self.clauses {
-            out.extend(clause.get_free_vars(bound));
+        for alt in &self.alts {
+            out.extend(alt.get_free_vars(bound));
         }
         out
     }
 }
 
-impl VCaseClause {
+impl VCaseAlt {
     pub(crate) fn get_free_vars(&self, bound: &BTreeSet<VVar>) -> BTreeSet<VVar> {
         let mut out = BTreeSet::new();
-        // case clause pattern binders scope over its guard and body only
+        // case alt pattern binders scope over its guard and body only
         let mut bound_inner = bound.clone();
         self.pattern.get_bound_vars(&mut bound_inner);
         if let Some((guard, _)) = &self.guard {

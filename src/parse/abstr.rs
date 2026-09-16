@@ -14,11 +14,11 @@
 ///   constructs that uses implicit layout list are:
 ///     - top-level items
 ///     - `let` bindings
-///     - `case` clauses
+///     - `case` alts
 ///
 ///   other constructs,
 ///     function `=`
-///     lambda/clause `->`
+///     lambda/alt `->`
 ///     binding `=`
 ///     `in`
 ///   , are followed by 1 expression and do not open an implicit layout block
@@ -68,15 +68,15 @@
 ///   binding              := pattern (`::` type_expr)? `=` expr
 ///                         | identifier parameter+ (`::` type_expr)? `=` expr
 ///
-///   case_expr            := `case` expr `of` layout(case_clause+)
+///   case_expr            := `case` expr `of` layout(case_alt+)
 ///                        := `case` expr `of`
 ///                              [layoutStart]
-///                              case_clause
+///                              case_alt
 ///                              [layoutSeparator]
 ///                              ...
 ///                              [layoutEnd]
 ///
-///   case_clause          := pattern (`|` expr)? `->` expr
+///   case_alt             := pattern (`|` expr)? `->` expr
 ///
 /// ---
 ///
@@ -908,20 +908,20 @@ fn parse_case_expr_source<S>(
 where
     S: ConcreteTokenSource + LayoutGrammarSource + PatternTokenStream,
 {
-    // clause expressions stop at their owning layout separator/end
+    // alt expressions stop at their owning layout separator/end
     //
     // the enclosing layout helper consumes those markers after the callback returns
     let argument = parse_expr_source(source, 0)?
         .ok_or_else(|| ParseError::unexpected_token("case scrutinee", Some(keyword.clone())))?;
     source.expect_concrete(&ConcreteToken::Of)?;
 
-    let first_clause = source
+    let first_alt = source
         .peek_concrete()?
-        .ok_or_else(|| ParseError::unexpected_eof("case clause"))?;
-    let clauses = source.parse_layout_items(
-        first_clause.loc.clone(),
+        .ok_or_else(|| ParseError::unexpected_eof("case alt"))?;
+    let alts = source.parse_layout_items(
+        first_alt.loc.clone(),
         false,
-        parse_case_clause,
+        parse_case_alt,
         LayoutFeedback::None,
     )?;
 
@@ -929,13 +929,13 @@ where
         expr: AExpr::CaseExpression(CaseExpr {
             keyword,
             argument: Box::new(argument),
-            clauses,
+            alts,
         }),
         type_expr: None,
     })
 }
 
-fn parse_case_clause(item: &mut LayoutItemParser<'_>) -> ParseResult<CaseClause> {
+fn parse_case_alt(item: &mut LayoutItemParser<'_>) -> ParseResult<CaseAlt> {
     let pattern = parse_pattern_source(item)
         .map_err(|error| ParseError::message(format!("invalid case pattern: {error:?}"), None))?;
 
@@ -957,9 +957,9 @@ fn parse_case_clause(item: &mut LayoutItemParser<'_>) -> ParseResult<CaseClause>
 
     item.expect_concrete(&ConcreteToken::ArrowRight)?;
     let body = parse_expr_source(item, 0)?
-        .ok_or_else(|| ParseError::unexpected_token("case clause body", None))?;
+        .ok_or_else(|| ParseError::unexpected_token("case alt body", None))?;
 
-    Ok(CaseClause {
+    Ok(CaseAlt {
         pattern,
         guard,
         body: Box::new(body),
@@ -1783,7 +1783,7 @@ mod tests {
         let super::AExpr::CaseExpression(case_expr) = expression.expr else {
             panic!("expected case expression")
         };
-        assert_eq!(case_expr.clauses.len(), 2);
+        assert_eq!(case_expr.alts.len(), 2);
         assert!(matches!(
             parser.peek().expect("peek after case"),
             Some(super::ParserToken {
@@ -1813,7 +1813,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nested_case_expression_returns_to_outer_clause_boundary() {
+    fn test_nested_case_expression_returns_to_outer_alt_boundary() {
         let input = "case x of\n  A -> case y of\n    B -> 1\n  C -> 2\n";
         let lexed = parse_content_to_concrete_tokens(Path::new("/test"), input)
             .expect("lexing nested case expression should succeed");
@@ -1825,11 +1825,11 @@ mod tests {
         let super::AExpr::CaseExpression(outer) = expression.expr else {
             panic!("expected outer case expression")
         };
-        assert_eq!(outer.clauses.len(), 2);
-        let super::AExpr::CaseExpression(inner) = &outer.clauses[0].body.expr else {
-            panic!("expected nested case expression in first clause")
+        assert_eq!(outer.alts.len(), 2);
+        let super::AExpr::CaseExpression(inner) = &outer.alts[0].body.expr else {
+            panic!("expected nested case expression in first alt")
         };
-        assert_eq!(inner.clauses.len(), 1);
+        assert_eq!(inner.alts.len(), 1);
     }
 
     #[test]

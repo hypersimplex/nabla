@@ -208,7 +208,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     // type preserving passes --->>
 
-    println!("desugar patterns to appear only in case clause pattern binders..");
+    println!("desugar patterns to appear only in case alt pattern binders..");
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr = desugar_pattern(&mut v_var_ns, &top_lvl_fn.typed_expr);

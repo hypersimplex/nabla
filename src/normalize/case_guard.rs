@@ -30,58 +30,58 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
             let scrutinee = desugar_case_guard(ns, &case.arg);
             let ty = &case.ty;
 
-            let mut clauses_remaining = VecDeque::<TypedVCaseClause>::new();
+            let mut alts_remaining = VecDeque::<TypedVCaseAlt>::new();
 
-            for TypedVCaseClause {
+            for TypedVCaseAlt {
                 pattern,
                 guard,
                 body,
-            } in case.clauses.iter().rev()
+            } in case.alts.iter().rev()
             {
                 let guard = guard.as_ref().map(|x| desugar_case_guard(ns, x));
                 let body = desugar_case_guard(ns, body);
                 match guard {
                     Some(g) => {
-                        // transform current case clause from:
+                        // transform current case alt from:
                         //
                         // pattern | g -> body
-                        // remaining_clauses
+                        // remaining_alts
                         //
                         // to:
                         //
                         // pattern -> case g of
                         //              True  -> body
                         //              False -> case scrutinee of
-                        //                         remaining_clauses
+                        //                         remaining_alts
                         let new_body = TypedVExpr::Case(TypedVCaseExpr {
                             arg: Box::new(g),
-                            clauses: vec![
-                                TypedVCaseClause {
+                            alts: vec![
+                                TypedVCaseAlt {
                                     pattern: bool_pattern(true),
                                     guard: None,
                                     body,
                                 },
-                                TypedVCaseClause {
+                                TypedVCaseAlt {
                                     pattern: bool_pattern(false),
                                     guard: None,
                                     body: TypedVExpr::Case(TypedVCaseExpr {
                                         arg: Box::new(scrutinee.clone()),
-                                        clauses: clauses_remaining.iter().cloned().collect(),
+                                        alts: alts_remaining.iter().cloned().collect(),
                                         ty: ty.clone(),
                                     }),
                                 },
                             ],
                             ty: ty.clone(),
                         });
-                        clauses_remaining.push_front(TypedVCaseClause {
+                        alts_remaining.push_front(TypedVCaseAlt {
                             pattern: pattern.clone(),
                             guard: None,
                             body: new_body,
                         });
                     }
                     _ => {
-                        // no guard so just collect clause
-                        clauses_remaining.push_front(TypedVCaseClause {
+                        // no guard so just collect alt
+                        alts_remaining.push_front(TypedVCaseAlt {
                             pattern: pattern.clone(),
                             guard,
                             body,
@@ -92,7 +92,7 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
 
             TypedVExpr::Case(TypedVCaseExpr {
                 arg: Box::new(scrutinee),
-                clauses: clauses_remaining.iter().cloned().collect(),
+                alts: alts_remaining.iter().cloned().collect(),
                 ty: ty.clone(),
             })
         }

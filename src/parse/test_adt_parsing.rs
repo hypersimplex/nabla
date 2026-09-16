@@ -177,7 +177,7 @@ nested x = case x of
     }
 
     #[test]
-    fn case_clause_patterns() {
+    fn case_alt_patterns() {
         let items = parse_top_level(PATTERN_FIXTURE);
         let TopLevelFunction {
             abstraction: unwrap_fn,
@@ -188,9 +188,9 @@ nested x = case x of
             other => panic!("expected case expression, got {other:?}"),
         };
 
-        assert_eq!(case_expr.clauses.len(), 3, "expected three case clauses");
+        assert_eq!(case_expr.alts.len(), 3, "expected three case alts");
 
-        match &case_expr.clauses[0].pattern {
+        match &case_expr.alts[0].pattern {
             PatternExpr::Constructor { constructor, .. } => {
                 if let ConcreteToken::Iden(name) = &constructor.token {
                     assert_eq!(name, "None");
@@ -201,7 +201,7 @@ nested x = case x of
             other => panic!("expected constructor pattern for None, got {other:?}"),
         }
 
-        match &case_expr.clauses[1].pattern {
+        match &case_expr.alts[1].pattern {
             PatternExpr::Constructor {
                 constructor,
                 args: PatternConstructorArgs::Positional(args),
@@ -218,8 +218,8 @@ nested x = case x of
         }
 
         assert!(
-            matches!(case_expr.clauses[2].pattern, PatternExpr::Wild),
-            "final clause should be wildcard"
+            matches!(case_expr.alts[2].pattern, PatternExpr::Wild),
+            "final alt should be wildcard"
         );
     }
 
@@ -235,7 +235,7 @@ nested x = case x of
             other => panic!("expected case expression, got {other:?}"),
         };
 
-        match &case_expr.clauses[1].pattern {
+        match &case_expr.alts[1].pattern {
             PatternExpr::Constructor {
                 constructor,
                 args: PatternConstructorArgs::Positional(inner),
@@ -272,7 +272,7 @@ nested x = case x of
             other => panic!("expected case expression, got {other:?}"),
         };
 
-        match &case_expr.clauses[2].pattern {
+        match &case_expr.alts[2].pattern {
             PatternExpr::Constructor {
                 constructor,
                 args: PatternConstructorArgs::Positional(arg),

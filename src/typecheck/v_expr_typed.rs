@@ -100,12 +100,12 @@ pub(crate) struct TypedVAppExpr {
 #[derive(Clone, Debug)]
 pub(crate) struct TypedVCaseExpr {
     pub arg: Box<TypedVExpr>,
-    pub clauses: Vec<TypedVCaseClause>,
+    pub alts: Vec<TypedVCaseAlt>,
     pub ty: TyExpr,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TypedVCaseClause {
+pub(crate) struct TypedVCaseAlt {
     pub pattern: TypedVPattern,
     pub guard: Option<TypedVExpr>,
     pub body: TypedVExpr,
@@ -301,8 +301,8 @@ impl DocPrinter for TypedVCaseExpr {
             .cat_space(self.arg.to_doc())
             .cat_space_lit("of");
 
-        let body = self.clauses.iter().fold(Doc::nil(), |acc, clause| {
-            acc.cat_line_force().cat(clause.to_doc())
+        let body = self.alts.iter().fold(Doc::nil(), |acc, alt| {
+            acc.cat_line_force().cat(alt.to_doc())
         });
 
         Doc::line_force()
@@ -312,15 +312,15 @@ impl DocPrinter for TypedVCaseExpr {
     }
 }
 
-impl DocPrinter for TypedVCaseClause {
+impl DocPrinter for TypedVCaseAlt {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc_pat_and_guard = self.pattern.to_doc();
         if let Some(g) = &self.guard {
             let doc_guard = g.to_doc();
             doc_pat_and_guard = doc_pat_and_guard.cat_space_lit("|").cat_space(doc_guard);
         }
-        let doc_clause_lhs = doc_pat_and_guard.cat_space_lit("->");
-        doc_clause_lhs.cat_space(self.body.to_doc().nest(4))
+        let doc_alt_lhs = doc_pat_and_guard.cat_space_lit("->");
+        doc_alt_lhs.cat_space(self.body.to_doc().nest(4))
     }
 }
 

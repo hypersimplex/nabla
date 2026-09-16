@@ -570,24 +570,24 @@ impl DocPrinter for PatternConstructorArgs {
     }
 }
 
-// syntactically corresponds to a case clause:
+// syntactically corresponds to a case alt:
 //   pattern (| guard)? -> body
 #[derive(Clone, Debug)]
-pub(crate) struct CaseClause {
+pub(crate) struct CaseAlt {
     pub pattern: PatternExpr,
     pub guard: Option<AExprAnnot>,
     pub body: Box<AExprAnnot>,
 }
 
-impl DocPrinter for CaseClause {
+impl DocPrinter for CaseAlt {
     fn to_doc(&self) -> Box<Doc> {
         let mut doc_pat_and_guard = self.pattern.to_doc();
         if let Some(g) = &self.guard {
             let doc_guard = g.to_doc();
             doc_pat_and_guard = doc_pat_and_guard.cat_space_lit("|").cat_space(doc_guard);
         }
-        let doc_clause_lhs = doc_pat_and_guard.cat_space_lit("->");
-        doc_clause_lhs.cat_space(self.body.to_doc().nest(4))
+        let doc_alt_lhs = doc_pat_and_guard.cat_space_lit("->");
+        doc_alt_lhs.cat_space(self.body.to_doc().nest(4))
     }
 }
 
@@ -598,7 +598,7 @@ impl DocPrinter for CaseClause {
 pub(crate) struct CaseExpr {
     pub keyword: ConcreteTokenAndLoc, // appearance of "case"
     pub argument: Box<AExprAnnot>,    // expr to be evaluated by case (eg: scrutinee)
-    pub clauses: Vec<CaseClause>,     // [(test, optional guard, branch expression)]
+    pub alts: Vec<CaseAlt>,           // [(test, optional guard, branch expression)]
 }
 
 impl DocPrinter for CaseExpr {
@@ -608,8 +608,8 @@ impl DocPrinter for CaseExpr {
             .cat_space_lit("of");
 
         let mut body = Doc::nil();
-        for clause in self.clauses.iter() {
-            body = body.cat_line_force().cat(clause.to_doc());
+        for alt in self.alts.iter() {
+            body = body.cat_line_force().cat(alt.to_doc());
         }
 
         Doc::line_force()

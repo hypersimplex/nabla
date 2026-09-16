@@ -73,16 +73,16 @@ pub(crate) fn desugar_literal_pattern_case(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     expr: &TypedVCaseExpr,
 ) -> TypedVExpr {
-    let TypedVCaseExpr { arg, clauses, ty } = expr;
+    let TypedVCaseExpr { arg, alts, ty } = expr;
 
     let arg = Box::new(desugar_literal_pattern(ns, env_v_var_to_ty_scheme, arg));
 
     TypedVExpr::Case(TypedVCaseExpr {
         arg: arg.clone(),
-        clauses: clauses
+        alts: alts
             .iter()
             .map(|x| {
-                let TypedVCaseClause {
+                let TypedVCaseAlt {
                     pattern,
                     guard,
                     body,
@@ -140,7 +140,7 @@ pub(crate) fn desugar_literal_pattern_case(
                 };
 
                 let body = desugar_literal_pattern(ns, env_v_var_to_ty_scheme, body);
-                TypedVCaseClause {
+                TypedVCaseAlt {
                     pattern,
                     guard,
                     body,

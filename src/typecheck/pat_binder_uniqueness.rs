@@ -58,12 +58,12 @@ pub(crate) fn validate_pattern_binder_uniqueness(vexpr: &VExpr) -> TyChkResult<(
         }
         VExpr::Case(case_expr) => {
             validate_pattern_binder_uniqueness(&case_expr.arg.0)?;
-            for clause in &case_expr.clauses {
-                validate_pattern_binders_unique(&clause.pattern)?;
-                if let Some((guard_expr, _)) = &clause.guard {
+            for alt in &case_expr.alts {
+                validate_pattern_binders_unique(&alt.pattern)?;
+                if let Some((guard_expr, _)) = &alt.guard {
                     validate_pattern_binder_uniqueness(guard_expr)?;
                 }
-                validate_pattern_binder_uniqueness(&clause.body.0)?;
+                validate_pattern_binder_uniqueness(&alt.body.0)?;
             }
             Ok(())
         }

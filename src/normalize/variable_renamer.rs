@@ -115,26 +115,22 @@ fn rename_var_unique_case(
     lvl: u32, // 0 for top-level scope
     expr: &VCaseExpr,
 ) -> VExpr {
-    let VCaseExpr {
-        keyword,
-        arg,
-        clauses,
-    } = expr;
+    let VCaseExpr { keyword, arg, alts } = expr;
 
     // note: local binders introduced in case scrutinee is not visible to
-    // case clauses
+    // case alts
     let (arg_expr, arg_ty_annot) = Deref::deref(arg);
     let arg_expr = rename_var_unique_aux(ns, vvar_outer_scope, lvl + 1, arg_expr);
     let arg = Box::new((arg_expr, arg_ty_annot.clone()));
 
-    let clauses = clauses
+    let alts = alts
         .iter()
-        .map(|clause| {
-            let VCaseClause {
+        .map(|alt| {
+            let VCaseAlt {
                 pattern,
                 guard,
                 body,
-            } = clause;
+            } = alt;
 
             let mut vvar_unique_map = vvar_outer_scope.clone();
             {
@@ -160,7 +156,7 @@ fn rename_var_unique_case(
                 rename_var_unique_aux(ns, &vvar_unique_map, lvl + 1, &body_v_expr),
                 body_ty_annot.clone(),
             ));
-            VCaseClause {
+            VCaseAlt {
                 pattern,
                 guard,
                 body,
@@ -171,7 +167,7 @@ fn rename_var_unique_case(
     VExpr::Case(VCaseExpr {
         keyword: keyword.clone(),
         arg,
-        clauses,
+        alts,
     })
 }
 

@@ -83,18 +83,18 @@ pub(crate) fn desugar_record_to_product(ty_env: &TyConEnv, expr: &TypedVExpr) ->
         }
         TypedVExpr::Case(case_expr) => {
             let arg = desugar_record_to_product(ty_env, &case_expr.arg);
-            let clauses = case_expr
-                .clauses
+            let alts = case_expr
+                .alts
                 .iter()
-                .map(|clause| {
-                    let pattern = desugar_pattern_records(ty_env, &clause.pattern);
-                    let guard = clause
+                .map(|alt| {
+                    let pattern = desugar_pattern_records(ty_env, &alt.pattern);
+                    let guard = alt
                         .guard
                         .as_ref()
                         .map(|g| desugar_record_to_product(ty_env, g));
-                    let body = desugar_record_to_product(ty_env, &clause.body);
+                    let body = desugar_record_to_product(ty_env, &alt.body);
 
-                    TypedVCaseClause {
+                    TypedVCaseAlt {
                         pattern,
                         guard,
                         body,
@@ -104,7 +104,7 @@ pub(crate) fn desugar_record_to_product(ty_env: &TyConEnv, expr: &TypedVExpr) ->
 
             TypedVExpr::Case(TypedVCaseExpr {
                 arg: Box::new(arg),
-                clauses,
+                alts,
                 ty: case_expr.ty.clone(),
             })
         }

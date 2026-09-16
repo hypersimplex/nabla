@@ -44,23 +44,23 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
         }
         TypedVExpr::Case(case) => {
             let arg_norm = normalize_case_scrutinee(ns, &case.arg);
-            let clauses_norm: Vec<_> = case
-                .clauses
+            let alts_norm: Vec<_> = case
+                .alts
                 .iter()
-                .map(|clause| TypedVCaseClause {
-                    pattern: clause.pattern.clone(),
-                    guard: clause
+                .map(|alt| TypedVCaseAlt {
+                    pattern: alt.pattern.clone(),
+                    guard: alt
                         .guard
                         .as_ref()
                         .map(|guard| normalize_case_scrutinee(ns, guard)),
-                    body: normalize_case_scrutinee(ns, &clause.body),
+                    body: normalize_case_scrutinee(ns, &alt.body),
                 })
                 .collect();
 
             let ty = case.ty.clone();
             let mut rebuilt = TypedVExpr::Case(TypedVCaseExpr {
                 arg: Box::new(arg_norm.clone()),
-                clauses: clauses_norm,
+                alts: alts_norm,
                 ty: ty.clone(),
             });
 
