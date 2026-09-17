@@ -53,7 +53,7 @@ pub(crate) fn lower_type_annot_to_ty_expr(ty_expr: &abstr_structures::ATypeExprC
             };
             let tail = match &fun.tail {
                 Some(x) => lower_type_annot_to_ty_expr(&x.lock().unwrap()),
-                None => panic!("expected tail in function type expression"),
+                None => unreachable!("parser guarantees function type expression has a tail"),
             };
             mk_ty_arrow(head, tail)
         }

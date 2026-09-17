@@ -354,7 +354,10 @@ fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
             AExpr::NumericExpr(_) | AExpr::StringExpr(_) => {
                 VPattern::Literal(literal_expr_to_vpattern(lit))
             }
-            other => panic!("unsupported literal pattern expression: {:?}", other),
+            other => unreachable!(
+                "parser guarantees PatternExpr::Literal only contains numeric or string literals, got: {:?}",
+                other
+            ),
         },
         PatternExpr::Range { start, end } => {
             let start = match start {
@@ -428,7 +431,10 @@ fn literal_expr_to_vpattern(lit: &abstr_structures::AExprAnnot) -> VPatternLiter
             token: string.literal.token.clone(),
             loc: Some(string.literal.loc.clone()),
         }),
-        other => panic!("unsupported literal pattern expression: {:?}", other),
+        other => unreachable!(
+            "parser guarantees PatternExpr::Literal only contains numeric or string literals, got: {:?}",
+            other
+        ),
     }
 }
 
@@ -448,6 +454,6 @@ pub(crate) fn parse_constructor_ref(
 pub(crate) fn identifier_from_token(token: &ConcreteTokenAndLoc, what: &str) -> String {
     match &token.token {
         ConcreteToken::Iden(name) => name.clone(),
-        other => panic!("expected identifier for {what}, got {:?}", other),
+        other => unreachable!("parser guarantees identifier for {what}, got {:?}", other),
     }
 }

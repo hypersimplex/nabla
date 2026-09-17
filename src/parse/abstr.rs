@@ -703,9 +703,20 @@ where
                 ) {
                     source.next_concrete()?;
                     qualified = Some(constructor);
-                    constructor = source
+                    let next_tok = source
                         .next_concrete()?
                         .ok_or_else(|| ParseError::unexpected_eof("qualified constructor"))?;
+                    match &next_tok.token {
+                        ConcreteToken::Iden(name) if is_constructor_name(name) => {
+                            constructor = next_tok;
+                        }
+                        _ => {
+                            return Err(ParseError::unexpected_token(
+                                "constructor identifier after '.'",
+                                Some(next_tok),
+                            ));
+                        }
+                    }
                 }
                 let record_fields = if matches!(
                     source.peek_concrete()?,

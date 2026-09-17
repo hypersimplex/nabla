@@ -303,4 +303,15 @@ nested x = case x of
             other => panic!("expected Some (Some _) pattern, got {other:?}"),
         }
     }
+
+    #[test]
+    fn test_invalid_qualified_constructor_rejected() {
+        let content = "f x = Foo.123";
+        let lexed = parse_content_to_concrete_tokens(Path::new("<memory>"), content)
+            .expect("lexing should succeed");
+        assert!(matches!(
+            parse_concrete_top_level(lexed),
+            Err(crate::parse::parser::ParseError::UnexpectedToken { .. })
+        ));
+    }
 }
