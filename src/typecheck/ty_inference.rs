@@ -996,8 +996,7 @@ pub(crate) fn ty_check_binding_group(
             let mut typed_rhs_vexpr = apply_subst_typed_expr(&subst_accum, typed_rhs_vexpr);
 
             // if present, enforce optional type annotation/signature
-            if let (VPattern::Variable(var), Some(sig_scheme)) = (pattern, optional_annot.as_ref())
-            {
+            if let Some(sig_scheme) = optional_annot.as_ref() {
                 // instantiate and then unify
                 let mut subst_sig = subst_id();
                 for tvn in sig_scheme.ty_vars_schematic.iter() {
@@ -1011,7 +1010,12 @@ pub(crate) fn ty_check_binding_group(
                     .map_err(|_| TyError::TypeConflict {
                         ty1: sig_type_inst.clone(),
                         ty2: typed_rhs_vexpr.ty().clone(),
-                        msg: Some(format!("signature mismatch for binder `{:?}`", var)),
+                        msg: match pattern {
+                            VPattern::Variable(var) => {
+                                Some(format!("signature mismatch for binder `{:?}`", var))
+                            }
+                            _ => Some(format!("signature mismatch for pattern `{:?}`", pattern)),
+                        },
                     })?;
 
                 // keep typed nodes in sync after annotation unification
@@ -2538,6 +2542,36 @@ pub(crate) fn build_scheme_from_ty_expr(
 mod tests {
     use super::*;
 
+    // --- test helpers ---
+
+    fn mk_lit_int(n: i64) -> VExpr {
+        VExpr::LitNumeric(VLitNumeric {
+            token: ConcreteToken::LiteralNumeric(n.to_string()),
+            loc: None,
+            value: NumericLiteralValue::Int {
+                raw: n.to_string(),
+                parsed: Some(n),
+            },
+        })
+    }
+
+    fn check_let(
+        pat: VPattern,
+        rhs: VExpr,
+        annot: Option<TyExpr>,
+    ) -> Result<(Substitution, TypedVExpr), TyError> {
+        let mut env = EnvVVarToTyScheme::new();
+        let ty_env = TyConEnv::new();
+        let mut ns = TyVarNameSupply::new();
+        let let_expr = VLetExpr {
+            defs: vec![(pat, rhs, annot)],
+            body: Box::new((mk_lit_int(0), None)),
+        };
+        ty_check_let_typed(&mut env, &ty_env, &mut ns, &let_expr)
+    }
+
+    // --- unification tests ---
+
     #[test]
     fn test_unify_incompatible_builtins_yields_type_conflict() {
         let subst = subst_id();
@@ -2633,5 +2667,40 @@ mod tests {
             }
             other => panic!("expected InfiniteType, got {:?}", other),
         }
+    }
+
+    // --- let-binding pattern type annotation tests ---
+
+    #[test]
+    fn test_let_binding_wildcard_pattern_annotation() {
+        // mismatch: let _ :: String = 42
+        assert!(matches!(
+            check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_string())),
+            Err(TyError::TypeConflict { .. })
+        ));
+
+        // matching: let _ :: i64 = 42
+        assert!(check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_i64())).is_ok());
+    }
+
+    #[test]
+    fn test_let_binding_literal_pattern_annotation() {
+        let pat_lit = VPattern::Literal(VPatternLiteral::Numeric(VLitNumeric {
+            token: ConcreteToken::LiteralNumeric("10".to_string()),
+            loc: None,
+            value: NumericLiteralValue::Int {
+                raw: "10".to_string(),
+                parsed: Some(10),
+            },
+        }));
+
+        // mismatch: let 10 :: String = 10
+        assert!(matches!(
+            check_let(pat_lit.clone(), mk_lit_int(10), Some(mk_ty_string())),
+            Err(TyError::TypeConflict { .. })
+        ));
+
+        // matching: let 10 :: i64 = 10
+        assert!(check_let(pat_lit, mk_lit_int(10), Some(mk_ty_i64())).is_ok());
     }
 }

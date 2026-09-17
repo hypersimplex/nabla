@@ -1025,3 +1025,43 @@ bad = f 0
         ),
     }
 }
+
+#[test]
+fn test_pipeline_let_wildcard_pattern_annotation() {
+    let mismatch = r###"
+f x =
+  let _ :: String = 42
+  in x + 1
+"###;
+    assert!(matches!(
+        compile(mismatch),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+
+    let matching = r###"
+f x =
+  let _ :: i64 = 42
+  in x + 1
+"###;
+    assert!(compile(matching).is_ok());
+}
+
+#[test]
+fn test_pipeline_let_constructor_pattern_annotation() {
+    let mismatch = r###"
+f x =
+  let Bool.True :: String = Bool.True
+  in x
+"###;
+    assert!(matches!(
+        compile(mismatch),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+
+    let matching = r###"
+f x =
+  let Bool.True :: Bool = Bool.True
+  in x
+"###;
+    assert!(compile(matching).is_ok());
+}
