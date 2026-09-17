@@ -191,18 +191,19 @@ pub(crate) fn unify_ty_exprs(
 
 /// extend the current substitution subst if possible
 fn extend(subst: &Substitution, tvn: &TyVarName, other: &TyExpr) -> Result<Substitution, TyError> {
-    match other {
+    let other_resolved = subst_ty(subst, other);
+    match &other_resolved {
         TyExpr::TyVar(tvn_other) if tvn == tvn_other => Ok(subst.clone()), // success
         _ => {
-            if free_ty_vars(other).contains(tvn) {
+            if free_ty_vars(&other_resolved).contains(tvn) {
                 return Err(TyError::InfiniteType {
                     var: tvn.clone(),
-                    ty: other.clone(),
+                    ty: other_resolved,
                     msg: Some("occurs check failed in substitution extension".to_string()),
                 });
             }
-            // compose {tvn -> other} in top of `subst`
-            Ok(subst_compose(&subst_delta(tvn, other), subst))
+            // compose {tvn -> other_resolved} on top of `subst`
+            Ok(subst_compose(&subst_delta(tvn, &other_resolved), subst))
         }
     }
 }
@@ -2606,6 +2607,29 @@ mod tests {
             Err(TyError::InfiniteType { var, ty: _, msg }) => {
                 assert_eq!(var, auto_var);
                 assert!(msg.is_some());
+            }
+            other => panic!("expected InfiniteType, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_unify_occurs_check_indirect_cycle_yields_infinite_type() {
+        let subst = subst_id();
+        let var_a = TyVarName::Auto(100);
+        let var_b = TyVarName::Auto(101);
+        let ty_a = TyExpr::TyVar(var_a.clone());
+        let ty_b = TyExpr::TyVar(var_b.clone());
+
+        // unify b ~ (a -> i64)
+        let subst1 =
+            unify_ty_exprs(&subst, &ty_b, &mk_ty_arrow(ty_a.clone(), mk_ty_i64())).unwrap();
+
+        // unify a ~ b
+        // this should fail with InfiniteType because b contains a
+        let res = unify_ty_exprs(&subst1, &ty_a, &ty_b);
+        match res {
+            Err(TyError::InfiniteType { var, .. }) => {
+                assert_eq!(var, var_a);
             }
             other => panic!("expected InfiniteType, got {:?}", other),
         }
