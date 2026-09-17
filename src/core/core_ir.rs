@@ -437,6 +437,9 @@ impl CoreTyVar {
 pub(crate) struct CoreCaseAlt {
     pub pattern: CoreAltConPattern,
 
+    // positional sensitive binders for `pattern`
+    pub binders: Vec<CoreVar>,
+
     pub expr: CoreExpr,
 }
 
@@ -446,8 +449,12 @@ pub(crate) struct CoreCaseAlt {
 /// note: after desugaring to core, supported patterns are quite restricted
 #[derive(Clone, Debug)]
 pub(crate) enum CoreAltConPattern {
-    Data(CoreTyCon),
+    Data(String), // [todo]: this should be referencing a constructor function of a data type
+
     Literal(CoreLiteral),
+
+    // catch-all (corresponds to wildcard or variable pattern in high level IR)
+    Default,
 }
 
 /// mechanical translation
@@ -958,9 +965,14 @@ impl DocPrinter for CoreCase {
     }
 }
 
+// [todo]
 impl DocPrinter for CoreCaseAlt {
     fn to_doc(&self) -> Box<Doc> {
-        let Self { pattern, expr } = self;
+        let Self {
+            pattern,
+            binders,
+            expr,
+        } = self;
 
         pattern
             .to_doc()
@@ -973,8 +985,11 @@ impl DocPrinter for CoreAltConPattern {
     fn to_doc(&self) -> Box<Doc> {
         use CoreAltConPattern::*;
         match self {
-            Data(x) => x.to_doc(),
+            // [todo]
+            // Data(x) => x.to_doc(),
+            Data(x) => Doc::lit(x),
             Literal(x) => x.to_doc(),
+            Default => Doc::lit("Default"),
         }
     }
 }
