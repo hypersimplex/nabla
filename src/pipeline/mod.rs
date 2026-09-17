@@ -989,3 +989,39 @@ fn test_pipeline_let_binding_type_annotation() {
         _ => {}
     }
 }
+
+#[test]
+fn test_pipeline_mutual_recursion_simple() {
+    let content = r###"
+f x = g (x + 1)
+g y = f (y - 1) + 10
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_mutual_recursion_rejects_unsound_polymorphism() {
+    let content = r###"
+f x = g (x + 1)
+g y = f (y - 1) + 10
+bad :: String
+bad = f 0
+"###;
+    let res = compile(content);
+    match res {
+        Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
+            assert!(matches!(
+                ty1,
+                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
+            ));
+            assert!(matches!(
+                ty2,
+                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+            ));
+        }
+        other => panic!(
+            "expected TypeConflict between String and I64, got {:?}",
+            other
+        ),
+    }
+}

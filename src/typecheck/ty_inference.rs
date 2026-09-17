@@ -968,7 +968,7 @@ pub(crate) fn ty_check_binding_group(
                     ty_var_ns,
                     pattern,
                 )?;
-            subst_accum = subst_compose(&subst_accum, &subst);
+            subst_accum = subst_compose(&subst, &subst_accum);
 
             let mut typed_binding_expr =
                 apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
@@ -983,7 +983,7 @@ pub(crate) fn ty_check_binding_group(
                 ty_var_ns,
                 def_expr,
             )?;
-            subst_accum = subst_compose(&subst_accum, &subst);
+            subst_accum = subst_compose(&subst, &subst_accum);
 
             // unify LHS with RHS
             subst_accum =
@@ -1037,6 +1037,22 @@ pub(crate) fn ty_check_binding_group(
                             typed_rhs_vexpr,
                         )),
                     );
+                }
+            }
+        }
+
+        // synchronize all typed pairs in this SCC with the final accumulated substitution
+        for idx in scc.iter() {
+            if let Some(entry) = typed_binding_def_pairs.get_mut(idx) {
+                match entry {
+                    TypedLhsRhsPair::SimpleVarBindingPair((pat, rhs)) => {
+                        *pat = apply_subst_typed_pattern(&subst_accum, pat.clone());
+                        *rhs = apply_subst_typed_expr(&subst_accum, rhs.clone());
+                    }
+                    TypedLhsRhsPair::NonSimpleVarBindingPair((pat, _, rhs)) => {
+                        *pat = apply_subst_typed_pattern(&subst_accum, pat.clone());
+                        *rhs = apply_subst_typed_expr(&subst_accum, rhs.clone());
+                    }
                 }
             }
         }
