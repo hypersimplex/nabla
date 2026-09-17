@@ -610,6 +610,7 @@ pub(crate) fn core_expr_from_abstraction(
 /// (->) a ((->) b) c)
 /// (App (App (->) a) (App (App (->) b) c))
 ///
+/// ```text
 ///      App
 ///      /  \
 ///   App    App
@@ -617,6 +618,7 @@ pub(crate) fn core_expr_from_abstraction(
 /// ->   a  App  c
 ///         / \
 ///        ->  b
+/// ```
 ///
 /// apply a, then the result is `b->c`
 /// which corresponds to taking the right subtree of the root

@@ -7,14 +7,14 @@ use crate::typecheck::v_var_name_supply::*;
 /// scrutinees are atomic and we avoid re-evaluating expressions
 ///
 /// this would transform
-/// ```
+/// ```text
 /// case non-variable-expr of
 ///   ...
 /// ```
 ///
 /// to
 ///
-/// ```
+/// ```text
 /// let
 ///   simple_variable = non-variable-expr
 /// in

@@ -63,17 +63,17 @@ fn desugar_pattern_case(ns: &mut VVarNameSupply, case_expr: &TypedVCaseExpr) -> 
 /// - add `case` expressions in the body for non-variable patterns
 ///
 /// eg, this transforms
-/// ```
+/// ```text
 /// f = \pat1 pat2 -> body
 /// ```
 /// to (intermediate)
-/// ```
+/// ```text
 /// f = \pat1 binder2 ->
 ///       case binder2 of
 ///         pat2 -> desugar(body)
 /// ```
 /// to
-/// ```
+/// ```text
 /// f = \binder1 binder2 ->
 ///       case binder1 of
 ///         pat1 ->
@@ -147,13 +147,13 @@ fn desugar_pattern_constructor(
 ///   - selector bindings for each pattern binder (`x = case tmp of pat -> x`)
 ///
 /// this would transforms
-/// ```
+/// ```text
 ///   let pat1 = rhs1
 ///       pat2 = rhs2
 ///   in body
 /// ```
 /// to
-/// ```
+/// ```text
 ///   let tmp1 = desugar(rhs1)
 ///       // -- if pat1 binds a,b then:
 ///       a = case tmp1 of pat1 -> a

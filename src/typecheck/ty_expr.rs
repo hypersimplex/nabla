@@ -28,11 +28,13 @@ pub(crate) enum TyExpr {
 /// ((->) a) b
 /// (App (App (->) a) b)
 ///
+/// ```text
 ///      App
 ///      / \
 ///   App   b
 ///  /  \
 /// ->   a
+/// ```
 ///
 #[derive(Clone, Debug)]
 pub(crate) struct TyApplication {

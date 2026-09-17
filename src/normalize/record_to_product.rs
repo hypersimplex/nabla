@@ -12,7 +12,7 @@ use std::collections::HashMap;
 ///
 /// eg, given:
 ///
-/// ```
+/// ```text
 /// data N {
 ///   y :: f64,
 /// }
@@ -25,14 +25,14 @@ use std::collections::HashMap;
 ///
 /// this transforms a record pattern
 ///
-/// ```
+/// ```text
 /// case y of
 ///   T { x: N { y: v }, .. } -> v
-///     ```
+/// ```
 ///
 /// to
 ///
-/// ```
+/// ```text
 /// case y of
 ///   T _ (N v) -> v
 /// ```
@@ -45,13 +45,13 @@ use std::collections::HashMap;
 ///
 /// and transforms a record constructor expression
 ///
-/// ```
+/// ```text
 /// T { v = 0, x = 10 }
 /// ```
 ///
 /// to
 ///
-/// ```
+/// ```text
 /// T 0 10
 /// ```
 ///
