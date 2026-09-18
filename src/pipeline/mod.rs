@@ -216,6 +216,29 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         }
     }
 
+    println!("normalize case scrutinee to be simple variable..");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
+    }
+
+    // desugar record patterns and record constructor expressions to positional product forms
+    println!("desugar record to product type");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = desugar_record_to_product(&ty_env, &top_lvl_fn.typed_expr);
+        }
+    }
+
+    println!("normalize constructor wildcards to fresh variable binders..");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr =
+                normalize_case_constructor_wildcard(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
+    }
+
     println!("desugar case literal range pattern to case guard expression");
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
@@ -238,13 +261,6 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         }
     }
 
-    println!("normalize case scrutinee to be simple variable..");
-    for group in ty_check_results.iter_mut() {
-        for (id, top_lvl_fn) in group.iter_mut() {
-            top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
-        }
-    }
-
     println!("desugar case guard to case expressions without guard expressions..");
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
@@ -256,22 +272,6 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
-        }
-    }
-
-    // desugar record patterns and record constructor expressions to positional product forms
-    println!("desugar record to product type");
-    for group in ty_check_results.iter_mut() {
-        for (id, top_lvl_fn) in group.iter_mut() {
-            top_lvl_fn.typed_expr = desugar_record_to_product(&ty_env, &top_lvl_fn.typed_expr);
-        }
-    }
-
-    println!("normalize case expr's constructor wildcards to fresh variable binders..");
-    for group in ty_check_results.iter_mut() {
-        for (id, top_lvl_fn) in group.iter_mut() {
-            top_lvl_fn.typed_expr =
-                normalize_case_constructor_wildcard(&mut v_var_ns, &top_lvl_fn.typed_expr);
         }
     }
 
