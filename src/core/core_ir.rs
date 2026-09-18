@@ -670,11 +670,12 @@ pub(crate) fn core_expr_from_case(
         }
     };
 
-    let alts = expr
+    let alts: CoreResult<Vec<CoreCaseAlt>> = expr
         .alts
         .iter()
         .map(|alt| core_case_alt_from_typed_v_case_alt(core_ty_con_env, ns, alt))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect();
+    let alts = alts?;
 
     let core_expr = CoreCase {
         scrutinee: Box::new(core_expr_scrutinee),
@@ -692,7 +693,7 @@ pub(crate) fn core_expr_from_let(
     ns: &mut VVarNameSupply,
     expr: &TypedVLetExpr,
 ) -> CoreResult<CoreExpr> {
-    let defs = expr
+    let defs: CoreResult<Vec<(CoreVar, CoreExpr)>> = expr
         .defs
         .iter()
         .map(|(lhs, rhs)| match lhs {
@@ -720,7 +721,8 @@ pub(crate) fn core_expr_from_let(
                 );
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect();
+    let defs = defs?;
 
     Ok(CoreExpr::Let(CoreLet {
         // defs: Vec<(CoreVar, CoreExpr)>,
@@ -944,7 +946,7 @@ fn core_case_alt_from_pattern_and_body(
             args,
             ..
         } => {
-            let binders = args
+            let binders: CoreResult<Vec<CoreVar>> = args
                 .iter()
                 .map(|arg_pat| match arg_pat {
                     TypedVPattern::Variable { binder, ty, .. } => {
@@ -957,7 +959,8 @@ fn core_case_alt_from_pattern_and_body(
                         "constructor arguments must be normalized to variable binders before Core IR conversion"
                     ),
                 })
-                .collect::<CoreResult<Vec<_>>>()?;
+                .collect();
+            let binders = binders?;
 
             Ok(CoreCaseAlt {
                 pattern: CoreAltConPattern::Data(CoreDataCon {
