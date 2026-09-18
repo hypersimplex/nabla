@@ -10,7 +10,7 @@ literatures from SPJ, Wolfe, and Banerjee.
 
 Planned features & non-features:
 - no support for type classes for now (eg: have "System F"-like core)
-- GC'd backend runtime, with G-machine implementation, to be done in Rust
+- either STG or G-machine for backend
 - evaluation strategy: weak head normal form
 - inferred types (HM algo.) and optional user specified types
 - not optimizing for efficient compilation for now

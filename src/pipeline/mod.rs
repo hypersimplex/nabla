@@ -304,8 +304,6 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     println!("conversion to core --->>");
 
-    // [WIP]
-
     let core_ty_con_env: CoreTyConEnv = (&ty_env).into();
 
     let mut core_top_level_groups: Vec<CoreTopLevelBindingGroup> = vec![];
@@ -326,6 +324,12 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     }
 
     println!("<<--- conversion to core");
+
+    // [WIP, todo]
+    // - perform any transformations in core
+    // - codegen
+    todo!("codegen");
+    // - optionally invoke runtime
 
     Ok(())
 }
