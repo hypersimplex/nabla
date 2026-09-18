@@ -1,3 +1,4 @@
+pub mod case_constructor_unnest;
 pub mod case_constructor_wildcard;
 pub mod case_default;
 pub mod case_guard;

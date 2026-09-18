@@ -3,6 +3,7 @@ use crate::builtin::values::*;
 use crate::core::core_err::*;
 use crate::core::core_ir::*;
 use crate::core::core_ty_con_env::*;
+use crate::normalize::case_constructor_unnest::*;
 use crate::normalize::case_constructor_wildcard::*;
 use crate::normalize::case_default::*;
 use crate::normalize::case_guard::*;
@@ -236,6 +237,14 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr =
                 normalize_case_constructor_wildcard(&mut v_var_ns, &top_lvl_fn.typed_expr);
+        }
+    }
+
+    println!("flatten case expressions' nested patterns in constructor arguments..");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr =
+                normalize_case_constructor_unnest(&mut v_var_ns, &ty_env, &top_lvl_fn.typed_expr);
         }
     }
 
@@ -1182,4 +1191,122 @@ f t = case t of
         Triple x _ z -> (+ x z)
 "###;
     assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_constructor_nested_wildcard() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just (Just _) -> 1
+        _             -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_sum_type() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just (Just x) -> x
+        Just Nothing  -> 0
+        Nothing       -> 100
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_constructor_guard() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just (Just x) | x > 10 -> x
+        Just (Just _)          -> 10
+        Just Nothing           -> 0
+        Nothing                -> 100
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_constructor_multiple_args_guard() {
+    let content = r###"
+data Pair A B = Pair A B
+data Maybe T = Just T | Nothing
+
+f p = case p of
+        Pair (Just x) (Just y) | x > y -> x
+        Pair (Just x) (Just _)          -> x
+        _                               -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_constructor_deep_guard() {
+    let content = r###"
+data Box A = Box A
+
+f b = case b of
+        Box (Box (Box x)) | x > 0 -> x
+        _                         -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_range_in_constructor_with_guard() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just (1..5) | True -> 1
+        _                  -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_range_in_constructor() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just (1..5) -> 1
+        _           -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_literal_in_constructor() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just 42 -> 1
+        _       -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_nested_range_in_record() {
+    let content = r###"
+data Item {
+    val :: i64,
+}
+
+f item = case item of
+    Item { val = 1..10 } -> 1
+    _                    -> 0
+"###;
+    match compile(content) {
+        Err(e) => panic!("{:?}", e),
+        _ => {}
+    }
 }
