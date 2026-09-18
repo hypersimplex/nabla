@@ -3,6 +3,7 @@ use crate::builtin::values::*;
 use crate::core::core_err::*;
 use crate::core::core_ir::*;
 use crate::core::core_ty_con_env::*;
+use crate::normalize::case_constructor_wildcard::*;
 use crate::normalize::case_default::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
@@ -263,6 +264,14 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr = desugar_record_to_product(&ty_env, &top_lvl_fn.typed_expr);
+        }
+    }
+
+    println!("normalize case expr's constructor wildcards to fresh variable binders..");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr =
+                normalize_case_constructor_wildcard(&mut v_var_ns, &top_lvl_fn.typed_expr);
         }
     }
 
@@ -1138,5 +1147,39 @@ f x = case x of
     // single alternative wildcard pattern transforms it into:
     //
     // `f = \x -> 42`
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_constructor_wildcard() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+f m = case m of
+        Just _  -> 1
+        Nothing -> 0
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_constructor_multiple_wildcards() {
+    let content = r###"
+data Triple A B C = Triple A B C
+
+f t = case t of
+        Triple _ _ _ -> 1
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_pattern_constructor_mixed_wildcards() {
+    let content = r###"
+data Triple A B C = Triple A B C
+
+f t = case t of
+        Triple x _ z -> (+ x z)
+"###;
     assert!(compile(content).is_ok());
 }
