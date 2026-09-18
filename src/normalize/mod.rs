@@ -1,3 +1,4 @@
+pub mod case_default;
 pub mod case_guard;
 pub mod case_scrutinee;
 pub mod literal_pattern;

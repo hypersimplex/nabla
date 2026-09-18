@@ -3,6 +3,7 @@ use crate::builtin::values::*;
 use crate::core::core_err::*;
 use crate::core::core_ir::*;
 use crate::core::core_ty_con_env::*;
+use crate::normalize::case_default::*;
 use crate::normalize::case_guard::*;
 use crate::normalize::case_scrutinee::*;
 use crate::normalize::literal_pattern::*;
@@ -262,6 +263,13 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr = desugar_record_to_product(&ty_env, &top_lvl_fn.typed_expr);
+        }
+    }
+
+    println!("normalize case variable patterns to let and wildcards..");
+    for group in ty_check_results.iter_mut() {
+        for (id, top_lvl_fn) in group.iter_mut() {
+            top_lvl_fn.typed_expr = normalize_case_default(&top_lvl_fn.typed_expr);
         }
     }
 
@@ -1064,4 +1072,71 @@ f x =
   in x
 "###;
     assert!(compile(matching).is_ok());
+}
+
+#[test]
+fn test_pipeline_case_multiple_variables() {
+    let content = r###"
+data Tree = Leaf i64 | Node Tree Tree
+f x = case x of
+        Leaf a -> a
+        y      -> 1
+        z      -> 2
+"###;
+    // expected desugared output:
+    //
+    // first variable catch-all `y -> 1` desugars into `_ -> let y = x in 1`
+    //
+    // and other variable pattern is pruned
+    //
+    // f = \x ->
+    //   case x of
+    //     Tree.Leaf a -> a
+    //     _ -> let y = x in 1
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_case_wildcard_before_patterns() {
+    let content = r###"
+data Tree = Leaf i64 | Node Tree Tree
+f x = case x of
+        _      -> 0
+        Leaf a -> a
+        y      -> 1
+"###;
+    // expected desugared output:
+    // Wildcard `_ -> 0` at the top prunes all other subsequent alternatives
+    // alternatives
+    //
+    // single alternative simplification further transforms `case x of _ -> 0`
+    // to `0`, so the function becomes `f = \x -> 0`
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_case_variable_only() {
+    let content = r###"
+f x = case x of
+        y -> y + 1
+"###;
+    // expected desugared output:
+    // `y -> y + 1` desugars to `_ -> let y = x in y + 1`
+    //
+    // single alternative simplification transforms the function into:
+    // `f = \x -> let y = x in y + 1`
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_case_wildcard_only() {
+    let content = r###"
+f x = case x of
+        _ -> 42
+"###;
+    // expected desugared output:
+    // single alternative wildcard pattern transforms it into:
+    //
+    // `f = \x -> 42`
+    assert!(compile(content).is_ok());
 }
