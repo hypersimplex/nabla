@@ -16,16 +16,18 @@ use crate::typecheck::ty_scheme::*;
 use crate::typecheck::ty_var_name::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
+use crate::typecheck::v_var_name::*;
+use crate::typecheck::v_var_name_supply::VVarNameSupply;
 use crate::util::printer::*;
 
 use std::collections::BTreeMap;
 
-/// this represents a top level function
+/// this represents a top level function or value binding
 #[derive(Clone, Debug)]
 pub(crate) struct CoreTopLevelBinding {
-    var_binder: CoreVar,
+    pub var_binder: CoreVar,
 
-    abstraction: CoreAbstr,
+    pub body: CoreExpr,
 }
 
 /// mutually recursive functions in a SCC is grouped together here
@@ -289,8 +291,6 @@ impl CoreApp {
     }
 }
 
-/// [todo]: review design of this construct
-///
 /// case construct in core IR introduces explicit variable binder for the result
 /// of scrutinee evaluation
 #[derive(Clone, Debug)]
@@ -432,7 +432,6 @@ impl CoreTyVar {
     }
 }
 
-/// [todo]: review design of this construct
 #[derive(Clone, Debug)]
 pub(crate) struct CoreCaseAlt {
     pub pattern: CoreAltConPattern,
@@ -443,16 +442,16 @@ pub(crate) struct CoreCaseAlt {
     pub expr: CoreExpr,
 }
 
-/// [todo]: - review design of this construct
-///         - add support for wild/default variant
-///
-/// note: after desugaring to core, supported patterns are quite restricted
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CoreDataCon {
+    pub ty_name: String,
+    pub name: String,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum CoreAltConPattern {
-    Data(String), // [todo]: this should be referencing a constructor function of a data type
-
+    Data(CoreDataCon),
     Literal(CoreLiteral),
-
     // catch-all (corresponds to wildcard or variable pattern in high level IR)
     Default,
 }
@@ -512,12 +511,14 @@ fn wrap_type_abstractions(mut core_expr: CoreExpr, schematic_vars: &[TyVarName])
 /// transform from high level IR to the core IR
 pub(crate) fn core_typed_top_level_function_group(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     group: &BTreeMap<usize, TypedTopLevelFunction>,
 ) -> CoreResult<CoreTopLevelBindingGroup> {
     let mut ret = vec![];
     for (id, top_lvl_function) in group.iter() {
         ret.push(core_top_level_binding_from_typed_top_level_function(
             core_ty_con_env,
+            ns,
             top_lvl_function,
         )?);
     }
@@ -530,19 +531,13 @@ pub(crate) fn core_typed_top_level_function_group(
 /// the function and construct explicit core IR type parameters
 pub(crate) fn core_top_level_binding_from_typed_top_level_function(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     top_lvl_fn: &TypedTopLevelFunction,
 ) -> CoreResult<CoreTopLevelBinding> {
-    let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &top_lvl_fn.typed_expr)?;
+    let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, ns, &top_lvl_fn.typed_expr)?;
 
     // introduce type parameter(s) for type abstraction
     let core_expr = wrap_type_abstractions(core_expr, &top_lvl_fn.scheme.ty_vars_schematic);
-
-    let core_abstraction = match core_expr {
-        CoreExpr::Abstraction(abstr) => abstr,
-        _ => {
-            unreachable!()
-        }
-    };
 
     // binder may contain schematic type variables,
     // which are translated to `ForAll`s, eg:
@@ -555,25 +550,26 @@ pub(crate) fn core_top_level_binding_from_typed_top_level_function(
 
     Ok(CoreTopLevelBinding {
         var_binder: top_level_fn_binder,
-        abstraction: core_abstraction,
+        body: core_expr,
     })
 }
 
 /// transform from high level IR to the core IR
 pub(crate) fn core_expr_from_typed_v_expr(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVExpr,
 ) -> CoreResult<CoreExpr> {
     use TypedVExpr::*;
     match expr {
-        Abstraction(x) => core_expr_from_abstraction(core_ty_con_env, x),
-        Application(x) => core_expr_from_application(core_ty_con_env, x),
-        Case(x) => core_expr_from_case(core_ty_con_env, x),
-        Let(x) => core_expr_from_let(core_ty_con_env, x),
+        Abstraction(x) => core_expr_from_abstraction(core_ty_con_env, ns, x),
+        Application(x) => core_expr_from_application(core_ty_con_env, ns, x),
+        Case(x) => core_expr_from_case(core_ty_con_env, ns, x),
+        Let(x) => core_expr_from_let(core_ty_con_env, ns, x),
         LitNumeric(x) => core_expr_from_lit_num(core_ty_con_env, x),
         LitString(x) => core_expr_from_lit_string(core_ty_con_env, x),
         Variable(x) => core_expr_from_variable(core_ty_con_env, x),
-        Constructor(x) => core_expr_from_constructor(core_ty_con_env, x),
+        Constructor(x) => core_expr_from_constructor(core_ty_con_env, ns, x),
     }
 }
 
@@ -581,12 +577,13 @@ pub(crate) fn core_expr_from_typed_v_expr(
 /// multiple parameters are converted to a nested form
 pub(crate) fn core_expr_from_abstraction(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVAbstrExpr,
 ) -> CoreResult<CoreExpr> {
     let TypedVAbstrExpr { params, body, ty } = expr;
 
     let mut ty_abstraction = body.ty().clone();
-    let mut core_expr = core_expr_from_typed_v_expr(core_ty_con_env, body)?;
+    let mut core_expr = core_expr_from_typed_v_expr(core_ty_con_env, ns, body)?;
     // note: process in reverse order since the arrow type is right associative
     for param in params.iter().rev() {
         ty_abstraction = mk_ty_arrow(param.ty.clone(), ty_abstraction);
@@ -624,13 +621,14 @@ pub(crate) fn core_expr_from_abstraction(
 /// which corresponds to taking the right subtree of the root
 fn apply_value_arguments(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     mut core_expr: CoreExpr,
     args: &[TypedVExpr],
 ) -> CoreResult<CoreExpr> {
     for arg in args.iter() {
         // [todo]: maybe check type of argument against expected parameter type
         // of the callable
-        let core_expr_arg = core_expr_from_typed_v_expr(core_ty_con_env, arg)?;
+        let core_expr_arg = core_expr_from_typed_v_expr(core_ty_con_env, ns, arg)?;
 
         // this is the resulting type after the application
         let core_ty_result = core_expr.ty().get_arrow_codomain().clone();
@@ -646,56 +644,55 @@ fn apply_value_arguments(
 
 pub(crate) fn core_expr_from_application(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVAppExpr,
 ) -> CoreResult<CoreExpr> {
-    let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, &expr.callable)?;
-    apply_value_arguments(core_ty_con_env, core_expr, &expr.args)
+    let core_expr = core_expr_from_typed_v_expr(core_ty_con_env, ns, &expr.callable)?;
+    apply_value_arguments(core_ty_con_env, ns, core_expr, &expr.args)
 }
 
 pub(crate) fn core_expr_from_case(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVCaseExpr,
 ) -> CoreResult<CoreExpr> {
-    // note: this is expected to be a simple variable from previous
-    // transformation phase in the pipeline
-    //
-    // [todo]: relax this assumption and let it be an arbitrary core expression
-    let core_expr_scrutinee = core_expr_from_typed_v_expr(core_ty_con_env, &*expr.arg)?;
+    let core_expr_scrutinee = core_expr_from_typed_v_expr(core_ty_con_env, ns, &*expr.arg)?;
+
+    // scrutinee can be arbitrary expression, but we introduce a simple variable
+    // binder to the result of the scrutinee evaluation if necessary
 
     let scrutinee_var = match &core_expr_scrutinee {
-        CoreExpr::Variable(scrutinee_var) => scrutinee_var.clone(),
-        _ => unreachable!(),
+        CoreExpr::Variable(v) => v.clone(),
+        non_var => {
+            let vvar = ns.generate();
+            let ty = non_var.ty();
+            CoreVar::ValueVariable(CoreVVar { vvar, ty })
+        }
     };
 
-    let mut alts = vec![];
-    for x in expr.alts.iter() {
-        match core_case_alt_from_typed_v_case_alt(core_ty_con_env, x) {
-            Ok(y) => alts.push(y),
-            Err(e) => return Err(e),
-        }
-    }
+    let alts = expr
+        .alts
+        .iter()
+        .map(|alt| core_case_alt_from_typed_v_case_alt(core_ty_con_env, ns, alt))
+        .collect::<Result<Vec<_>, _>>()?;
 
     let core_expr = CoreCase {
         scrutinee: Box::new(core_expr_scrutinee),
-
-        // note: binder to result of evaluating the scrutinee is guaranteed
-        // to a simple variable binder
         result: scrutinee_var,
-
         alts,
-
         ty: core_ty_from_ty_expr(core_ty_con_env, &expr.ty),
     };
     Ok(CoreExpr::Case(core_expr))
 }
 
-/// [todo]: for each let definition, take the schematic type variables in the scheme
+/// for each let definition, take the schematic type variables in the scheme
 /// of the LHS variable binder and construct explicit core IR type parameters
 pub(crate) fn core_expr_from_let(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVLetExpr,
 ) -> CoreResult<CoreExpr> {
-    let defs_with_result: Vec<(CoreVar, CoreResult<CoreExpr>)> = expr
+    let defs = expr
         .defs
         .iter()
         .map(|(lhs, rhs)| match lhs {
@@ -712,45 +709,43 @@ pub(crate) fn core_expr_from_let(
                     vvar: binder.clone(),
                     ty: ty_expr,
                 });
-                let rhs_core_expr = core_expr_from_typed_v_expr(core_ty_con_env, rhs)
-                    .map(|expr| wrap_type_abstractions(expr, &ty_schematic.ty_vars_schematic));
+                let rhs_core_expr = core_expr_from_typed_v_expr(core_ty_con_env, ns, rhs)
+                    .map(|expr| wrap_type_abstractions(expr, &ty_schematic.ty_vars_schematic))?;
 
-                (lhs_var, rhs_core_expr)
+                Ok((lhs_var, rhs_core_expr))
             }
             _ => {
-                unreachable!();
+                unreachable!(
+                    "let bindings should be normalized to variables before Core IR conversion"
+                );
             }
         })
-        .collect();
-
-    let mut defs: Vec<(CoreVar, CoreExpr)> = vec![];
-    for (v, expr) in defs_with_result {
-        match expr {
-            Ok(x) => defs.push((v, x)),
-            Err(e) => return Err(e),
-        }
-    }
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(CoreExpr::Let(CoreLet {
         // defs: Vec<(CoreVar, CoreExpr)>,
         defs,
-        body: Box::new(core_expr_from_typed_v_expr(core_ty_con_env, &*expr.body)?),
+        body: Box::new(core_expr_from_typed_v_expr(
+            core_ty_con_env,
+            ns,
+            &*expr.body,
+        )?),
         ty: core_ty_from_ty_expr(core_ty_con_env, &expr.ty),
     }))
 }
 
 pub(crate) fn core_expr_from_lit_num(
-    core_ty_con_env: &CoreTyConEnv,
+    _core_ty_con_env: &CoreTyConEnv,
     expr: &TypedVLitNumeric,
 ) -> CoreResult<CoreExpr> {
     match &expr.val.value {
-        NumericLiteralValue::Int { raw, parsed } => Ok(CoreExpr::Literal(
+        NumericLiteralValue::Int { raw: _, parsed } => Ok(CoreExpr::Literal(
             CoreLiteral::LitNumericIntegral(CoreLitNumericIntegral {
                 loc: expr.val.loc.clone(),
                 value: parsed.unwrap(),
             }),
         )),
-        NumericLiteralValue::Float { raw, parsed } => Ok(CoreExpr::Literal(
+        NumericLiteralValue::Float { raw: _, parsed } => Ok(CoreExpr::Literal(
             CoreLiteral::LitNumericFloat(CoreLitNumericFloat {
                 loc: expr.val.loc.clone(),
                 value: parsed.unwrap(),
@@ -760,7 +755,7 @@ pub(crate) fn core_expr_from_lit_num(
 }
 
 pub(crate) fn core_expr_from_lit_string(
-    core_ty_con_env: &CoreTyConEnv,
+    _core_ty_con_env: &CoreTyConEnv,
     expr: &TypedVLitString,
 ) -> CoreResult<CoreExpr> {
     let value = match &expr.val.token {
@@ -832,6 +827,7 @@ fn core_expr_from_variable(
 /// core ir constructor definitions only use positional arguments
 fn core_expr_from_constructor(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVConstructorExpr,
 ) -> CoreResult<CoreExpr> {
     let TypedVConstructorExpr {
@@ -871,7 +867,7 @@ fn core_expr_from_constructor(
         }
 
         // apply value level arguments
-        apply_value_arguments(core_ty_con_env, core_expr, args)
+        apply_value_arguments(core_ty_con_env, ns, core_expr, args)
     } else {
         return Err(CoreError::AdtError(format!(
             "constructor {} not found in ADT {}",
@@ -882,24 +878,120 @@ fn core_expr_from_constructor(
 
 fn core_case_alt_from_typed_v_case_alt(
     core_ty_con_env: &CoreTyConEnv,
+    ns: &mut VVarNameSupply,
     expr: &TypedVCaseAlt,
 ) -> CoreResult<CoreCaseAlt> {
-    todo!("core_case_alt_from_typed_v_case_alt")
+    assert!(
+        expr.guard.is_none(),
+        "case guards should be desugared before Core IR conversion"
+    );
+    let body = core_expr_from_typed_v_expr(core_ty_con_env, ns, &expr.body)?;
+    core_case_alt_from_pattern_and_body(core_ty_con_env, &expr.pattern, body)
+}
+
+fn core_case_alt_from_pattern_and_body(
+    core_ty_con_env: &CoreTyConEnv,
+    pattern: &TypedVPattern,
+    body: CoreExpr,
+) -> CoreResult<CoreCaseAlt> {
+    match pattern {
+        TypedVPattern::Wild { .. } => Ok(CoreCaseAlt {
+            pattern: CoreAltConPattern::Default,
+            binders: vec![],
+            expr: body,
+        }),
+        // note: literal patterns in case expressions are desugared by
+        // desugar_literal_pattern pass earlier in the pipeline, which are then
+        // eliminated by `desugar_case_guard`, thus literal patterns might not
+        // reach Core IR, but we handle them here to support literal pattern
+        // matching in Core IR in the future if needed
+        TypedVPattern::Literal { literal, .. } => {
+            let core_lit = match literal {
+                VPatternLiteral::Numeric(num) => match &num.value {
+                    NumericLiteralValue::Int { raw: _, parsed } => {
+                        CoreLiteral::LitNumericIntegral(CoreLitNumericIntegral {
+                            loc: num.loc.clone(),
+                            value: parsed.unwrap(),
+                        })
+                    }
+                    NumericLiteralValue::Float { raw: _, parsed } => {
+                        CoreLiteral::LitNumericFloat(CoreLitNumericFloat {
+                            loc: num.loc.clone(),
+                            value: parsed.unwrap(),
+                        })
+                    }
+                },
+                VPatternLiteral::String(s) => {
+                    let value = match &s.token {
+                        ConcreteToken::LiteralString(x) => x.clone(),
+                        _ => unreachable!(),
+                    };
+                    CoreLiteral::LitString(CoreLitString {
+                        loc: s.loc.clone(),
+                        value,
+                    })
+                }
+            };
+            Ok(CoreCaseAlt {
+                pattern: CoreAltConPattern::Literal(core_lit),
+                binders: vec![],
+                expr: body,
+            })
+        }
+        TypedVPattern::Constructor {
+            ty_name,
+            constructor,
+            args,
+            ..
+        } => {
+            let binders = args
+                .iter()
+                .map(|arg_pat| match arg_pat {
+                    TypedVPattern::Variable { binder, ty, .. } => {
+                        Ok(CoreVar::ValueVariable(CoreVVar {
+                            vvar: binder.clone(),
+                            ty: core_ty_from_ty_expr(core_ty_con_env, ty),
+                        }))
+                    }
+                    _ => unreachable!(
+                        "constructor arguments must be normalized to variable binders before Core IR conversion"
+                    ),
+                })
+                .collect::<CoreResult<Vec<_>>>()?;
+
+            Ok(CoreCaseAlt {
+                pattern: CoreAltConPattern::Data(CoreDataCon {
+                    ty_name: ty_name.clone(),
+                    name: constructor.clone(),
+                }),
+                binders,
+                expr: body,
+            })
+        }
+        TypedVPattern::Variable { .. } => {
+            unreachable!(
+                "variable patterns in case alt should be normalized by normalize_case_default"
+            );
+        }
+        TypedVPattern::Range { .. } => {
+            unreachable!("range patterns should be desugared before Core IR conversion");
+        }
+        TypedVPattern::Record { .. } => {
+            unreachable!("record patterns should be desugared before Core IR conversion");
+        }
+    }
 }
 
 // helper impl. for doc printer trait --->>
 
 impl DocPrinter for CoreTopLevelBinding {
     fn to_doc(&self) -> Box<Doc> {
-        let Self {
-            var_binder,
-            abstraction,
-        } = self;
+        let Self { var_binder, body } = self;
 
         var_binder
             .to_doc()
             .cat_space_lit("=")
-            .cat_space(abstraction.to_doc())
+            .cat_space(body.to_doc())
     }
 }
 
@@ -920,7 +1012,7 @@ impl DocPrinter for CoreExpr {
 
 impl DocPrinter for CoreAbstr {
     fn to_doc(&self) -> Box<Doc> {
-        let Self { param, body, ty } = self;
+        let Self { param, body, ty: _ } = self;
         Doc::lit("\\")
             .cat_space(param.to_doc())
             .cat_space_lit("->")
@@ -949,10 +1041,10 @@ impl DocPrinter for CoreCase {
             scrutinee,
             result,
             alts,
-            ty,
+            ty: _,
         } = self;
 
-        let mut doc = Doc::line_force()
+        let doc = Doc::line_force()
             .cat_lit("case")
             .cat_space(scrutinee.to_doc())
             .cat_space_lit("of")
@@ -967,7 +1059,6 @@ impl DocPrinter for CoreCase {
     }
 }
 
-// [todo]
 impl DocPrinter for CoreCaseAlt {
     fn to_doc(&self) -> Box<Doc> {
         let Self {
@@ -976,10 +1067,18 @@ impl DocPrinter for CoreCaseAlt {
             expr,
         } = self;
 
-        pattern
-            .to_doc()
-            .cat_space_lit("->")
-            .cat_space(expr.to_doc().nest(4))
+        let mut doc_pat = pattern.to_doc();
+        for binder in binders.iter() {
+            doc_pat = doc_pat.cat_space(binder.to_doc());
+        }
+
+        doc_pat.cat_space_lit("->").cat_space(expr.to_doc().nest(4))
+    }
+}
+
+impl DocPrinter for CoreDataCon {
+    fn to_doc(&self) -> Box<Doc> {
+        Doc::lit(&format!("{}.{}", self.ty_name, self.name))
     }
 }
 
@@ -987,18 +1086,16 @@ impl DocPrinter for CoreAltConPattern {
     fn to_doc(&self) -> Box<Doc> {
         use CoreAltConPattern::*;
         match self {
-            // [todo]
-            // Data(x) => x.to_doc(),
-            Data(x) => Doc::lit(x),
+            Data(x) => x.to_doc(),
             Literal(x) => x.to_doc(),
-            Default => Doc::lit("Default"),
+            Default => Doc::lit("DEFAULT"),
         }
     }
 }
 
 impl DocPrinter for CoreLet {
     fn to_doc(&self) -> Box<Doc> {
-        let Self { defs, body, ty } = self;
+        let Self { defs, body, ty: _ } = self;
 
         let mut doc_defs = Doc::nil();
         for (idx, (var, def)) in defs.iter().enumerate() {

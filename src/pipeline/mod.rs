@@ -310,7 +310,8 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     let mut core_top_level_groups: Vec<CoreTopLevelBindingGroup> = vec![];
     for group in ty_check_results.iter() {
-        let core_top_level_group = core_typed_top_level_function_group(&core_ty_con_env, group);
+        let core_top_level_group =
+            core_typed_top_level_function_group(&core_ty_con_env, &mut v_var_ns, group);
         match core_top_level_group {
             Ok(x) => core_top_level_groups.push(x),
             Err(e) => return Err(e)?,
@@ -1309,4 +1310,32 @@ f item = case item of
         Err(e) => panic!("{:?}", e),
         _ => {}
     }
+}
+
+#[test]
+fn test_pipeline_case_scrutinee_polymorphic_variable() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+none = Maybe.Nothing
+
+f = case none of
+      Maybe.Nothing -> 0
+      _             -> 1
+"###;
+    assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_case_scrutinee_compound_expression() {
+    let content = r###"
+data Maybe T = Just T | Nothing
+
+g x = Maybe.Just x
+
+f x = case g x of
+        Maybe.Just v  -> v
+        Maybe.Nothing -> 0
+"###;
+    assert!(compile(content).is_ok());
 }
