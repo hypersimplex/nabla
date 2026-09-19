@@ -232,6 +232,12 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         }
     }
 
+    // [todo] compile pattern matching using decision tree for generating more
+    // efficient code
+
+    // [todo, optional] reduce code size by introducing join points; reference:
+    // Compiling without continuations (2017)
+
     println!("normalize constructor wildcards to fresh variable binders..");
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
