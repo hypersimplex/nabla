@@ -117,8 +117,8 @@ fn bool_pattern(is_true: bool) -> TypedVPattern {
     TypedVPattern::Constructor {
         ty_name: "Bool".to_string(),
         constructor: if is_true { "True" } else { "False" }.to_string(),
-        args: vec![],
+        args: Vec::new(),
         ty: mk_ty_bool(),
-        ty_args: vec![],
+        ty_args: Vec::new(),
     }
 }

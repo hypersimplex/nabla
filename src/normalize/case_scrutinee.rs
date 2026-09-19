@@ -77,7 +77,7 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
                 binder: binder.clone(),
                 ty: ty_binder.clone(),
                 ty_schematic: TyScheme {
-                    ty_vars_schematic: vec![],
+                    ty_vars_schematic: Vec::new(),
                     ty_expr: Box::new(ty_binder.clone()),
                 },
             };
@@ -88,7 +88,7 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
                 ty: ty_binder.clone(),
                 ty_args: Vec::new(),
                 ty_schematic: TyScheme {
-                    ty_vars_schematic: vec![],
+                    ty_vars_schematic: Vec::new(),
                     ty_expr: Box::new(ty_binder),
                 },
             });

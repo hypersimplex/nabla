@@ -223,7 +223,7 @@ fn desugar_pattern_let_expr(ns: &mut VVarNameSupply, let_expr: &TypedVLetExpr) -
 
 /// collect variable binders and their types from nested patterns in left-to-right DFS order
 fn collect_pattern_binders_nested_in_order(pattern: &TypedVPattern) -> Vec<(VVar, TyExpr)> {
-    let mut binders_typed = vec![];
+    let mut binders_typed = Vec::new();
     fn collect(
         pattern: &TypedVPattern,
         binders_typed: &mut Vec<(VVar, TyExpr)>,
@@ -293,7 +293,7 @@ fn mk_typed_vexpr_var(var: &VVar, ty: &TyExpr) -> TypedVExpr {
         ty: ty.clone(),
         ty_args: Vec::new(),
         ty_schematic: TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(ty.clone()),
         },
     })
@@ -306,7 +306,7 @@ fn mk_typed_vpattern_variable(binder: &VVar, ty: &TyExpr) -> TypedVPattern {
         ty: ty.clone(),
         // [TODO]
         ty_schematic: TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(ty.clone()),
         },
     }

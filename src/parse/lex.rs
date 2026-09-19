@@ -53,14 +53,14 @@ pub(crate) fn parse_content_to_concrete_tokens(
 ) -> Result<LexedTokensAndLocs, ParseError> {
     let mut loc = Location::new(file_path);
     let mut cur = Cur::new(file_content.as_bytes());
-    let mut out = vec![];
+    let mut out = Vec::new();
     lex_root(&mut cur, &mut loc, &mut out)?;
     let out = assign_line_start(out.as_slice());
     Ok(LexedTokensAndLocs(out))
 }
 
 fn assign_line_start(inputs: &[ConcreteTokenAndLoc]) -> Vec<ConcreteTokenAndLoc> {
-    let mut ret = vec![];
+    let mut ret = Vec::new();
     // state used to set the relevant field for each output token
     let mut start_next_line = true;
     for i in inputs {
@@ -176,7 +176,7 @@ fn consume_comments(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteTok
     let span_comment_start = Span::new(cur.pos_linear(), cur.row(), cur.col());
 
     //consume rest of the line, not including line break
-    let mut comments = vec![];
+    let mut comments = Vec::new();
     while let Some(x) = cur.peek_nth(1) {
         if try_match_single_token(Some(x), ConcreteToken::LineDelimiter) {
             break;

@@ -110,7 +110,7 @@ pub(crate) fn desugar_literal_range_pattern_case(
                             binder: simple_binder_var.clone(),
                             ty: ty.clone(),
                             ty_schematic: TyScheme {
-                                ty_vars_schematic: vec![],
+                                ty_vars_schematic: Vec::new(),
                                 ty_expr: Box::new(ty.clone()),
                             },
                         };
@@ -118,9 +118,9 @@ pub(crate) fn desugar_literal_range_pattern_case(
                         let binder_typed_expr = TypedVExpr::Variable(TypedVVariable {
                             var: simple_binder_var,
                             ty: arg.ty().clone(),
-                            ty_args: vec![],
+                            ty_args: Vec::new(),
                             ty_schematic: TyScheme {
-                                ty_vars_schematic: vec![],
+                                ty_vars_schematic: Vec::new(),
                                 ty_expr: Box::new(ty.clone()),
                             },
                         });

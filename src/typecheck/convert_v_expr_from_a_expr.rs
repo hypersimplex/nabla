@@ -93,7 +93,7 @@ fn v_expr_from_app_expr(
         return (
             VExpr::Application(VAppExpr {
                 callable,
-                args: vec![],
+                args: Vec::new(),
             }),
             fun.type_expr.as_ref().map(lower_type_annot_to_ty_expr),
         );

@@ -306,7 +306,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
 
     let core_ty_con_env: CoreTyConEnv = (&ty_env).into();
 
-    let mut core_top_level_groups: Vec<CoreTopLevelBindingGroup> = vec![];
+    let mut core_top_level_groups: Vec<CoreTopLevelBindingGroup> = Vec::new();
     for group in ty_check_results.iter() {
         let core_top_level_group =
             core_typed_top_level_function_group(&core_ty_con_env, &mut v_var_ns, group);

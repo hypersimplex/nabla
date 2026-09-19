@@ -341,7 +341,7 @@ fn mk_var_pat(var: &VVar, ty: &TyExpr) -> TypedVPattern {
         binder: var.clone(),
         ty: ty.clone(),
         ty_schematic: TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(ty.clone()),
         },
     }
@@ -351,9 +351,9 @@ fn mk_var_expr(var: &VVar, ty: &TyExpr) -> TypedVExpr {
     TypedVExpr::Variable(TypedVVariable {
         var: var.clone(),
         ty: ty.clone(),
-        ty_args: vec![],
+        ty_args: Vec::new(),
         ty_schematic: TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(ty.clone()),
         },
     })

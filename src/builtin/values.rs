@@ -112,7 +112,7 @@ pub fn init_v_var_ty_scheme_builtin_unary_not(
             builtin: Some(FnBuiltin::UnaryLogicalNot),
         }),
         TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(mk_ty_arrow(mk_ty_bool(), mk_ty_bool())),
         },
     );
@@ -316,7 +316,7 @@ pub fn init_v_var_ty_scheme_builtin_logical_and(
             builtin: Some(FnBuiltin::LogicalAnd),
         }),
         TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(mk_ty_arrow_multi(
                 vec![mk_ty_bool(), mk_ty_bool()],
                 mk_ty_bool(),
@@ -338,7 +338,7 @@ pub fn init_v_var_ty_scheme_builtin_logical_or(
             builtin: Some(FnBuiltin::LogicalOr),
         }),
         TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             ty_expr: Box::new(mk_ty_arrow_multi(
                 vec![mk_ty_bool(), mk_ty_bool()],
                 mk_ty_bool(),
@@ -378,7 +378,7 @@ pub fn init_v_var_ty_scheme_builtin_i64_from_f64(
             builtin: Some(FnBuiltin::ConvertI64FromF64),
         }),
         TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             // maps to a function type expression: f64 -> i64
             ty_expr: Box::new(mk_ty_arrow(mk_ty_f64(), mk_ty_i64())),
         },
@@ -397,7 +397,7 @@ pub fn init_v_var_ty_scheme_builtin_f64_from_i64(
             builtin: Some(FnBuiltin::ConvertF64FromI64),
         }),
         TyScheme {
-            ty_vars_schematic: vec![],
+            ty_vars_schematic: Vec::new(),
             // maps to a function type expression: i64 -> f64
             ty_expr: Box::new(mk_ty_arrow(mk_ty_i64(), mk_ty_f64())),
         },
@@ -557,7 +557,7 @@ pub(crate) fn mk_builtin_typed_vexpr_logical_and(
     let callable = TypedVExpr::Variable(TypedVVariable {
         var: var_logical_and,
         ty: *ty_logical_and,
-        ty_args: vec![],
+        ty_args: Vec::new(),
         ty_schematic: ty_scheme.clone(),
     });
 

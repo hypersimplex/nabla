@@ -111,7 +111,7 @@ impl TyConEnv {
             ADTDef {
                 name,
                 ty_params,
-                constructors: vec![],
+                constructors: Vec::new(),
             },
         );
     }

@@ -38,7 +38,7 @@ impl<'a> From<&'a TyConEnv> for CoreTyConEnv {
                 CoreADTDef {
                     name: adt.name.clone(),
                     ty_params: adt.ty_params.clone(),
-                    constructors: vec![],
+                    constructors: Vec::new(),
                 },
             );
         }

@@ -478,7 +478,7 @@ pub(crate) fn ty_check_abstraction_typed(
         env_lambda.insert(
             param.binder.clone(),
             TyScheme {
-                ty_vars_schematic: vec![],
+                ty_vars_schematic: Vec::new(),
                 ty_expr: Box::new(ty_binder.clone()),
             },
         );
@@ -875,7 +875,7 @@ pub(crate) fn ty_check_binding_group(
             env_v_var_to_ty_scheme_binding_seed.insert(
                 pat_var.clone(),
                 TyScheme {
-                    ty_vars_schematic: vec![],
+                    ty_vars_schematic: Vec::new(),
                     ty_expr: Box::new(TyExpr::TyVar(ty_var_ns.generate())),
                 },
             );
@@ -885,12 +885,12 @@ pub(crate) fn ty_check_binding_group(
     }
 
     // compute mutually dependent definition groups
-    let mut scc_groups: Vec<BTreeSet<usize>> = vec![];
+    let mut scc_groups: Vec<BTreeSet<usize>> = Vec::new();
     {
         let mut map_def_to_previsit = BTreeMap::new();
         let mut map_def_to_earliest = BTreeMap::new();
         let mut map_def_to_scc = BTreeMap::new();
-        let mut stack = vec![];
+        let mut stack = Vec::new();
         let mut generate_previsit = 0;
 
         // extract free value-level variables in each RHS and retain only binders from
@@ -1342,7 +1342,7 @@ pub(crate) fn ty_check_let_typed(
     let typed_body_expr = apply_subst_typed_expr(&subst_accum, typed_body_expr);
     let ty_body = typed_body_expr.ty().clone();
 
-    let mut typed_defs = vec![];
+    let mut typed_defs = Vec::new();
     for typed_binding_def_pairs in groups_of_typed_binding_def_pairs.into_iter() {
         let defs: Vec<(TypedVPattern, TypedVExpr)> = typed_binding_def_pairs
             .into_values()
@@ -1736,7 +1736,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
             env.insert(
                 var.clone(),
                 TyScheme {
-                    ty_vars_schematic: vec![],
+                    ty_vars_schematic: Vec::new(),
                     ty_expr: Box::new(ty.clone()),
                 },
             );

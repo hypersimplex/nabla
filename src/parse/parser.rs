@@ -380,7 +380,7 @@ impl Parser {
         let layout_id = self.layout_stream.open_implicit_layout(&anchor)?;
         self.consume_layout_start(layout_id)?;
 
-        let mut items = vec![];
+        let mut items = Vec::new();
 
         let check_allow_empty = |items: &[T]| -> ParseResult<()> {
             if items.is_empty() && !allow_empty {
@@ -1038,7 +1038,7 @@ mod tests {
                             closes_before_in(),
                         )?
                     } else {
-                        vec![]
+                        Vec::new()
                     };
                     Ok((identifier, nested))
                 },
@@ -1053,7 +1053,7 @@ mod tests {
                     String::from("outer"),
                     vec![String::from("inner_a"), String::from("inner_b")],
                 ),
-                (String::from("next_outer"), vec![]),
+                (String::from("next_outer"), Vec::new()),
             ]
         );
         assert_current_type(

@@ -31,7 +31,7 @@ impl<K: Clone + Ord, V: Clone> PersistentMap<K, V> {
     }
     pub(crate) fn in_order(&self) -> Vec<(K, V)> {
         match &self.0 {
-            None => vec![],
+            None => Vec::new(),
             Some(x) => x.in_order(),
         }
     }
@@ -44,7 +44,7 @@ impl<K: Clone + Ord, V: Clone> PersistentMap<K, V> {
     pub(crate) fn iter(&self) -> PersistentMapInnerIter<K, V> {
         match &self.0 {
             None => PersistentMapInnerIter {
-                stack_traversal: vec![],
+                stack_traversal: Vec::new(),
                 idx: 0,
             },
             Some(x) => x.iter(),
@@ -137,7 +137,7 @@ impl<K: Clone + Ord, V: Clone> PersistentMapInner<K, V> {
     }
 
     pub(crate) fn in_order(&self) -> Vec<(K, V)> {
-        let mut items = vec![];
+        let mut items = Vec::new();
         if let Some(branch) = self.left.as_ref() {
             items.append(&mut branch.in_order());
         }

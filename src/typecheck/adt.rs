@@ -262,16 +262,16 @@ pub(crate) fn register_adt_into_type_env(
 
     env.add_adt(ADTDef {
         name: "Bool".to_string(),
-        ty_params: vec![],
+        ty_params: Vec::new(),
         constructors: vec![
             ConstructorDef {
                 name: "True".to_string(),
-                field_types: vec![],
+                field_types: Vec::new(),
                 field_names: None,
             },
             ConstructorDef {
                 name: "False".to_string(),
-                field_types: vec![],
+                field_types: Vec::new(),
                 field_names: None,
             },
         ],
@@ -284,7 +284,7 @@ pub(crate) fn register_adt_into_type_env(
         constructors: vec![
             ConstructorDef {
                 name: "Nothing".to_string(),
-                field_types: vec![],
+                field_types: Vec::new(),
                 field_names: None,
             },
             ConstructorDef {
@@ -297,10 +297,10 @@ pub(crate) fn register_adt_into_type_env(
 
     env.add_adt(ADTDef {
         name: "Unit".to_string(),
-        ty_params: vec![],
+        ty_params: Vec::new(),
         constructors: vec![ConstructorDef {
             name: "Unit".to_string(),
-            field_types: vec![],
+            field_types: Vec::new(),
             field_names: None,
         }],
     });

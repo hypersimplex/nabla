@@ -170,7 +170,7 @@ use super::parser::{
 // top-level grammar ---
 
 pub(crate) fn parse_concrete_top_level(input: LexedTokensAndLocs) -> ParseResult<TopLevelItems> {
-    let mut result = vec![];
+    let mut result = Vec::new();
     let mut parser = Parser::new(input);
     match parser.peek()? {
         Some(x) if matches!(x.ty, ParserTokenType::Concrete(ConcreteToken::EndOfFile)) => {}

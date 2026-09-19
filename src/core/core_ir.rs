@@ -514,7 +514,7 @@ pub(crate) fn core_typed_top_level_function_group(
     ns: &mut VVarNameSupply,
     group: &BTreeMap<usize, TypedTopLevelFunction>,
 ) -> CoreResult<CoreTopLevelBindingGroup> {
-    let mut ret = vec![];
+    let mut ret = Vec::new();
     for (id, top_lvl_function) in group.iter() {
         ret.push(core_top_level_binding_from_typed_top_level_function(
             core_ty_con_env,
@@ -899,7 +899,7 @@ fn core_case_alt_from_pattern_and_body(
     match pattern {
         TypedVPattern::Wild { .. } => Ok(CoreCaseAlt {
             pattern: CoreAltConPattern::Default,
-            binders: vec![],
+            binders: Vec::new(),
             expr: body,
         }),
         // note: literal patterns in case expressions are desugared by
@@ -936,7 +936,7 @@ fn core_case_alt_from_pattern_and_body(
             };
             Ok(CoreCaseAlt {
                 pattern: CoreAltConPattern::Literal(core_lit),
-                binders: vec![],
+                binders: Vec::new(),
                 expr: body,
             })
         }
