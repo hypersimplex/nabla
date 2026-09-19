@@ -64,4 +64,14 @@ isEven n = case n of
 isOdd n = case n of
   0 -> Bool.False
   _ -> isEven (n - 1)
+
+add x y = x + y
+
+addTen = add 10.0
+
+// explicit annotation
+makeAdder :: i64 -> i64 -> i64
+makeAdder base =
+  let adder x = add base x
+  in adder
 ```
