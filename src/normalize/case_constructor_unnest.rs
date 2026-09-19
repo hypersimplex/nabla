@@ -1,6 +1,5 @@
 use crate::typecheck::ty_con_env::TyConEnv;
 use crate::typecheck::ty_expr::TyExpr;
-use crate::typecheck::ty_scheme::TyScheme;
 use crate::typecheck::v_expr::VVar;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name_supply::VVarNameSupply;
@@ -298,7 +297,7 @@ fn unpack_nested_argument(
     //
     // otherwise, we don't need to consider the remaining alternatives since
     // they are not reachable
-    if (has_guard || is_pattern_refutable(ty_env, pat)) && !alts_fallback.is_empty() {
+    if (has_guard || pat.is_refutable(ty_env)) && !alts_fallback.is_empty() {
         inner_alts.push(TypedVCaseAlt {
             pattern: TypedVPattern::Wild {
                 ty: ty_var_binder_to_pat.clone(),
@@ -319,44 +318,3 @@ fn unpack_nested_argument(
         ty: ty_outer.clone(),
     })
 }
-
-// other helpers --->>
-
-/// determine if a pattern match ever fails at runtime without other knowledge:
-/// - sum types (with more than 1 constructor), literals, and ranges are refutable
-/// - single constructor product types, variables, and wildcards are irrefutable
-fn is_pattern_refutable(ty_env: &TyConEnv, pat: &TypedVPattern) -> bool {
-    match pat {
-        TypedVPattern::Constructor { ty_name, .. } => ty_env
-            .get_adt(ty_name)
-            .map_or(true, |adt| adt.constructors.len() > 1),
-        TypedVPattern::Literal { .. } | TypedVPattern::Range { .. } => true,
-        TypedVPattern::Variable { .. } | TypedVPattern::Wild { .. } => false,
-        TypedVPattern::Record { .. } => false,
-    }
-}
-
-fn mk_var_pat(var: &VVar, ty: &TyExpr) -> TypedVPattern {
-    TypedVPattern::Variable {
-        binder: var.clone(),
-        ty: ty.clone(),
-        ty_schematic: TyScheme {
-            ty_vars_schematic: Vec::new(),
-            ty_expr: Box::new(ty.clone()),
-        },
-    }
-}
-
-fn mk_var_expr(var: &VVar, ty: &TyExpr) -> TypedVExpr {
-    TypedVExpr::Variable(TypedVVariable {
-        var: var.clone(),
-        ty: ty.clone(),
-        ty_args: Vec::new(),
-        ty_schematic: TyScheme {
-            ty_vars_schematic: Vec::new(),
-            ty_expr: Box::new(ty.clone()),
-        },
-    })
-}
-
-// <<--- helpers

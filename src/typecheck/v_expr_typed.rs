@@ -1,6 +1,7 @@
 //! value level constructs with required type annotation, produced after type
 //! checking/inference
 
+use crate::typecheck::ty_con_env::TyConEnv;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_scheme::*;
 use crate::typecheck::v_expr::*;
@@ -195,6 +196,71 @@ impl TypedVExpr {
     }
 }
 
+impl TypedVPattern {
+    pub(crate) fn ty(&self) -> &TyExpr {
+        match self {
+            TypedVPattern::Wild { ty }
+            | TypedVPattern::Variable { ty, .. }
+            | TypedVPattern::Literal { ty, .. }
+            | TypedVPattern::Range { ty, .. }
+            | TypedVPattern::Constructor { ty, .. }
+            | TypedVPattern::Record { ty, .. } => ty,
+        }
+    }
+
+    /// determine if a pattern match ever fails at runtime without other knowledge:
+    /// - sum types (with more than 1 constructor), literals, and ranges are refutable
+    /// - single constructor product types, variables, and wildcards are irrefutable
+    pub(crate) fn is_refutable(&self, ty_env: &TyConEnv) -> bool {
+        match self {
+            TypedVPattern::Constructor { ty_name, .. } => ty_env
+                .get_adt(ty_name)
+                .map_or(true, |adt| adt.constructors.len() > 1),
+            TypedVPattern::Literal { .. } | TypedVPattern::Range { .. } => true,
+            TypedVPattern::Variable { .. } | TypedVPattern::Wild { .. } => false,
+            TypedVPattern::Record { .. } => false,
+        }
+    }
+}
+
+// other helpers --->>
+
+/// helper to build a simple typed variable
+pub(crate) fn mk_var_expr(var: &VVar, ty: &TyExpr) -> TypedVExpr {
+    TypedVExpr::Variable(TypedVVariable {
+        var: var.clone(),
+        ty: ty.clone(),
+        ty_args: Vec::new(),
+        ty_schematic: TyScheme {
+            ty_vars_schematic: Vec::new(),
+            ty_expr: Box::new(ty.clone()),
+        },
+    })
+}
+
+/// helper to build a simple pattern variable
+pub(crate) fn mk_var_pat(var: &VVar, ty: &TyExpr) -> TypedVPattern {
+    TypedVPattern::Variable {
+        binder: var.clone(),
+        ty: ty.clone(),
+        ty_schematic: TyScheme {
+            ty_vars_schematic: Vec::new(),
+            ty_expr: Box::new(ty.clone()),
+        },
+    }
+}
+
+/// helper to build a boolean constructor pattern (`Bool.True` or `Bool.False`)
+pub(crate) fn mk_bool_pat(is_true: bool) -> TypedVPattern {
+    TypedVPattern::Constructor {
+        ty_name: "Bool".to_string(),
+        constructor: if is_true { "True" } else { "False" }.to_string(),
+        args: Vec::new(),
+        ty: mk_ty_bool(),
+        ty_args: Vec::new(),
+    }
+}
+
 pub(crate) fn mk_typed_vexpr_from_v_lit_numeric(lit: &VLitNumeric) -> TypedVExpr {
     TypedVExpr::LitNumeric(TypedVLitNumeric {
         val: lit.clone(),
@@ -209,18 +275,7 @@ pub(crate) fn mk_typed_vexpr_from_v_lit_string(lit: &VLitString) -> TypedVExpr {
     })
 }
 
-impl TypedVPattern {
-    pub(crate) fn ty(&self) -> &TyExpr {
-        match self {
-            TypedVPattern::Wild { ty }
-            | TypedVPattern::Variable { ty, .. }
-            | TypedVPattern::Literal { ty, .. }
-            | TypedVPattern::Range { ty, .. }
-            | TypedVPattern::Constructor { ty, .. }
-            | TypedVPattern::Record { ty, .. } => ty,
-        }
-    }
-}
+// <<--- helpers
 
 // helper impl. for doc printer trait --->>
 

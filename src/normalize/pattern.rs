@@ -1,5 +1,4 @@
 use crate::typecheck::ty_expr::*;
-use crate::typecheck::ty_scheme::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name::*;
@@ -105,7 +104,7 @@ fn desugar_pattern_abstr(ns: &mut VVarNameSupply, abstr: &TypedVAbstrExpr) -> Ty
     let params_desugared = params
         .into_iter()
         .map(|TypedVAbstrParam { binder, ty, .. }| TypedVAbstrParam {
-            pattern: mk_typed_vpattern_variable(binder, ty),
+            pattern: mk_var_pat(binder, ty),
             binder: binder.clone(),
             ty: ty.clone(),
         })
@@ -187,10 +186,7 @@ fn desugar_pattern_let_expr(ns: &mut VVarNameSupply, let_expr: &TypedVLetExpr) -
         // introduce a fresh temp scrutinee and bind to RHS
         let binder_scrutinee = ns.generate();
         let ty_scrutinee = pattern.ty().clone();
-        lowered_defs.push((
-            mk_typed_vpattern_variable(&binder_scrutinee, &ty_scrutinee),
-            rhs,
-        ));
+        lowered_defs.push((mk_var_pat(&binder_scrutinee, &ty_scrutinee), rhs));
 
         // expose each pattern binder as a peer let binding via a selector case;
         // this can increase number of defs compared to the original defs
@@ -204,13 +200,10 @@ fn desugar_pattern_let_expr(ns: &mut VVarNameSupply, let_expr: &TypedVLetExpr) -
                 &binder_scrutinee,
                 &ty_scrutinee,
                 pattern,
-                &mk_typed_vexpr_var(&binder, &ty_binder),
+                &mk_var_expr(&binder, &ty_binder),
                 &ty_binder,
             );
-            lowered_defs.push((
-                mk_typed_vpattern_variable(&binder, &ty_binder),
-                selector_rhs,
-            ));
+            lowered_defs.push((mk_var_pat(&binder, &ty_binder), selector_rhs));
         }
     }
 
@@ -276,7 +269,7 @@ fn mk_case_with_single_alt(
     ty: &TyExpr,
 ) -> TypedVExpr {
     TypedVExpr::Case(TypedVCaseExpr {
-        arg: Box::new(mk_typed_vexpr_var(binder_scrutinee, ty_scrutinee)),
+        arg: Box::new(mk_var_expr(binder_scrutinee, ty_scrutinee)),
         alts: vec![TypedVCaseAlt {
             pattern: pattern.clone(),
             guard: None,
@@ -284,30 +277,4 @@ fn mk_case_with_single_alt(
         }],
         ty: ty.clone(),
     })
-}
-
-/// helper to build a simple typed variable
-fn mk_typed_vexpr_var(var: &VVar, ty: &TyExpr) -> TypedVExpr {
-    TypedVExpr::Variable(TypedVVariable {
-        var: var.clone(),
-        ty: ty.clone(),
-        ty_args: Vec::new(),
-        ty_schematic: TyScheme {
-            ty_vars_schematic: Vec::new(),
-            ty_expr: Box::new(ty.clone()),
-        },
-    })
-}
-
-/// helper to build a simple pattern variable
-fn mk_typed_vpattern_variable(binder: &VVar, ty: &TyExpr) -> TypedVPattern {
-    TypedVPattern::Variable {
-        binder: binder.clone(),
-        ty: ty.clone(),
-        // [TODO]
-        ty_schematic: TyScheme {
-            ty_vars_schematic: Vec::new(),
-            ty_expr: Box::new(ty.clone()),
-        },
-    }
 }
