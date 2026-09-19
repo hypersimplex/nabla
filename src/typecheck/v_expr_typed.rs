@@ -213,11 +213,19 @@ impl TypedVPattern {
     /// - single constructor product types, variables, and wildcards are irrefutable
     pub(crate) fn is_refutable(&self, ty_env: &TyConEnv) -> bool {
         match self {
-            TypedVPattern::Constructor { ty_name, .. } => ty_env
-                .get_adt(ty_name)
-                .map_or(true, |adt| adt.constructors.len() > 1),
+            TypedVPattern::Constructor { ty_name, .. } => {
+                ty_env
+                    .get_adt(ty_name)
+                    .expect("ICE: constructor pattern type not found in TyConEnv")
+                    .constructors
+                    .len()
+                    > 1
+            }
             TypedVPattern::Literal { .. } | TypedVPattern::Range { .. } => true,
             TypedVPattern::Variable { .. } | TypedVPattern::Wild { .. } => false,
+            // records are single-constructor product types (irrefutable);
+            // patterns are assumed to be unnested in prior passes in the
+            // pipeline
             TypedVPattern::Record { .. } => false,
         }
     }
