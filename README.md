@@ -24,6 +24,7 @@ Planned features & non-features:
 
 ## Remaining Todo
 
+- STG IR
 - code generation
 - runtime support
 
