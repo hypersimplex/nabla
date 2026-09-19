@@ -1,6 +1,3 @@
-use crate::typecheck::ty_expr::TyExpr;
-use crate::typecheck::ty_scheme::TyScheme;
-use crate::typecheck::v_expr::VVar;
 use crate::typecheck::v_expr_typed::*;
 use crate::typecheck::v_var_name_supply::VVarNameSupply;
 
@@ -101,16 +98,5 @@ fn normalize_pattern(ns: &mut VVarNameSupply, pat: &TypedVPattern) -> TypedVPatt
             }
         }
         other => other.clone(),
-    }
-}
-
-fn mk_var_pat(var: &VVar, ty: &TyExpr) -> TypedVPattern {
-    TypedVPattern::Variable {
-        binder: var.clone(),
-        ty: ty.clone(),
-        ty_schematic: TyScheme {
-            ty_vars_schematic: Vec::new(),
-            ty_expr: Box::new(ty.clone()),
-        },
     }
 }

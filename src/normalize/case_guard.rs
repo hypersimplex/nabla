@@ -57,12 +57,12 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
                             arg: Box::new(g),
                             alts: vec![
                                 TypedVCaseAlt {
-                                    pattern: bool_pattern(true),
+                                    pattern: mk_bool_pat(true),
                                     guard: None,
                                     body,
                                 },
                                 TypedVCaseAlt {
-                                    pattern: bool_pattern(false),
+                                    pattern: mk_bool_pat(false),
                                     guard: None,
                                     body: TypedVExpr::Case(TypedVCaseExpr {
                                         arg: Box::new(scrutinee.clone()),
@@ -109,16 +109,5 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
             TypedVExpr::Let(let_expr_new)
         }
         other => other.clone(),
-    }
-}
-
-// [todo] relocate this to common utility file
-fn bool_pattern(is_true: bool) -> TypedVPattern {
-    TypedVPattern::Constructor {
-        ty_name: "Bool".to_string(),
-        constructor: if is_true { "True" } else { "False" }.to_string(),
-        args: Vec::new(),
-        ty: mk_ty_bool(),
-        ty_args: Vec::new(),
     }
 }
