@@ -6,7 +6,7 @@
 
 Experimenting and learning about lazy functional language implementation from
 first principles, with inspiration from Miranda, Haskell, Rust, and various
-literatures from SPJ, Wolfe, and Banerjee.
+literatures from SPJ (1987, 1992), Wolfe (1995), and Banerjee (1993).
 
 Planned features & non-features:
 - no support for type classes for now (eg: have "System F"-like core)
@@ -64,4 +64,14 @@ isEven n = case n of
 isOdd n = case n of
   0 -> Bool.False
   _ -> isEven (n - 1)
+
+add x y = x + y
+
+addTen = add 10.0
+
+// explicit annotation
+makeAdder :: i64 -> i64 -> i64
+makeAdder base =
+  let adder x = add base x
+  in adder
 ```
