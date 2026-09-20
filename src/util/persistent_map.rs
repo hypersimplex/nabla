@@ -53,7 +53,7 @@ impl<K: Clone + Ord, V: Clone> PersistentMap<K, V> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PersistentMapInner<K, V> {
+struct PersistentMapInner<K, V> {
     key: K,
     value: V,
     left: Option<Arc<PersistentMapInner<K, V>>>,
