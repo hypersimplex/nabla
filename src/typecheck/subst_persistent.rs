@@ -9,7 +9,7 @@ pub(crate) type SubstPersistent = PersistentMap<TyVarName, TyExpr>;
 
 /// an implementation that applies identity function when key is not found
 #[derive(Debug, Clone)]
-pub(crate) struct SubstPersistentIdent(pub PersistentMap<TyVarName, TyExpr>);
+pub(crate) struct SubstPersistentIdent(PersistentMap<TyVarName, TyExpr>);
 
 impl Subst for SubstPersistent {
     fn new(key: TyVarName, val: TyExpr) -> Self {
