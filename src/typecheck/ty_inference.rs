@@ -472,7 +472,7 @@ pub(crate) fn ty_check_abstraction_typed(
 
     // process parameters
     for param in v_abstr_expr.params.iter() {
-        env_lambda = env_lambda.apply_subst_to_env(&subst_params);
+        env_lambda.apply_subst_to_env_in_place(&subst_params);
 
         let ty_binder = TyExpr::TyVar(ty_var_ns.generate());
         env_lambda.insert(
@@ -487,20 +487,20 @@ pub(crate) fn ty_check_abstraction_typed(
             ty_check_pattern_typed(&mut env_lambda, ty_env, ty_var_ns, &param.pattern)?;
         subst_params = subst_compose(&pattern_subst, &subst_params);
 
-        env_lambda = env_lambda.apply_subst_to_env(&subst_params);
+        env_lambda.apply_subst_to_env_in_place(&subst_params);
 
         let ty_binder_resolved = subst_ty(&subst_params, &ty_binder);
         let pattern_resolved = subst_ty(&subst_params, typed_pattern_raw.ty());
         subst_params = unify_ty_exprs(&subst_params, &ty_binder_resolved, &pattern_resolved)?;
 
-        env_lambda = env_lambda.apply_subst_to_env(&subst_params);
+        env_lambda.apply_subst_to_env_in_place(&subst_params);
 
         if let Some(param_annot) = &param.annotation {
             let annot_resolved = subst_ty(&subst_params, param_annot);
             let ty_binder_substituted = subst_ty(&subst_params, &ty_binder);
             subst_params = unify_ty_exprs(&subst_params, &ty_binder_substituted, &annot_resolved)?;
 
-            env_lambda = env_lambda.apply_subst_to_env(&subst_params);
+            env_lambda.apply_subst_to_env_in_place(&subst_params);
         }
 
         typed_params.push(TypedVAbstrParam {
@@ -512,7 +512,7 @@ pub(crate) fn ty_check_abstraction_typed(
 
     // process body
 
-    env_lambda = env_lambda.apply_subst_to_env(&subst_params);
+    env_lambda.apply_subst_to_env_in_place(&subst_params);
 
     let (body_vexpr, body_optional_texpr) = v_abstr_expr.body.as_ref();
     let (body_subst, typed_body_raw) =
@@ -669,7 +669,7 @@ pub(crate) fn ty_check_case_typed(
         let subst_pattern_unified =
             unify_ty_exprs(&subst_pattern, typed_scrutinee.ty(), typed_pattern.ty())?;
 
-        env_alt = env_alt.apply_subst_to_env(&subst_pattern_unified);
+        env_alt.apply_subst_to_env_in_place(&subst_pattern_unified);
 
         let (subst_alt, typed_guard) = match &alt.guard {
             Some((guard_expr, _)) => {
@@ -681,7 +681,7 @@ pub(crate) fn ty_check_case_typed(
                     unify_ty_exprs(&subst_alt, typed_guard_subst.ty(), &mk_ty_bool())?;
                 subst_alt = subst_guard_bool;
 
-                env_alt = env_alt.apply_subst_to_env(&subst_alt);
+                env_alt.apply_subst_to_env_in_place(&subst_alt);
 
                 (subst_alt, Some(typed_guard_subst))
             }
@@ -733,11 +733,11 @@ pub(crate) fn ty_check_case_typed(
     let mut subst_bodies = subst_id();
     let mut typed_bodies = Vec::new();
     {
-        for alt_info in alt_infos.iter() {
-            let mut env_with_subst = alt_info.env.apply_subst_to_env(&subst_bodies);
+        for alt_info in alt_infos.iter_mut() {
+            alt_info.env.apply_subst_to_env_in_place(&subst_bodies);
 
             let (subst_body, typed_body) =
-                ty_check_vexpr_typed(&mut env_with_subst, ty_env, ty_var_ns, &alt_info.body_expr)?;
+                ty_check_vexpr_typed(&mut alt_info.env, ty_env, ty_var_ns, &alt_info.body_expr)?;
             subst_bodies = subst_compose(&subst_body, &subst_bodies);
             typed_bodies.push(typed_body);
         }
@@ -958,8 +958,7 @@ pub(crate) fn ty_check_binding_group(
             let (pattern, def_expr, optional_annot): &(VPattern, VExpr, Option<TyScheme>) =
                 &defs[*idx];
 
-            *env_v_var_to_ty_scheme_binding_seed =
-                env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
+            env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env_in_place(&subst_accum);
 
             let (subst, bound_vvars_in_pattern, typed_binding_expr) =
                 ty_check_pattern_typed_with_seeded_binders(
@@ -975,8 +974,7 @@ pub(crate) fn ty_check_binding_group(
                 apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
 
             // typecheck RHS
-            *env_v_var_to_ty_scheme_binding_seed =
-                env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env(&subst_accum);
+            env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env_in_place(&subst_accum);
 
             let (subst, typed_rhs_vexpr) = ty_check_vexpr_typed(
                 env_v_var_to_ty_scheme_binding_seed,
@@ -1069,7 +1067,7 @@ pub(crate) fn ty_check_binding_group(
         // - update monomorphic placeholders after generalization completes
         let free_ty_vars_in_env: BTreeSet<_> = {
             let mut env_outer_copy = env_outer.clone();
-            env_outer_copy = env_outer_copy.apply_subst_to_env(&subst_accum);
+            env_outer_copy.apply_subst_to_env_in_place(&subst_accum);
 
             // `free(env)` for HM generalization:
             // type vars in scheme bodies that are not bound by the scheme
@@ -1333,7 +1331,7 @@ pub(crate) fn ty_check_let_typed(
         ty_check_binding_group(&mut env_working, &mut env_outer, ty_env, ty_var_ns, &defs)?;
 
     // typecheck body of let expression using accumulated env and substitutions
-    env_working = env_working.apply_subst_to_env(&subst_accum);
+    env_working.apply_subst_to_env_in_place(&subst_accum);
 
     let (subst_body, typed_body_expr) =
         ty_check_vexpr_typed(&mut env_working, ty_env, ty_var_ns, &vexpr.body.0)?;
@@ -1785,10 +1783,10 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
             let (subst_start, typed_start) =
                 ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &v_expr_start)?;
 
-            let mut env_clone_end = env_clone.apply_subst_to_env(&subst_start);
+            env_clone.apply_subst_to_env_in_place(&subst_start);
 
             let (subst_end, typed_end) =
-                ty_check_vexpr_typed(&mut env_clone_end, ty_env, ty_var_ns, &v_expr_end)?;
+                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &v_expr_end)?;
             let mut subst = subst_compose(&subst_end, &subst_start);
             subst = unify_ty_exprs(&subst, typed_start.ty(), typed_end.ty())?;
             Ok((
@@ -2363,7 +2361,7 @@ fn unify_nested_pattern_typed(
     pattern: &VPattern,
     ty_expected: &TyExpr,
 ) -> Result<(Vec<VVar>, TypedVPattern), TyError> {
-    *env = env.apply_subst_to_env(subst);
+    env.apply_subst_to_env_in_place(subst);
 
     let (pattern_subst, bound_vars, typed_pattern_expr) =
         ty_check_pattern_typed_with_seeded_binders(
@@ -2376,13 +2374,13 @@ fn unify_nested_pattern_typed(
 
     *subst = subst_compose(&pattern_subst, subst);
 
-    *env = env.apply_subst_to_env(subst);
+    env.apply_subst_to_env_in_place(subst);
 
     let ty_pattern = typed_pattern_expr.ty().clone();
     let unified = unify_ty_exprs(subst, &ty_pattern, ty_expected)?;
     *subst = unified;
 
-    *env = env.apply_subst_to_env(subst);
+    env.apply_subst_to_env_in_place(subst);
 
     Ok((
         bound_vars,
