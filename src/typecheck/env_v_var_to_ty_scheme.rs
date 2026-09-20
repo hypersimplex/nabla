@@ -3,10 +3,11 @@ use crate::typecheck::ty_scheme::TyScheme;
 use crate::typecheck::v_expr::VVar;
 
 use std::collections::BTreeMap;
+use std::collections::btree_map;
 
 /// maps value level variable to a type scheme (possibly with type parameters)
 #[derive(Debug, Clone)]
-pub(crate) struct EnvVVarToTyScheme(pub BTreeMap<VVar, TyScheme>);
+pub(crate) struct EnvVVarToTyScheme(BTreeMap<VVar, TyScheme>);
 
 impl EnvVVarToTyScheme {
     pub fn new() -> Self {
@@ -36,5 +37,32 @@ impl EnvVVarToTyScheme {
             *ty_scheme = subst_ty_scheme(subst, ty_scheme);
         }
         self
+    }
+
+    pub fn iter<'a>(&'a self) -> IterEnvVVarToTyScheme<'a> {
+        IterEnvVVarToTyScheme {
+            inner: self.0.iter(),
+        }
+    }
+}
+
+pub(crate) struct IterEnvVVarToTyScheme<'a> {
+    inner: btree_map::Iter<'a, VVar, TyScheme>,
+}
+
+impl<'a> Iterator for IterEnvVVarToTyScheme<'a> {
+    type Item = (&'a VVar, &'a TyScheme);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+impl<'a> IntoIterator for &'a EnvVVarToTyScheme {
+    type Item = (&'a VVar, &'a TyScheme);
+    type IntoIter = IterEnvVVarToTyScheme<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }

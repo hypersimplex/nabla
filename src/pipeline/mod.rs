@@ -133,9 +133,8 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     println!("rename user introduced local variables and patterns to uniquify..");
     // top level bindings stays constant (identity map)
     let vvars_outer_scope: BTreeMap<VVar, VVar> = env_v_var_to_ty_scheme
-        .0
-        .keys()
-        .map(|x| (x.clone(), x.clone()))
+        .iter()
+        .map(|(key, _val)| (key.clone(), key.clone()))
         .collect();
 
     for (idx, (_var_binder_for_fn, expr)) in funcs.iter_mut() {

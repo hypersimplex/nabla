@@ -34,7 +34,7 @@ pub fn init_v_var_ty_scheme_builtin_unary_plus(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_numeric = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::UnaryPlus,
             loc: None,
@@ -57,7 +57,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_plus(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_numeric = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::BinaryPlus,
             loc: None,
@@ -83,7 +83,7 @@ pub fn init_v_var_ty_scheme_builtin_unary_minus(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_numeric = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::UnaryMinus,
             loc: None,
@@ -105,7 +105,7 @@ pub fn init_v_var_ty_scheme_builtin_unary_not(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ns: &mut TyVarNameSupply,
 ) {
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::UnaryNot,
             loc: None,
@@ -124,7 +124,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_minus(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_numeric = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::BinaryMinus,
             loc: None,
@@ -149,7 +149,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_mul(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_numeric = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::BinaryMul,
             loc: None,
@@ -174,7 +174,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_div(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_numeric = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::BinaryDiv,
             loc: None,
@@ -199,7 +199,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_lt(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_any = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::AngleL,
             loc: None,
@@ -221,7 +221,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_le(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_any = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::LessEqual,
             loc: None,
@@ -243,7 +243,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_gt(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_any = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::AngleR,
             loc: None,
@@ -265,7 +265,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_ge(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_any = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::GreaterEqual,
             loc: None,
@@ -287,7 +287,7 @@ pub fn init_v_var_ty_scheme_builtin_binary_eq(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_any = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::EqualEqual,
             loc: None,
@@ -309,7 +309,7 @@ pub fn init_v_var_ty_scheme_builtin_logical_and(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ns: &mut TyVarNameSupply,
 ) {
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::BinaryAnd,
             loc: None,
@@ -331,7 +331,7 @@ pub fn init_v_var_ty_scheme_builtin_logical_or(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ns: &mut TyVarNameSupply,
 ) {
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::BinaryOr,
             loc: None,
@@ -353,7 +353,7 @@ pub fn init_v_var_ty_scheme_builtin_match_fail(
     ns: &mut TyVarNameSupply,
 ) {
     let ty_var_any = ns.generate();
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::Iden("match_fail".to_string()),
             loc: None,
@@ -371,7 +371,7 @@ pub fn init_v_var_ty_scheme_builtin_i64_from_f64(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ns: &mut TyVarNameSupply,
 ) {
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::Iden("i64_from_f64".to_string()),
             loc: None,
@@ -390,7 +390,7 @@ pub fn init_v_var_ty_scheme_builtin_f64_from_i64(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ns: &mut TyVarNameSupply,
 ) {
-    env_v_var_to_ty_scheme.0.insert(
+    env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
             token: concrete_token::ConcreteToken::Iden("f64_from_i64".to_string()),
             loc: None,

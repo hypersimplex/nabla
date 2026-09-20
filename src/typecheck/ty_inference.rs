@@ -34,7 +34,7 @@ struct PatternConstructorInfo<'a> {
 /// variable -> type scheme environment
 pub(crate) fn free_tvns_in_ty_env(ty_scheme: &EnvVVarToTyScheme) -> Vec<TyVarName> {
     let mut out: BTreeSet<TyVarName> = BTreeSet::new();
-    for scheme in ty_scheme.0.values() {
+    for (_vvar, scheme) in ty_scheme {
         let bound: BTreeSet<_> = scheme.ty_vars_schematic.iter().cloned().collect();
         for tvn in free_ty_vars(&scheme.ty_expr) {
             if !bound.contains(&tvn) {
@@ -1630,26 +1630,23 @@ pub(crate) fn ty_check_variable(
     vexpr: &VVar,
 ) -> Result<(Substitution, TyExpr, Vec<TyExpr>), TyError> {
     // look up the variable to its type scheme
-    let type_scheme = env_var_to_ty_scheme
-        .0
-        .get(vexpr)
-        .ok_or_else(|| match vexpr {
-            VVar::Renamed(named_uniqued) => {
-                let name = &named_uniqued.original.token;
-                match &named_uniqued.original.loc {
-                    Some(loc) => TyError::UnboundVariable(format!("`{name}` at {loc:?}")),
-                    None => TyError::UnboundVariable(format!("`{name}`")),
-                }
+    let type_scheme = env_var_to_ty_scheme.get(vexpr).ok_or_else(|| match vexpr {
+        VVar::Renamed(named_uniqued) => {
+            let name = &named_uniqued.original.token;
+            match &named_uniqued.original.loc {
+                Some(loc) => TyError::UnboundVariable(format!("`{name}` at {loc:?}")),
+                None => TyError::UnboundVariable(format!("`{name}`")),
             }
-            VVar::Anon(id) => TyError::UnboundVariable(format!("anon_{id}")),
-            VVar::Named(named) => TyError::InternalError(
-                format!(
-                    "encountered variable {:?} that is not renamed; ensure renamer pass is ran",
-                    named
-                )
-                .to_string(),
-            ),
-        })?;
+        }
+        VVar::Anon(id) => TyError::UnboundVariable(format!("anon_{id}")),
+        VVar::Named(named) => TyError::InternalError(
+            format!(
+                "encountered variable {:?} that is not renamed; ensure renamer pass is ran",
+                named
+            )
+            .to_string(),
+        ),
+    })?;
     // instantiate by generating unique schematic type variables to avoid collision, then apply substitution
     let mut substitution = subst_id();
     // record instantiation args in scheme order (for later TyApp insertion [todo])
