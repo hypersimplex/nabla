@@ -31,6 +31,14 @@ pub(crate) fn subst_ty(subst: &impl Subst, ty_expr: &TyExpr) -> TyExpr {
     }
 }
 
+/// apply substitution to the body of a type scheme but leave schematic
+/// type variables unchanged
+///
+/// note: this does not automatically perform alpha renaming of schematic type
+/// variables, so callers are responsible for ensuring that free type variables
+/// introduced by `subst` do not collide with `ty_scheme.ty_vars_schematic`
+/// (this is guaranteed currently in the pipeline by creating unique type
+/// variable IDs)
 pub(crate) fn subst_ty_scheme(subst: &impl Subst, ty_scheme: &TyScheme) -> TyScheme {
     // apply filter on substitution in order to not alter any schematic type variables,
     // before applying the substitution on the type scheme's type expression
