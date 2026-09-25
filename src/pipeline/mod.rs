@@ -1388,3 +1388,26 @@ f z = case 0 of
         ),
     }
 }
+
+#[test]
+fn test_pipeline_duplicate_adt_rejected() {
+    let content_sum = r###"
+data Foo = A
+data Foo = B
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content_sum),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+
+    let content_rec = r###"
+data Bar { x :: i64 }
+data Bar { y :: i64 }
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content_rec),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}

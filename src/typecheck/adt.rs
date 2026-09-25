@@ -216,6 +216,7 @@ pub(crate) fn register_adt_into_type_env(
     items: &[TopLevelItem],
 ) -> Result<TyConEnv, TyError> {
     validate_no_builtin_type_shadowing(items)?;
+    validate_no_duplicate_adt_definitions(items)?;
     let mut env = TyConEnv::new();
 
     // pass 1: register skeletons
@@ -391,6 +392,25 @@ fn validate_no_builtin_type_shadowing(items: &[TopLevelItem]) -> Result<(), TyEr
         if resolve_builtin_type(&name).is_some() {
             return Err(TyError::AdtError(format!(
                 "type name `{name}` conflicts with builtin type at {:?}",
+                identifier.loc
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_no_duplicate_adt_definitions(items: &[TopLevelItem]) -> Result<(), TyError> {
+    let mut seen_type_names = HashSet::new();
+    for item in items.iter() {
+        let identifier = match item {
+            TopLevelItem::DataRecord(rec) => &rec.identifier,
+            TopLevelItem::DataSum(sum) => &sum.identifier,
+            _ => continue,
+        };
+        let name: String = get_data_type_name(identifier)?;
+        if !seen_type_names.insert(name.clone()) {
+            return Err(TyError::AdtError(format!(
+                "duplicate definition of type `{name}` at {:?}",
                 identifier.loc
             )));
         }
