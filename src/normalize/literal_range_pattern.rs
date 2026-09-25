@@ -109,38 +109,28 @@ pub(crate) fn desugar_literal_range_pattern_case(
                         let binder_typed_expr = mk_var_expr(&simple_binder_var, arg.ty());
 
                         let expr_cmp_start = match start {
-                            RangeBound::Inclusive(VPatternLiteral::Numeric(s)) => {
-                                mk_builtin_typed_vexpr_ge(
-                                    env_v_var_to_ty_scheme,
-                                    &binder_typed_expr,
-                                    &mk_typed_vexpr_from_v_lit_numeric(s),
-                                )
-                            }
-                            RangeBound::Exclusive(VPatternLiteral::Numeric(s)) => {
-                                mk_builtin_typed_vexpr_gt(
-                                    env_v_var_to_ty_scheme,
-                                    &binder_typed_expr,
-                                    &mk_typed_vexpr_from_v_lit_numeric(s),
-                                )
-                            }
-                            _ => todo!("literal range pattern only works for numerical types"),
+                            RangeBound::Inclusive(lit) => mk_builtin_typed_vexpr_ge(
+                                env_v_var_to_ty_scheme,
+                                &binder_typed_expr,
+                                &mk_typed_vexpr_from_v_pat_lit(lit),
+                            ),
+                            RangeBound::Exclusive(lit) => mk_builtin_typed_vexpr_gt(
+                                env_v_var_to_ty_scheme,
+                                &binder_typed_expr,
+                                &mk_typed_vexpr_from_v_pat_lit(lit),
+                            ),
                         };
                         let expr_cmp_end = match &end {
-                            RangeBound::Inclusive(VPatternLiteral::Numeric(s)) => {
-                                mk_builtin_typed_vexpr_le(
-                                    env_v_var_to_ty_scheme,
-                                    &binder_typed_expr,
-                                    &mk_typed_vexpr_from_v_lit_numeric(s),
-                                )
-                            }
-                            RangeBound::Exclusive(VPatternLiteral::Numeric(s)) => {
-                                mk_builtin_typed_vexpr_lt(
-                                    env_v_var_to_ty_scheme,
-                                    &binder_typed_expr,
-                                    &mk_typed_vexpr_from_v_lit_numeric(s),
-                                )
-                            }
-                            _ => todo!("literal range pattern only works for numerical types"),
+                            RangeBound::Inclusive(lit) => mk_builtin_typed_vexpr_le(
+                                env_v_var_to_ty_scheme,
+                                &binder_typed_expr,
+                                &mk_typed_vexpr_from_v_pat_lit(lit),
+                            ),
+                            RangeBound::Exclusive(lit) => mk_builtin_typed_vexpr_lt(
+                                env_v_var_to_ty_scheme,
+                                &binder_typed_expr,
+                                &mk_typed_vexpr_from_v_pat_lit(lit),
+                            ),
                         };
 
                         let expr_predicate = mk_builtin_typed_vexpr_logical_and(

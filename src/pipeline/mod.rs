@@ -595,6 +595,14 @@ f x = case x of
         _           ->   0
 "###;
 
+// support for string ranges is yet to be determine, but one
+// way is to be lexicographical ordering
+static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_STRING: &str = r###"
+f x = case x of
+        "a".."z" -> 100
+        _        ->   0
+"###;
+
 static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT_AND_GUARD: &str = r###"
 f x = case x of
         x | x > 15 -> 200
@@ -909,6 +917,16 @@ fn test_pipeline_desugar_case_literal_range_int() {
 #[test]
 fn test_pipeline_desugar_case_literal_range_float() {
     match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_FLOAT) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_pipeline_desugar_case_literal_range_string() {
+    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_STRING) {
         Err(e) => {
             println!("{:?}", e);
         }

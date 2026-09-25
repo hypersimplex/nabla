@@ -170,13 +170,6 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
                 let tail = self.parse_atom_pattern()?;
                 match (head, tail) {
                     (PatternExpr::Literal(start), PatternExpr::Literal(end)) => {
-                        if matches!(start.expr, AExpr::StringExpr(_))
-                            || matches!(end.expr, AExpr::StringExpr(_))
-                        {
-                            return Err(PatternParseError::InvalidPattern(
-                                "string range patterns are not supported".to_string(),
-                            ));
-                        }
                         return Ok(PatternExpr::Range {
                             start: PatternRangeBound::Inclusive(start),
                             end: PatternRangeBound::Exclusive(end),
@@ -652,21 +645,35 @@ mod tests {
     }
 
     #[test]
-    fn parse_string_range_pattern_is_rejected() {
+    fn parse_string_range_pattern() {
         let tokens = vec![
             make_token(ConcreteToken::LiteralString("a".to_string())),
             make_token(ConcreteToken::Ellipse),
             make_token(ConcreteToken::LiteralString("z".to_string())),
         ];
-        let err = parse_pattern(&tokens).unwrap_err();
-        match err {
-            PatternParseError::InvalidPattern(msg) => {
-                assert!(
-                    msg.contains("string range patterns"),
-                    "unexpected error: {msg}"
-                );
+        let pat = parse_pattern(&tokens).unwrap();
+        match pat {
+            PatternExpr::Range { start, end } => {
+                if let PatternRangeBound::Inclusive(AExprAnnot {
+                    expr: AExpr::StringExpr(lit),
+                    ..
+                }) = start
+                {
+                    assert_eq!(lit.literal.token, ConcreteToken::LiteralString("a".into()));
+                } else {
+                    panic!("expected inclusive string start bound");
+                }
+                if let PatternRangeBound::Exclusive(AExprAnnot {
+                    expr: AExpr::StringExpr(lit),
+                    ..
+                }) = end
+                {
+                    assert_eq!(lit.literal.token, ConcreteToken::LiteralString("z".into()));
+                } else {
+                    panic!("expected exclusive string end bound");
+                }
             }
-            other => panic!("expected invalid pattern error, got {:?}", other),
+            other => panic!("expected range pattern, got {:?}", other),
         }
     }
 

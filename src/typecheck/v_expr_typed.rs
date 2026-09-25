@@ -283,6 +283,13 @@ pub(crate) fn mk_typed_vexpr_from_v_lit_string(lit: &VLitString) -> TypedVExpr {
     })
 }
 
+pub(crate) fn mk_typed_vexpr_from_v_pat_lit(lit: &VPatternLiteral) -> TypedVExpr {
+    match lit {
+        VPatternLiteral::Numeric(s) => mk_typed_vexpr_from_v_lit_numeric(s),
+        VPatternLiteral::String(s) => mk_typed_vexpr_from_v_lit_string(s),
+    }
+}
+
 // <<--- helpers
 
 // helper impl. for doc printer trait --->>

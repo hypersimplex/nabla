@@ -103,7 +103,7 @@
 ///
 ///   see `abstr_pattern.rs` for the validation rules
 ///
-///   note: range pattern, x..y, currently only supports numeric literal
+///   note: range pattern, x..y
 /// ---
 ///
 /// types
