@@ -796,6 +796,7 @@ fn core_expr_from_variable(
 
     // currying: accumulate updated schematic type as we apply type argument one by one
     let mut ty_schematic_substitued = ty_schematic.clone();
+    assert_eq!(ty_args.len(), ty_schematic.ty_vars_schematic.len());
     for (ty_arg, ty_schematic_var) in ty_args.iter().zip(ty_schematic.ty_vars_schematic.iter()) {
         let core_ty_arg = core_ty_from_ty_expr(core_ty_con_env, ty_arg);
 
