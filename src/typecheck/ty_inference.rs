@@ -240,6 +240,20 @@ pub(crate) fn subst_compose(subst2: &Substitution, subst1: &Substitution) -> Sub
     Subst::compose(subst2, subst1)
 }
 
+/// unify two substitutions by unifying their mappings for common type variables
+pub(crate) fn unify_substs(
+    subst1: &Substitution,
+    subst2: &Substitution,
+) -> Result<Substitution, TyError> {
+    let mut subst_combined = subst1.clone();
+    for (tvn, ty2) in subst2.iter() {
+        let ty1_after_subst = subst_ty(&subst_combined, &TyExpr::TyVar(tvn.clone()));
+        let ty2_after_subst = subst_ty(&subst_combined, &ty2);
+        subst_combined = unify_ty_exprs(&subst_combined, &ty1_after_subst, &ty2_after_subst)?;
+    }
+    Ok(subst_combined)
+}
+
 /// apply provided substitution to the input typed expression and return the
 /// resulting typed expression
 pub(crate) fn apply_subst_typed_expr(subst: &Substitution, expr: TypedVExpr) -> TypedVExpr {
@@ -641,14 +655,14 @@ pub(crate) fn ty_check_case_typed(
     ty_var_ns: &mut TyVarNameSupply,
     vexpr: &VCaseExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
-    // type check argument
+    // type check argument/scrutinee
     let (phi, typed_scrutinee_raw) =
         ty_check_vexpr_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, &vexpr.arg.0)?;
     // carry scrutinee constraints forward
     // affect patterns and downstream typing
-    let typed_scrutinee = apply_subst_typed_expr(&phi, typed_scrutinee_raw);
+    let mut typed_scrutinee = apply_subst_typed_expr(&phi, typed_scrutinee_raw);
 
-    let env_augmented = env_var_to_ty_scheme.apply_subst_to_env(&phi);
+    let mut env_augmented = env_var_to_ty_scheme.apply_subst_to_env(&phi);
 
     struct AltInfo {
         body_expr: VExpr,
@@ -688,6 +702,12 @@ pub(crate) fn ty_check_case_typed(
             _ => (subst_pattern_unified, None),
         };
 
+        // propagate case alternative's substitution to env_augmented and
+        // typed_scrutinee so that subsequent alternatives observe the type
+        // constraints
+        env_augmented.apply_subst_to_env_in_place(&subst_alt);
+        typed_scrutinee = apply_subst_typed_expr(&subst_alt, typed_scrutinee);
+
         let vexpr = alt.body.0.clone();
         alt_infos.push(AltInfo {
             body_expr: vexpr,
@@ -698,10 +718,12 @@ pub(crate) fn ty_check_case_typed(
         });
     }
 
-    // compose substitutions
-    let substs_pattern = alt_infos.iter().map(|x| &x.subst);
-    let mut subst_patterns_unified =
-        substs_pattern.fold(subst_id(), |acc, s| subst_compose(s, &acc));
+    // pairwise unify case alternative substitutions using `unify_substs` and
+    // produce the combined substitution
+    let mut subst_patterns_unified = subst_id();
+    for alt_info in alt_infos.iter() {
+        subst_patterns_unified = unify_substs(&subst_patterns_unified, &alt_info.subst)?;
+    }
 
     // apply substitution to scrutinee
     let mut ty_scrutinee_updated = subst_ty(&subst_patterns_unified, typed_scrutinee.ty());
@@ -734,6 +756,12 @@ pub(crate) fn ty_check_case_typed(
     let mut typed_bodies = Vec::new();
     {
         for alt_info in alt_infos.iter_mut() {
+            // propagate unified substitutions, related to pattern and guard, into the case
+            // alternative environment
+            alt_info
+                .env
+                .apply_subst_to_env_in_place(&subst_patterns_unified);
+
             alt_info.env.apply_subst_to_env_in_place(&subst_bodies);
 
             let (subst_body, typed_body) =
@@ -2662,6 +2690,46 @@ mod tests {
             }
             other => panic!("expected InfiniteType, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_unify_substs_conflicting_builtins_yields_type_conflict() {
+        let var = TyVarName::Auto(100);
+        let subst1 = subst_delta(&var, &mk_ty_i64());
+        let subst2 = subst_delta(&var, &mk_ty_string());
+
+        let res = unify_substs(&subst1, &subst2);
+        match res {
+            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
+                assert!(matches!(
+                    ty1,
+                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+                ));
+                assert!(matches!(
+                    ty2,
+                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
+                ));
+            }
+            other => panic!("expected type conflict, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_unify_substs_compatible_unification() {
+        let var_a = TyVarName::Auto(100);
+        let var_b = TyVarName::Auto(101);
+        let subst1 = subst_delta(&var_a, &TyExpr::TyVar(var_b.clone()));
+        let subst2 = subst_delta(&var_b, &mk_ty_i64());
+
+        let res = unify_substs(&subst1, &subst2).unwrap();
+        assert!(matches!(
+            subst_ty(&res, &TyExpr::TyVar(var_a)),
+            TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+        ));
+        assert!(matches!(
+            subst_ty(&res, &TyExpr::TyVar(var_b)),
+            TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+        ));
     }
 
     // --- let-binding pattern type annotation tests ---

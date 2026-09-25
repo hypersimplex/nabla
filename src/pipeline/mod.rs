@@ -1063,7 +1063,7 @@ bad = f 0
 }
 
 #[test]
-fn test_pipeline_let_wildcard_pattern_annotation() {
+fn test_pipeline_let_wildcard_pattern_annotation_type_conflict() {
     let mismatch = r###"
 f x =
   let _ :: String = 42
@@ -1083,7 +1083,7 @@ f x =
 }
 
 #[test]
-fn test_pipeline_let_constructor_pattern_annotation() {
+fn test_pipeline_let_constructor_pattern_annotation_type_conflict() {
     let mismatch = r###"
 f x =
   let Bool.True :: String = Bool.True
@@ -1347,4 +1347,44 @@ f x = case g x of
         Maybe.Nothing -> 0
 "###;
     assert!(compile(content).is_ok());
+}
+
+#[test]
+fn test_pipeline_case_guard_typing_error() {
+    // expected failure in type inference f case expression with multiple
+    // alternatives and guards
+    //
+    // `f` is expected to be rejected with a type conflict
+    let content = r###"
+f z = case 0 of
+        _ | (z + 1) == 2 -> 10
+        _ | z == "hello" -> 20
+"###;
+
+    let res = compile(content);
+    match res {
+        Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
+            let is_i64_and_str = (matches!(
+                ty1,
+                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+            ) && matches!(
+                ty2,
+                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
+            )) || (matches!(
+                ty1,
+                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
+            ) && matches!(
+                ty2,
+                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
+            ));
+            assert!(
+                is_i64_and_str,
+                "expect guards to fail with type conflict between i64 and String"
+            );
+        }
+        other => panic!(
+            "expected type conflict between String and i64, got {:?}",
+            other
+        ),
+    }
 }
