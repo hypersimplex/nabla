@@ -539,6 +539,19 @@ pub(crate) fn ty_check_abstraction_typed(
     let mut subst_params = subst_id();
     let mut typed_params: Vec<TypedVAbstrParam> = Vec::new();
 
+    // this container is valid across parameters and body annotation and
+    // accumulates user defined type variables
+    //
+    // specifically it ensures identical type variable names map to the same
+    // fresh type variable in this abstraction
+    //
+    // eg: `\ (x :: a) (y :: a) -> (x :: a)`
+    // - first parameter introduces 'a' -> fresh type variable t0
+    // - second parameter reuses 'a' -> t0
+    // - body expr's annotation reuses 'a' -> t0
+    // thus enforcing variables to share the same type as expected
+    let mut local_ty_vars: BTreeMap<String, TyVarName> = BTreeMap::new();
+
     // process parameters
     for param in v_abstr_expr.params.iter() {
         env_lambda.apply_subst_to_env_in_place(&subst_params);
@@ -565,7 +578,9 @@ pub(crate) fn ty_check_abstraction_typed(
         env_lambda.apply_subst_to_env_in_place(&subst_params);
 
         if let Some(param_annot) = &param.annotation {
-            let annot_resolved = subst_ty(&subst_params, param_annot);
+            let annot_inst =
+                instantiate_and_subst_ty_expr(param_annot, ty_env, ty_var_ns, &mut local_ty_vars);
+            let annot_resolved = subst_ty(&subst_params, &annot_inst);
             let ty_binder_substituted = subst_ty(&subst_params, &ty_binder);
             subst_params = unify_ty_exprs(&subst_params, &ty_binder_substituted, &annot_resolved)?;
 
@@ -591,7 +606,9 @@ pub(crate) fn ty_check_abstraction_typed(
     let mut typed_body = apply_subst_typed_expr(&phi, typed_body_raw);
 
     if let Some(ty_annot_body) = body_optional_texpr {
-        let annot_resolved = subst_ty(&phi, ty_annot_body);
+        let annot_inst =
+            instantiate_and_subst_ty_expr(ty_annot_body, ty_env, ty_var_ns, &mut local_ty_vars);
+        let annot_resolved = subst_ty(&phi, &annot_inst);
         match unify_ty_exprs(&phi, typed_body.ty(), &annot_resolved) {
             Ok(phi2) => {
                 phi = phi2;
@@ -2568,6 +2585,82 @@ fn schematic_info_without_binders(
     next
 }
 
+/// collect unique user-defined type variable names (excluding registered ADTs in TyConEnv)
+/// in left-to-right appearance order.
+pub(crate) fn collect_user_defined_ty_var_names(ty: &TyExpr, te: &TyConEnv) -> Vec<String> {
+    fn collect<'a>(
+        ty: &'a TyExpr,
+        te: &TyConEnv,
+        seen: &mut BTreeSet<&'a str>,
+        ordered: &mut Vec<String>,
+    ) {
+        match ty {
+            TyExpr::TyVar(TyVarName::UserDefined(u)) => {
+                if let ConcreteToken::Iden(name) = &u.token {
+                    if te.get_adt(name).is_err() && !seen.contains(name.as_str()) {
+                        seen.insert(name.as_str());
+                        ordered.push(name.clone());
+                    }
+                }
+            }
+            TyExpr::TyVar(_) => {}
+            TyExpr::TyApp(app) => {
+                collect(&app.ty_func, te, seen, ordered);
+                collect(&app.ty_arg, te, seen, ordered);
+            }
+        }
+    }
+
+    let mut seen = BTreeSet::new();
+    let mut ordered = Vec::new();
+    collect(ty, te, &mut seen, &mut ordered);
+    ordered
+}
+
+/// substitute user-defined type variables whose token names exist in `var_map`
+/// with the corresponding fresh type variable mapped by `var_map`
+pub(crate) fn subst_user_defined_ty_vars(
+    ty: &TyExpr,
+    var_map: &BTreeMap<String, TyVarName>,
+) -> TyExpr {
+    if var_map.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        TyExpr::TyVar(TyVarName::UserDefined(u)) => {
+            if let ConcreteToken::Iden(name) = &u.token {
+                if let Some(target) = var_map.get(name) {
+                    return TyExpr::TyVar(target.clone());
+                }
+            }
+            ty.clone()
+        }
+        TyExpr::TyVar(_) => ty.clone(),
+        TyExpr::TyApp(app) => ty_app(
+            subst_user_defined_ty_vars(&app.ty_func, var_map),
+            subst_user_defined_ty_vars(&app.ty_arg, var_map),
+        ),
+    }
+}
+
+/// instantiate user-defined type variables in `ty` with fresh type variables and
+/// return the resulting substituted `TyExpr`.
+///
+/// updates `var_map` with fresh type variables for newly encountered names while
+/// reusing existing entries, allowing callers to scope identical names across
+/// multiple annotations (e.g. in lambda abstractions).
+pub(crate) fn instantiate_and_subst_ty_expr(
+    ty: &TyExpr,
+    te: &TyConEnv,
+    ns: &mut TyVarNameSupply,
+    var_map: &mut BTreeMap<String, TyVarName>,
+) -> TyExpr {
+    for name in collect_user_defined_ty_var_names(ty, te) {
+        var_map.entry(name).or_insert_with(|| ns.generate());
+    }
+    subst_user_defined_ty_vars(ty, var_map)
+}
+
 /// build a type scheme from a `ty_expr` type annotation
 /// by generalizing free user-defined type variables that are not ADT names
 /// in the type environment
@@ -2576,41 +2669,17 @@ pub(crate) fn build_scheme_from_ty_expr(
     ty_env: &TyConEnv,
     ns: &mut TyVarNameSupply,
 ) -> TyScheme {
-    fn collect_user_vars<'a>(
-        ty: &'a TyExpr,
-        out: &mut BTreeSet<&'a TyVarNameUserDefined>,
-        te: &TyConEnv,
-    ) {
-        match ty {
-            TyExpr::TyVar(TyVarName::UserDefined(u)) => {
-                if let Err(TyError::UnknownType(_)) = te.get_adt(&format!("{}", u.token)) {
-                    out.insert(u);
-                }
-            }
-            TyExpr::TyVar(_) => {}
-            TyExpr::TyApp(app) => {
-                collect_user_vars(&app.ty_func, out, te);
-                collect_user_vars(&app.ty_arg, out, te);
-            }
-        }
+    let var_names = collect_user_defined_ty_var_names(ty_expr, ty_env);
+    let mut var_map = BTreeMap::new();
+    let mut ty_vars_schematic = Vec::new();
+
+    for name in var_names {
+        let fresh = ns.generate();
+        ty_vars_schematic.push(fresh.clone());
+        var_map.insert(name, fresh);
     }
 
-    let mut ty_vars_schematic: Vec<TyVarName> = Vec::new();
-    let mut subst = SubstPersistentIdent::default();
-
-    let mut to_generalize = BTreeSet::new();
-    collect_user_vars(ty_expr, &mut to_generalize, ty_env);
-
-    for u in to_generalize {
-        let fresh_ty_var_name = ns.generate();
-        ty_vars_schematic.push(fresh_ty_var_name.clone());
-        subst = subst.insert(
-            TyVarName::UserDefined(u.clone()),
-            TyExpr::TyVar(fresh_ty_var_name),
-        );
-    }
-
-    let ty_expr_generalized = subst_ty(&subst, ty_expr);
+    let ty_expr_generalized = subst_user_defined_ty_vars(ty_expr, &var_map);
 
     TyScheme {
         ty_vars_schematic,
@@ -2822,5 +2891,131 @@ mod tests {
 
         // matching: let 10 :: i64 = 10
         assert!(check_let(pat_lit, mk_lit_int(10), Some(mk_ty_i64())).is_ok());
+    }
+
+    // --- user-defined type variable handling tests ---
+
+    #[cfg(test)]
+    fn mk_ty_user(name: &str) -> TyExpr {
+        TyExpr::TyVar(TyVarName::UserDefined(TyVarNameUserDefined {
+            token: ConcreteToken::Iden(name.to_string()),
+            loc: None,
+        }))
+    }
+
+    // explicit polymorphic type scheme construction test
+    //
+    // verify scheme construction from type expression:
+    // - deduplicate repeated occurrences of type variables (e.g. `a -> a`)
+    // - preserve appearance order across multiple variables (e.g. `a -> b -> a`)
+    // - preserve registered ADT constructors without generalizing them as type variables
+    // - monomorphic types yield an empty quantifier list
+    #[test]
+    fn test_build_scheme_from_ty_expr() {
+        let mut te = TyConEnv::new();
+        te.add_adt_skeleton("Maybe".to_string(), vec![TyVarName::Auto(0)]);
+        let mut ns = TyVarNameSupply::new();
+
+        // deduplication: a -> a yields 1 schematic variable
+        let ty_id = mk_ty_arrow(mk_ty_user("a"), mk_ty_user("a"));
+        let scheme = build_scheme_from_ty_expr(&ty_id, &te, &mut ns);
+        assert_eq!(scheme.ty_vars_schematic.len(), 1);
+
+        // multiple variables: a -> b -> a yields 2 schematic variables
+        let ty_const = mk_ty_arrow(
+            mk_ty_user("a"),
+            mk_ty_arrow(mk_ty_user("b"), mk_ty_user("a")),
+        );
+        let scheme_const = build_scheme_from_ty_expr(&ty_const, &te, &mut ns);
+        assert_eq!(scheme_const.ty_vars_schematic.len(), 2);
+
+        // adt preservation: a -> Maybe a -> i64 preserves Maybe and yields 1 schematic variable
+        let maybe_a = ty_app(mk_ty_user("Maybe"), mk_ty_user("a"));
+        let ty_adt = mk_ty_arrow(mk_ty_user("a"), mk_ty_arrow(maybe_a, mk_ty_i64()));
+        let scheme_adt = build_scheme_from_ty_expr(&ty_adt, &te, &mut ns);
+        assert_eq!(scheme_adt.ty_vars_schematic.len(), 1);
+
+        // monomorphic: i64 -> i64 yields 0 schematic variables
+        let ty_mono = mk_ty_arrow(mk_ty_i64(), mk_ty_i64());
+        let scheme_mono = build_scheme_from_ty_expr(&ty_mono, &te, &mut ns);
+        assert!(scheme_mono.ty_vars_schematic.is_empty());
+    }
+
+    // abstraction parameter and body type annotation test
+    //
+    // verify that `ty_check_abstraction_typed` scopes user-defined type variables
+    // across multiple parameters and body annotation so identical variable names
+    // map to the same type variable
+    //
+    // note: parameter annotations on lambdas are not yet supported by the surface
+    // syntax parser, so this is verified directly at the typecheck layer
+    #[test]
+    fn test_abstraction_annotation_scoping() {
+        let mut env = EnvVVarToTyScheme::new();
+        let ty_env = TyConEnv::new();
+        let mut ns = TyVarNameSupply::new();
+
+        let var_x = VVar::Anon(10);
+        let var_y = VVar::Anon(11);
+
+        // matching: \ (x :: a) (y :: a) -> (x :: a)
+        // both parameters and body annotation share the same type variable 'a'
+        let abstr = VAbstrExpr {
+            params: vec![
+                VAbstrParam {
+                    binder: var_x.clone(),
+                    pattern: VPattern::Variable(var_x.clone()),
+                    annotation: Some(mk_ty_user("a")),
+                },
+                VAbstrParam {
+                    binder: var_y.clone(),
+                    pattern: VPattern::Variable(var_y.clone()),
+                    annotation: Some(mk_ty_user("a")),
+                },
+            ],
+            body: Box::new((VExpr::Variable(var_x.clone()), Some(mk_ty_user("a")))),
+        };
+
+        let res = ty_check_abstraction_typed(&mut env, &ty_env, &mut ns, &abstr);
+        assert!(res.is_ok());
+        let (_, typed_expr) = res.unwrap();
+
+        // verify function type has matching parameter types and return type:
+        // (-> t (-> t t))
+        match typed_expr.ty() {
+            TyExpr::TyApp(arrow1) => {
+                let param1_ty = match &*arrow1.ty_func {
+                    TyExpr::TyApp(f1) => format!("{:?}", f1.ty_arg),
+                    _ => panic!("expected arrow1 func"),
+                };
+                match &*arrow1.ty_arg {
+                    TyExpr::TyApp(arrow2) => {
+                        let param2_ty = match &*arrow2.ty_func {
+                            TyExpr::TyApp(f2) => format!("{:?}", f2.ty_arg),
+                            _ => panic!("expected arrow2 func"),
+                        };
+                        let ret_ty = format!("{:?}", arrow2.ty_arg);
+                        assert_eq!(param1_ty, param2_ty);
+                        assert_eq!(param2_ty, ret_ty);
+                    }
+                    _ => panic!("expected nested arrow for 2nd param"),
+                }
+            }
+            _ => panic!("expected arrow type"),
+        }
+
+        // mismatch: \ (x :: i64) -> (x :: String)
+        let abstr_mismatch = VAbstrExpr {
+            params: vec![VAbstrParam {
+                binder: var_x.clone(),
+                pattern: VPattern::Variable(var_x.clone()),
+                annotation: Some(mk_ty_i64()),
+            }],
+            body: Box::new((VExpr::Variable(var_x), Some(mk_ty_string()))),
+        };
+        assert!(matches!(
+            ty_check_abstraction_typed(&mut env, &ty_env, &mut ns, &abstr_mismatch),
+            Err(TyError::TypeConflict { .. })
+        ));
     }
 }

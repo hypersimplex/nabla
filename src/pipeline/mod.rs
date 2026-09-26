@@ -1446,6 +1446,22 @@ f x = 42
     ));
 }
 
+// negative test
+//
+// distinct type variables in a polymorphic signature
+// (e.g. `a` and `b`) must not unify with each other
+#[test]
+fn test_pipeline_polymorphic_signature_rejects_distinct_rigid_vars() {
+    let content = r###"
+f :: a -> b
+f x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
 // negative test for ensuring rigid type variables cannot escape their
 // declaring scope
 //
@@ -1467,4 +1483,74 @@ f x =
             ..
         })) if m.contains("escapes")
     ));
+}
+
+// explicit polymorphic signature test
+//
+// repeated occurrences of the same type variable in an explicit type annotation
+// (e.g. `a -> a`) are allowed and refer to the same type variable
+#[test]
+fn test_pipeline_polymorphic_signature_deduplication() {
+    let content = r###"
+id :: a -> a
+id x = x
+"###;
+    assert!(compile(content).is_ok());
+}
+
+// explicit polymorphic signature test
+//
+// multiple distinct type variables (e.g. `a -> b -> a`)
+#[test]
+fn test_pipeline_polymorphic_signature_multi_var() {
+    let content = r###"
+const :: a -> b -> a
+const x y = x
+"###;
+    assert!(compile(content).is_ok());
+}
+
+// explicit polymorphic signature test
+//
+// registered ADT constructors (e.g. `Maybe`) are preserved as
+// concrete type constructors and not generalized as type variables
+#[test]
+fn test_pipeline_polymorphic_signature_with_adt() {
+    let content = r###"
+data Maybe a
+  = Just a
+  | Nothing
+
+from_maybe :: a -> Maybe a -> a
+from_maybe def m = case m of
+  Just x -> x
+  Nothing -> def
+"###;
+    assert!(compile(content).is_ok());
+}
+
+// explicit polymorphic signature test
+//
+// nested arrow types (higher-order functions)
+#[test]
+fn test_pipeline_polymorphic_signature_higher_order() {
+    let content = r###"
+apply :: (a -> b) -> a -> b
+apply f x = f x
+"###;
+    assert!(compile(content).is_ok());
+}
+
+// explicit polymorphic signature test
+//
+// local let-bindings with polymorphic type annotations
+// correctly generalize
+#[test]
+fn test_pipeline_let_binding_polymorphic_signature() {
+    let content = r###"
+f x =
+    let id :: a -> a = \y -> y
+    in id x
+"###;
+    assert!(compile(content).is_ok());
 }
