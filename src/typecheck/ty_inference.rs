@@ -793,18 +793,6 @@ pub(crate) fn ty_check_case_typed(
     }
 
     // [todo] check case expression coverage over its matching patterns
-    // if let Some(cov) = compute_constructor_coverage_for_case(ty_env, &ty_scrutinee_updated, vexpr) {
-    //     for &idx in &cov.redundant {
-    //         return Err(TyError::Unexpected(
-    //             format!("warning: redundant pattern at alt {:?}", idx).to_string(),
-    //         ));
-    //     }
-    //     for &idx in &cov.unreachable {
-    //         return Err(TyError::Unexpected(
-    //             format!("warning: unreachable pattern at alt {:?}", idx).to_string(),
-    //         ));
-    //     }
-    // }
 
     // type check each alt's body
     let mut subst_bodies = subst_id();
