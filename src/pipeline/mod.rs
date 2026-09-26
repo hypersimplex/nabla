@@ -1429,3 +1429,42 @@ f x = 0
         Err(CompileError::Type(TyError::AdtError(_)))
     ));
 }
+
+// negative test
+//
+// declared polymorphic signature uses rigid type variables,
+// preventing flexible unification with concrete types
+#[test]
+fn test_pipeline_polymorphic_signature_rejects_concrete_type() {
+    let content = r###"
+f :: a -> a
+f x = 42
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test for ensuring rigid type variables cannot escape their
+// declaring scope
+//
+// `g` introduces rigid type variable `a`
+//
+// `g = x` constrains outer parameter `x` to have type `a`,
+// then rigid type variable `a` leaks into `f`'s typing environment
+#[test]
+fn test_pipeline_polymorphic_signature_rejects_escaping_rigid_type() {
+    let content = r###"
+f x =
+    let g :: a = x
+    in 0
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict {
+            msg: Some(ref m),
+            ..
+        })) if m.contains("escapes")
+    ));
+}

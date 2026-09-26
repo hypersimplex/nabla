@@ -50,7 +50,12 @@ pub(crate) fn free_ty_vars(ty_expr: &TyExpr) -> BTreeSet<TyVarName> {
     let mut stack: Vec<&TyExpr> = vec![ty_expr];
     while let Some(current) = stack.pop() {
         match current {
-            TyExpr::TyVar(var) if matches!(var, TyVarName::Auto(_) | TyVarName::UserDefined(_)) => {
+            TyExpr::TyVar(var)
+                if matches!(
+                    var,
+                    TyVarName::Auto(_) | TyVarName::UserDefined(_) | TyVarName::Rigid(_)
+                ) =>
+            {
                 vars.insert(var.clone());
             }
             TyExpr::TyApp(app) => {
@@ -138,6 +143,56 @@ pub(crate) fn unify_ty_exprs(
                                 ),
                             })
                         }
+
+                        // Rigid vs Rigid
+                        (TyVarName::Rigid(r1), TyExpr::TyVar(TyVarName::Rigid(r2))) => {
+                            if r1 == r2 {
+                                Ok(subst.clone())
+                            } else {
+                                Err(TyError::TypeConflict {
+                                    ty1: ty_expr1.clone(),
+                                    ty2: ty_expr2.clone(),
+                                    msg: Some(
+                                        "cannot unify different rigid type variables".to_string(),
+                                    ),
+                                })
+                            }
+                        }
+
+                        // Rigid vs Auto: bind the flexible Auto variable to Rigid
+                        (TyVarName::Rigid(_), TyExpr::TyVar(TyVarName::Auto(_))) => {
+                            // symmetry
+                            unify_ty_exprs(subst, ty_expr2, ty_expr1)
+                        }
+                        (TyVarName::Auto(_), TyExpr::TyVar(TyVarName::Rigid(_))) => {
+                            extend(subst, x, other)
+                        }
+
+                        // Rigid vs Concrete type produces error
+                        (
+                            TyVarName::Rigid(_),
+                            TyExpr::TyVar(TyVarName::Builtin(_) | TyVarName::UserDefined(_)),
+                        )
+                        | (
+                            TyVarName::Builtin(_) | TyVarName::UserDefined(_),
+                            TyExpr::TyVar(TyVarName::Rigid(_)),
+                        ) => Err(TyError::TypeConflict {
+                            ty1: ty_expr1.clone(),
+                            ty2: ty_expr2.clone(),
+                            msg: Some(
+                                "cannot unify rigid type variable with concrete type".to_string(),
+                            ),
+                        }),
+
+                        // Rigid vs type application produces error
+                        (TyVarName::Rigid(_), TyExpr::TyApp(_)) => Err(TyError::TypeConflict {
+                            ty1: ty_expr1.clone(),
+                            ty2: ty_expr2.clone(),
+                            msg: Some(
+                                "cannot unify rigid type variable with type application"
+                                    .to_string(),
+                            ),
+                        }),
 
                         // Auto vs. Concrete type: substitute the Auto variable
                         (
@@ -1021,12 +1076,14 @@ pub(crate) fn ty_check_binding_group(
             typed_binding_expr = apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
             let mut typed_rhs_vexpr = apply_subst_typed_expr(&subst_accum, typed_rhs_vexpr);
 
-            // if present, enforce optional type annotation/signature
+            // if explicit user type annotation is present, enforce typecheck with it
             if let Some(sig_scheme) = optional_annot.as_ref() {
                 // instantiate and then unify
                 let mut subst_sig = subst_id();
                 for tvn in sig_scheme.ty_vars_schematic.iter() {
-                    subst_sig = subst_sig.insert(tvn.clone(), TyExpr::TyVar(ty_var_ns.generate()));
+                    // note: we generate a rigid type variable instead of flexible type variable
+                    subst_sig =
+                        subst_sig.insert(tvn.clone(), TyExpr::TyVar(ty_var_ns.generate_rigid()));
                 }
                 let sig_type_inst = subst_ty(
                     &subst_compose(&subst_sig, &subst_accum),
@@ -1101,6 +1158,18 @@ pub(crate) fn ty_check_binding_group(
             // type vars in scheme bodies that are not bound by the scheme
             free_tvns_in_ty_env(&env_outer_copy).into_iter().collect()
         };
+
+        // sanity check: rigid type variables cannot escape local scope
+        // and into outer environment definition
+        for tvn in &free_ty_vars_in_env {
+            if matches!(tvn, TyVarName::Rigid(_)) {
+                return Err(TyError::TypeConflict {
+                    ty1: TyExpr::TyVar(tvn.clone()),
+                    ty2: TyExpr::TyVar(tvn.clone()),
+                    msg: Some(format!("rigid type variable {:?} escapes", tvn)),
+                });
+            }
+        }
 
         // scc-wide map from generalized unification vars to canonical scheme vars
         //

@@ -9,8 +9,16 @@ use crate::util::printer::*;
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub(crate) enum TyVarName {
     UserDefined(TyVarNameUserDefined),
-    Builtin(TyVarNameBuiltin), // basic type supported by the compiler
-    Auto(u64),                 // auto-generated unique name
+
+    // basic type supported by the compiler
+    Builtin(TyVarNameBuiltin),
+
+    // auto-generated unique name
+    Auto(u64),
+
+    // rigid type for signature checking;
+    // these do not mutate with / adapt to surrounding type context
+    Rigid(u64),
 }
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
@@ -47,6 +55,7 @@ impl DocPrinter for TyVarName {
             UserDefined(ty_var_name_user_defined) => ty_var_name_user_defined.to_doc(),
             Builtin(ty_var_name_builtin) => ty_var_name_builtin.to_doc(),
             Auto(auto_id) => Doc::lit(&format!("TyAuto({})", auto_id)),
+            Rigid(rigid_id) => Doc::lit(&format!("TyRigid({})", rigid_id)),
         }
     }
 }
