@@ -1584,3 +1584,18 @@ id_my_type x = x
 "###;
     assert!(compile(content).is_ok());
 }
+
+// negative test
+//
+// referencing an undeclared/unbound variable must be reported as
+// UnboundVariable with its name, rather than an internal error
+#[test]
+fn test_pipeline_unbound_variable_rejected() {
+    let content = r###"
+f x = unknown_var + 1
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnboundVariable(_)))
+    ));
+}

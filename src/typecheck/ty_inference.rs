@@ -1736,22 +1736,18 @@ pub(crate) fn ty_check_variable(
     vexpr: &VVar,
 ) -> Result<(Substitution, TyExpr, Vec<TyExpr>), TyError> {
     // look up the variable to its type scheme
-    let type_scheme = env_var_to_ty_scheme.get(vexpr).ok_or_else(|| match vexpr {
-        VVar::Renamed(named_uniqued) => {
-            let name = &named_uniqued.original.token;
-            match &named_uniqued.original.loc {
-                Some(loc) => TyError::UnboundVariable(format!("`{name}` at {loc:?}")),
-                None => TyError::UnboundVariable(format!("`{name}`")),
+    let type_scheme = env_var_to_ty_scheme.get(vexpr).ok_or_else(|| {
+        let (token, loc) = match vexpr {
+            VVar::Named(named) => (&named.token, &named.loc),
+            VVar::Renamed(named_uniqued) => {
+                (&named_uniqued.original.token, &named_uniqued.original.loc)
             }
+            VVar::Anon(id) => return TyError::UnboundVariable(format!("anon_{id}")),
+        };
+        match loc {
+            Some(loc) => TyError::UnboundVariable(format!("`{token}` at {loc:?}")),
+            None => TyError::UnboundVariable(format!("`{token}`")),
         }
-        VVar::Anon(id) => TyError::UnboundVariable(format!("anon_{id}")),
-        VVar::Named(named) => TyError::InternalError(
-            format!(
-                "encountered variable {:?} that is not renamed; ensure renamer pass is ran",
-                named
-            )
-            .to_string(),
-        ),
     })?;
     // instantiate by generating unique schematic type variables to avoid collision, then apply substitution
     let mut substitution = subst_id();
