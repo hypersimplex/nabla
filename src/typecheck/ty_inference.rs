@@ -111,25 +111,29 @@ pub(crate) fn unify_ty_exprs(
                     //   unify with themselves or with Auto variables
                     match (x, other) {
                         // Builtin vs Builtin: must be the same type
-                        (TyVarName::Builtin(b1), TyExpr::TyVar(TyVarName::Builtin(b2)))
-                            if b1 != b2 =>
-                        {
-                            Err(TyError::TypeConflict {
-                                ty1: ty_expr1.clone(),
-                                ty2: ty_expr2.clone(),
-                                msg: Some("incompatible builtin types".to_string()),
-                            })
+                        (TyVarName::Builtin(b1), TyExpr::TyVar(TyVarName::Builtin(b2))) => {
+                            if b1 == b2 {
+                                Ok(subst.clone())
+                            } else {
+                                Err(TyError::TypeConflict {
+                                    ty1: ty_expr1.clone(),
+                                    ty2: ty_expr2.clone(),
+                                    msg: Some("incompatible builtin types".to_string()),
+                                })
+                            }
                         }
 
                         // UserDefined vs UserDefined: must have the same name
-                        (TyVarName::UserDefined(u1), TyExpr::TyVar(TyVarName::UserDefined(u2)))
-                            if u1.token != u2.token =>
-                        {
-                            Err(TyError::TypeConflict {
-                                ty1: ty_expr1.clone(),
-                                ty2: ty_expr2.clone(),
-                                msg: Some("incompatible user-defined types".to_string()),
-                            })
+                        (TyVarName::UserDefined(u1), TyExpr::TyVar(TyVarName::UserDefined(u2))) => {
+                            if u1 == u2 {
+                                Ok(subst.clone())
+                            } else {
+                                Err(TyError::TypeConflict {
+                                    ty1: ty_expr1.clone(),
+                                    ty2: ty_expr2.clone(),
+                                    msg: Some("incompatible user-defined types".to_string()),
+                                })
+                            }
                         }
 
                         // Builtin vs UserDefined: incompatible

@@ -1554,3 +1554,33 @@ f x =
 "###;
     assert!(compile(content).is_ok());
 }
+
+// negative test
+//
+// distinct user-defined types (e.g. `Foo` vs `Bar`) must not unify
+#[test]
+fn test_pipeline_user_defined_type_conflict() {
+    let content = r###"
+data Foo = Foo
+data Bar = Bar
+
+bad :: Foo -> Bar
+bad x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// user-defined types occurring at distinct source locations unify
+#[test]
+fn test_pipeline_user_defined_type_distinct_locations() {
+    let content = r###"
+data MyType = MyCon
+
+id_my_type :: MyType -> MyType
+id_my_type x = x
+"###;
+    assert!(compile(content).is_ok());
+}

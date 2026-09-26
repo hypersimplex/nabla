@@ -21,12 +21,30 @@ pub(crate) enum TyVarName {
     Rigid(u64),
 }
 
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub(crate) struct TyVarNameUserDefined {
     pub token: concrete_token::ConcreteToken,
 
     // maybe None if compiler creates this
     pub loc: Option<loc::Location>,
+}
+
+impl PartialEq for TyVarNameUserDefined {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
+}
+
+impl Ord for TyVarNameUserDefined {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.token.cmp(&other.token)
+    }
+}
+
+impl PartialOrd for TyVarNameUserDefined {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
