@@ -12,9 +12,12 @@ Planned features & non-features:
 - simple forward sequenced compile pipeline for now
 - not optimizing for efficient compilation for now
 - no support for type classes for now (eg: have "System F"-like core)
-- STG for backend
+- no support for polymorphic recursion
+- STG for backend (push/enter model)
 - evaluation strategy: weak head normal form
-- inferred types (HM algo.) and optional user specified types
+- inferred types, using HM algo (Algorithm W), and optional user specified types
+- strictness analysis and related optimization [planned]
+- pattern matching decision tree compilation [todo]
 - basic builtin ops have hardcoded precedence and associativity for now
 - support for infix list notation [todo]
 - builtin tabular(arrays/matrices) support [possibly/experimental]
