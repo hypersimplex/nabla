@@ -12,8 +12,13 @@ pub enum PatternParseError {
     InvalidPattern(String),
 }
 
-/// constructor need to start with an uppercase
-pub fn is_constructor_name(name: &str) -> bool {
+/// data constructor needs to start with an uppercase letter
+pub fn is_data_constructor_name(name: &str) -> bool {
+    name.chars().next().map_or(false, char::is_uppercase)
+}
+
+/// type constructor needs to start with an uppercase letter
+pub fn is_type_constructor_name(name: &str) -> bool {
     name.chars().next().map_or(false, char::is_uppercase)
 }
 
@@ -215,7 +220,7 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
             ConcreteToken::ParenL => self.parse_parenthesized(),
             ConcreteToken::Iden(name) => {
                 let token = self.next()?.expect("peeked identifier must be available");
-                if is_constructor_name(name) {
+                if is_data_constructor_name(name) {
                     self.parse_constructor(token)
                 } else {
                     Ok(PatternExpr::Variable(token))
@@ -268,7 +273,7 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
 
                 // get constructor name
                 match &ctor_token.token {
-                    ConcreteToken::Iden(name) if is_constructor_name(name) => {
+                    ConcreteToken::Iden(name) if is_data_constructor_name(name) => {
                         qualified = Some(head);
                         constructor = ctor_token;
                     }

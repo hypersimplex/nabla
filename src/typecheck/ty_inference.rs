@@ -1,3 +1,5 @@
+use crate::builtin::types::resolve_builtin_type;
+use crate::parse::abstr_pattern::is_type_constructor_name;
 use crate::parse::concrete_token::*;
 use crate::typecheck::adt::*;
 use crate::typecheck::algos::*;
@@ -583,7 +585,7 @@ pub(crate) fn ty_check_abstraction_typed(
 
         if let Some(param_annot) = &param.annotation {
             let annot_inst =
-                instantiate_and_subst_ty_expr(param_annot, ty_env, ty_var_ns, &mut local_ty_vars);
+                instantiate_and_subst_ty_expr(param_annot, ty_env, ty_var_ns, &mut local_ty_vars)?;
             let annot_resolved = subst_ty(&subst_params, &annot_inst);
             let ty_binder_substituted = subst_ty(&subst_params, &ty_binder);
             subst_params = unify_ty_exprs(&subst_params, &ty_binder_substituted, &annot_resolved)?;
@@ -611,7 +613,7 @@ pub(crate) fn ty_check_abstraction_typed(
 
     if let Some(ty_annot_body) = body_optional_texpr {
         let annot_inst =
-            instantiate_and_subst_ty_expr(ty_annot_body, ty_env, ty_var_ns, &mut local_ty_vars);
+            instantiate_and_subst_ty_expr(ty_annot_body, ty_env, ty_var_ns, &mut local_ty_vars)?;
         let annot_resolved = subst_ty(&phi, &annot_inst);
         match unify_ty_exprs(&phi, typed_body.ty(), &annot_resolved) {
             Ok(phi2) => {
@@ -1414,17 +1416,15 @@ pub(crate) fn ty_check_let_typed(
         .defs
         .iter()
         .map(|(pat, expr, annot)| {
-            (
-                pat.clone(),
-                expr.clone(),
-                // conversion to TyScheme for running the helper
-                // `ty_check_binding_group`
-                annot
-                    .as_ref()
-                    .map(|ty| build_scheme_from_ty_expr(ty, ty_env, ty_var_ns)),
-            )
+            // conversion to TyScheme for running the helper
+            // `ty_check_binding_group`
+            let ty_scheme = match annot {
+                Some(ty) => Some(build_scheme_from_ty_expr(ty, ty_env, ty_var_ns)?),
+                None => None,
+            };
+            Ok((pat.clone(), expr.clone(), ty_scheme))
         })
-        .collect();
+        .collect::<Result<Vec<_>, TyError>>()?;
 
     // used to compute free variables in environment
     // this is needed to determine the set of generalizable type variables which become schematic type variables in type schemes
@@ -2587,17 +2587,26 @@ fn schematic_info_without_binders(
 
 /// collect unique user-defined type variable names (excluding registered ADTs in TyConEnv)
 /// in left-to-right appearance order.
-pub(crate) fn collect_user_defined_ty_var_names(ty: &TyExpr, te: &TyConEnv) -> Vec<String> {
+pub(crate) fn collect_user_defined_ty_var_names(
+    ty: &TyExpr,
+    te: &TyConEnv,
+) -> Result<Vec<String>, TyError> {
     fn collect<'a>(
         ty: &'a TyExpr,
         te: &TyConEnv,
         seen: &mut BTreeSet<&'a str>,
         ordered: &mut Vec<String>,
-    ) {
+    ) -> Result<(), TyError> {
         match ty {
             TyExpr::TyVar(TyVarName::UserDefined(u)) => {
                 if let ConcreteToken::Iden(name) = &u.token {
-                    if te.get_adt(name).is_err() && !seen.contains(name.as_str()) {
+                    if te.get_adt(name).is_ok() || resolve_builtin_type(name).is_some() {
+                        // registered ADT or builtin type
+                    } else if is_type_constructor_name(name) {
+                        // no match
+                        return Err(TyError::UnknownType(name.clone()));
+                    } else if !seen.contains(name.as_str()) {
+                        // previous check determined that is is not a type constructor
                         seen.insert(name.as_str());
                         ordered.push(name.clone());
                     }
@@ -2605,16 +2614,17 @@ pub(crate) fn collect_user_defined_ty_var_names(ty: &TyExpr, te: &TyConEnv) -> V
             }
             TyExpr::TyVar(_) => {}
             TyExpr::TyApp(app) => {
-                collect(&app.ty_func, te, seen, ordered);
-                collect(&app.ty_arg, te, seen, ordered);
+                collect(&app.ty_func, te, seen, ordered)?;
+                collect(&app.ty_arg, te, seen, ordered)?;
             }
         }
+        Ok(())
     }
 
     let mut seen = BTreeSet::new();
     let mut ordered = Vec::new();
-    collect(ty, te, &mut seen, &mut ordered);
-    ordered
+    collect(ty, te, &mut seen, &mut ordered)?;
+    Ok(ordered)
 }
 
 /// substitute user-defined type variables whose token names exist in `var_map`
@@ -2654,11 +2664,11 @@ pub(crate) fn instantiate_and_subst_ty_expr(
     te: &TyConEnv,
     ns: &mut TyVarNameSupply,
     var_map: &mut BTreeMap<String, TyVarName>,
-) -> TyExpr {
-    for name in collect_user_defined_ty_var_names(ty, te) {
+) -> Result<TyExpr, TyError> {
+    for name in collect_user_defined_ty_var_names(ty, te)? {
         var_map.entry(name).or_insert_with(|| ns.generate());
     }
-    subst_user_defined_ty_vars(ty, var_map)
+    Ok(subst_user_defined_ty_vars(ty, var_map))
 }
 
 /// build a type scheme from a `ty_expr` type annotation
@@ -2668,8 +2678,8 @@ pub(crate) fn build_scheme_from_ty_expr(
     ty_expr: &TyExpr,
     ty_env: &TyConEnv,
     ns: &mut TyVarNameSupply,
-) -> TyScheme {
-    let var_names = collect_user_defined_ty_var_names(ty_expr, ty_env);
+) -> Result<TyScheme, TyError> {
+    let var_names = collect_user_defined_ty_var_names(ty_expr, ty_env)?;
     let mut var_map = BTreeMap::new();
     let mut ty_vars_schematic = Vec::new();
 
@@ -2681,10 +2691,10 @@ pub(crate) fn build_scheme_from_ty_expr(
 
     let ty_expr_generalized = subst_user_defined_ty_vars(ty_expr, &var_map);
 
-    TyScheme {
+    Ok(TyScheme {
         ty_vars_schematic,
         ty_expr: Box::new(ty_expr_generalized),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -2918,7 +2928,7 @@ mod tests {
 
         // deduplication: a -> a yields 1 schematic variable
         let ty_id = mk_ty_arrow(mk_ty_user("a"), mk_ty_user("a"));
-        let scheme = build_scheme_from_ty_expr(&ty_id, &te, &mut ns);
+        let scheme = build_scheme_from_ty_expr(&ty_id, &te, &mut ns).unwrap();
         assert_eq!(scheme.ty_vars_schematic.len(), 1);
 
         // multiple variables: a -> b -> a yields 2 schematic variables
@@ -2926,19 +2936,38 @@ mod tests {
             mk_ty_user("a"),
             mk_ty_arrow(mk_ty_user("b"), mk_ty_user("a")),
         );
-        let scheme_const = build_scheme_from_ty_expr(&ty_const, &te, &mut ns);
+        let scheme_const = build_scheme_from_ty_expr(&ty_const, &te, &mut ns).unwrap();
         assert_eq!(scheme_const.ty_vars_schematic.len(), 2);
 
         // adt preservation: a -> Maybe a -> i64 preserves Maybe and yields 1 schematic variable
         let maybe_a = ty_app(mk_ty_user("Maybe"), mk_ty_user("a"));
         let ty_adt = mk_ty_arrow(mk_ty_user("a"), mk_ty_arrow(maybe_a, mk_ty_i64()));
-        let scheme_adt = build_scheme_from_ty_expr(&ty_adt, &te, &mut ns);
+        let scheme_adt = build_scheme_from_ty_expr(&ty_adt, &te, &mut ns).unwrap();
         assert_eq!(scheme_adt.ty_vars_schematic.len(), 1);
 
         // monomorphic: i64 -> i64 yields 0 schematic variables
         let ty_mono = mk_ty_arrow(mk_ty_i64(), mk_ty_i64());
-        let scheme_mono = build_scheme_from_ty_expr(&ty_mono, &te, &mut ns);
+        let scheme_mono = build_scheme_from_ty_expr(&ty_mono, &te, &mut ns).unwrap();
         assert!(scheme_mono.ty_vars_schematic.is_empty());
+
+        // undeclared capitalized type name yields UnknownType error
+        let ty_unknown = mk_ty_user("Unknown");
+        assert!(matches!(
+            build_scheme_from_ty_expr(&ty_unknown, &te, &mut ns),
+            Err(TyError::UnknownType(_))
+        ));
+
+        let ty_arrow_unknown = mk_ty_arrow(mk_ty_user("a"), mk_ty_user("Person"));
+        assert!(matches!(
+            build_scheme_from_ty_expr(&ty_arrow_unknown, &te, &mut ns),
+            Err(TyError::UnknownType(_))
+        ));
+
+        let ty_nested_unknown = ty_app(mk_ty_user("Maybe"), mk_ty_user("Item"));
+        assert!(matches!(
+            build_scheme_from_ty_expr(&ty_nested_unknown, &te, &mut ns),
+            Err(TyError::UnknownType(_))
+        ));
     }
 
     // abstraction parameter and body type annotation test

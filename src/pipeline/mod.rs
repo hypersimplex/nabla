@@ -92,7 +92,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &mut env_v_var_to_ty_scheme,
         &mut declared_function_type_schemes,
         &mut ty_var_ns,
-    );
+    )?;
 
     let mut v_var_ns: VVarNameSupply = VVarNameSupply::new();
 
@@ -345,11 +345,11 @@ fn insert_declared_fun_signatures(
     env: &mut EnvVVarToTyScheme,
     declared_function_type_schemes: &mut BTreeMap<String, TyScheme>,
     ty_var_ns: &mut TyVarNameSupply,
-) {
+) -> Result<(), TyError> {
     for i in items.iter() {
         if let TopLevelItem::FunctionSignature(sig) = i {
             if let ConcreteToken::Iden(name) = &sig.identifier.token {
-                let ty_scheme = build_scheme_from_signature(sig, ty_env, ty_var_ns);
+                let ty_scheme = build_scheme_from_signature(sig, ty_env, ty_var_ns)?;
                 declared_function_type_schemes.insert(name.clone(), ty_scheme.clone());
                 let v_var = VVar::Named(VVarName {
                     token: sig.identifier.token.clone(),
@@ -360,6 +360,7 @@ fn insert_declared_fun_signatures(
             }
         }
     }
+    Ok(())
 }
 
 /// build a type scheme from a declared function signature
@@ -369,7 +370,7 @@ fn build_scheme_from_signature(
     sig: &FnSig,
     ty_env: &TyConEnv,
     ns: &mut TyVarNameSupply,
-) -> TyScheme {
+) -> Result<TyScheme, TyError> {
     let ty_expr = lower_type_annot_to_ty_expr(&sig.ty);
     build_scheme_from_ty_expr(&ty_expr, ty_env, ns)
 }
@@ -1597,5 +1598,45 @@ f x = unknown_var + 1
     assert!(matches!(
         compile(content),
         Err(CompileError::Type(TyError::UnboundVariable(_)))
+    ));
+}
+
+// negative test: undeclared capitalized type in function signature must be reported as UnknownType
+#[test]
+fn test_pipeline_undeclared_type_in_signature_rejected() {
+    let content = r###"
+f :: Person -> i64
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnknownType(_)))
+    ));
+}
+
+// negative test: undeclared capitalized type nested as type parameter in signature
+#[test]
+fn test_pipeline_undeclared_type_nested_in_signature_rejected() {
+    let content = r###"
+f :: Maybe Person -> i64
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnknownType(_)))
+    ));
+}
+
+// negative test: undeclared capitalized type in let binding annotation must be reported as UnknownType
+#[test]
+fn test_pipeline_undeclared_type_in_let_annotation_rejected() {
+    let content = r###"
+f x =
+  let y :: Person = 1
+  in y
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnknownType(_)))
     ));
 }

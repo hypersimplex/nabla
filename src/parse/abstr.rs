@@ -690,7 +690,7 @@ where
     match next.token {
         ConcreteToken::Iden(name) => {
             let token = source.next_concrete()?.expect("peeked identifier");
-            if name.chars().next().is_some_and(char::is_uppercase) {
+            if is_data_constructor_name(&name) {
                 // constructor (qualified or not)
                 let mut qualified = None;
                 let mut constructor = token;
@@ -707,7 +707,7 @@ where
                         .next_concrete()?
                         .ok_or_else(|| ParseError::unexpected_eof("qualified constructor"))?;
                     match &next_tok.token {
-                        ConcreteToken::Iden(name) if is_constructor_name(name) => {
+                        ConcreteToken::Iden(name) if is_data_constructor_name(name) => {
                             constructor = next_tok;
                         }
                         _ => {
