@@ -25,7 +25,7 @@ Planned features & non-features:
 
 ## Remaining Todo
 
-- STG IR
+- STG IR: [some notes on operational semantics](http://github.com/hypersimplex/notes_stg/blob/main/notebook.pdf)
 - code generation
 - runtime support
 
