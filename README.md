@@ -13,7 +13,7 @@ Planned features & non-features:
 - not optimizing for efficient compilation for now
 - no support for type classes for now (eg: have "System F"-like core)
 - no support for polymorphic recursion
-- STG for backend (push/enter model)
+- STG-based backend and runtime
 - evaluation strategy: weak head normal form
 - inferred types, using HM algo (Algorithm W), and optional user specified types
 - strictness analysis and related optimization [planned]
@@ -25,7 +25,7 @@ Planned features & non-features:
 
 ## Remaining Todo
 
-- STG IR: [some notes on operational semantics](http://github.com/hypersimplex/notes_stg/blob/main/notebook.pdf)
+- STG IR: [some notes on operational semantics](http://github.com/hypersimplex/notes_stg/blob/main/notebook.pdf), [notes on design of STG runtime for this project](http://github.com/hypersimplex/nabla/blob/main/doc/stg.pdf)
 - code generation
 - runtime support
 
