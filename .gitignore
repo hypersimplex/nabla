@@ -29,3 +29,8 @@ target
 .docs/
 
 **/*~
+
+**/*.bbl
+**/*.blg
+**/*.log
+**/*.aux
