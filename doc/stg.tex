@@ -1,0 +1,476 @@
+\documentclass[8pt]{extarticle}
+
+\usepackage[margin=0.7in]{geometry}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{tikz}
+\usepackage[ruled,vlined,linesnumbered,lined,boxed,commentsnumbered]{algorithm2e}
+\usepackage{algpseudocode}
+\usepackage{siunitx}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{fancyhdr}
+
+\usepackage{enumitem}
+\setlist[itemize,1]{label=-}   % 1st level
+
+\usepackage{alltt}
+
+\usepackage{parskip} %turns off paragraph indent
+\pagestyle{fancy}
+
+\usepackage{xcolor}
+\usepackage{mdframed}
+
+\usepackage[small]{titlesec}
+
+\usepackage{inconsolata}
+
+\usepackage{hanging}
+
+\usepackage{listings}
+% Set font styles globally
+\lstset{
+  basicstyle=\ttfamily,          % Small, monospaced font
+  commentstyle=\color{gray}\itshape,   % Italics for comments
+  keywordstyle=\color{blue}\bfseries,   % Bold for programming keywords
+  mathescape=true,
+  breaklines=true
+}
+
+\usepackage{tabularray}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes,arrows}
+% Define block styles
+\tikzset{
+    block/.style={rectangle, draw, line width=0.5mm, black, text width=5em, text centered,
+                  rounded corners, minimum height=2em},
+    line/.style={draw, -latex}
+}% <- if you insist in using this in the document add this % here.
+
+\DeclareMathOperator*{\argmin}{argmin}
+\newcommand*{\argminl}{\argmin\limits}
+
+\usepackage[small]{titlesec}
+
+% \newcommand{\mathleft}{\@fleqntrue\@mathmargin0pt}
+% \newcommand{\R}{\mathbb{R}}
+% \newcommand{\Z}{\mathbb{Z}} 
+% \newcommand{\N}{\mathbb{N}}
+% \newcommand{\ppartial}[2]{\frac{\partial #1}{\partial #2}}
+% \newcommand{\p}{\partial}
+% \newcommand{\te}[1]{\text{#1 }}
+% \newcommand{\norm}[1]{\|#1\|}
+
+\newcommand*{\vrectangle}{{\setlength{\fboxsep}{0pt}\fbox{\phantom{l}}}}
+
+\setcounter{MaxMatrixCols}{20}
+
+% remove excess vertical space for align equations
+\setlength{\abovedisplayskip}{0pt}
+\setlength{\belowdisplayskip}{0pt}
+\setlength{\abovedisplayshortskip}{0pt}
+\setlength{\belowdisplayshortskip}{0pt}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+
+\begin {document}
+
+\lhead{Notes - Runtime Design}
+  
+\begin{multicols*}{2}
+
+  \section{Overview}
+
+  The design of the runtime will be based on the 1992 reference \cite{peyton1992} plus the augmentation to use Apply/Eval approach from the 2006 reference \cite{marlow2006}. We will also use a single unified stack.
+
+  \section{Frame Types}
+  
+  Using one unified stack by marking boundaries of parts of the stack by frames means no standalone items (such as arguments) will exist on its own in the stack; instead they will be described by frame headers. When accessing the stack, we will always be able to inspect a frame header that is present on top of the stack before manipulating the stack. The variants of frame are:
+
+  \begin{itemize}
+  \item Continuation Frame
+  \item Application Frame
+  \item Update Frame
+  \end{itemize}
+
+  For each of the above types of frames, a stack frame header is embedded (pointer to some meta-info describing items associated with the frame that are also pushed earlier onto the stack). The stack frame meta-info is used by the garbage collector (GC) to discriminate pointer/non-pointer types (GC will use this to trace live objects instead of using a separate stack as roots of live objects as in the approach of the 1992 reference \cite{peyton1992}).
+
+  These frames are produced and consumed during certain state transitions that are mentioned in the following sections of this document.
+  
+  \vfill\null
+  \columnbreak
+
+  \section{Continuation Frame}
+
+  \subsection{triggered by}
+  
+  start of evaluation of a case expression
+
+  \subsection{actions to the stack}
+
+  push each local env variable that are live across the continuation
+
+  push a Continuation Frame that is embedded with:
+
+  \begin{itemize}
+  \item stack frame info containing previously inserted items onto the stack
+  \item return address/vector corresponding to the alternatives
+  \end{itemize}
+  
+  \subsection{consumed by}
+
+  an eventual return of constructor transfers control to the continuation (for example, one can possibly use the convention of return vector jump indexed by the constructor variant), where it pops from the stack:
+
+  \begin{itemize}
+  \item continuation frame
+  \item local vars associated with the continuation frame (these are read and used for the continuation)
+  \end{itemize}
+
+  before proceeding to execute the remainder of the continuation
+  
+  \section{Application Frame}
+
+  \subsection{triggered by}
+
+  a function application, and before evaluation of the function to weak head normal form
+
+  \subsection{actions to the stack}
+
+  push each argument into the stack
+
+  push an Application Frame that also embedded with:
+  \begin{itemize}
+  \item stack frame info for previously inserted items onto the stack
+  \end{itemize}
+
+  \subsection{consumed by}
+
+  before an enter of a closure/function, an arity check is run using the application frame info that already encodes available arguments on the stack
+
+  different scenarios to consider:
+
+  1) if the closure finds over-saturation of arguments:
+  
+  copy and remove the function's required arguments off the stack and adjust the application frame to encode the remaining arguments on the stack, before jumping to the function's entry code with the arguments (eg: a possible calling convention could be leaving those arguments on the stack)
+    
+  2) if the closure finds exact number of arguments avaialable from the application frame:
+
+  pop the application frame off the stack, copy and pop all the arguments (associated with the application frame) off the stack, then jump to the function's entry code with the arguments
+
+  3) if the closure finds under-saturation of arguments:
+
+  create a new partial application (PAP) closure on the heap taking the existing function closure and available arguments from the stack as payload on the heap, pop the application frame off the stack and all the arguments off the stack, and return the new PAP closure (for example, by saving its address in a designated register)
+  
+  \vfill\null
+  \columnbreak
+
+  \section{Update Frame}
+
+  \subsection{triggered by}
+
+  when thunk / updatable closure is entered for the first time
+
+  \subsection{actions to the stack}
+
+  push an Update Frame that also embedded with:
+  \begin{itemize}
+  \item stack frame info
+  \item address of the thunk / updatable closure in the heap
+  \end{itemize}
+
+  \subsection{consumed by}
+
+  either:
+  \begin{itemize}
+  \item a return of constructor, or
+  \item a completion of a partial application (where a previous removal of an application frame from the stack happened)
+  \end{itemize}
+  sees the update frame on top of the stack
+
+  we read the address of the thunk associated with the Update Frame and update the thunk with a target closure by overwriting the thunk with an indirection closure
+
+  notes about indirection closure:
+
+  it is a closure with:
+  \begin{itemize}
+  \item 1 payload field that is the address of the target closure
+  \item entry code that jumps to the target closure (its entry code)
+  \end{itemize}
+
+  this means a thunk / any closure needs to be atleast 2 words in size (1 payload field + a pointer to its entry code)
+
+  the indirection closure can be removed during a GC sweep since we can use the target closure pointer and remove the intermediate indirection
+
+  \vfill\null
+  \columnbreak
+
+  \section{States}
+
+  a tuple of:
+
+  \begin{itemize}
+  \item code
+  \item $s \equiv$ unified stack: containing a frame of type: continuation/update/application plus any relevant payloads associated with the frame
+  \item $h \equiv$ heap: for locals, closures
+  \item $\sigma \equiv$ globals: for top-level variables/binders
+  \end{itemize}
+  
+  \section{State Transition: eval case expression}
+
+  we enqueue live local variables into the stack along with a continuation frame
+  
+  \begin{lstlisting}
+    eval (case e of alts) $\rho$, s, h, $\sigma$
+
+    $\implies$
+
+    eval e $\rho$, s', h, $\sigma$
+
+    where:
+
+    s' = (cf:vs) ++ s
+    
+    vs = local live vars for alternatives (equivalent to providing $\rho$ for continuation)
+    
+    cf = continuation frame (layout-aware of its 'vs' payload)
+  \end{lstlisting}
+
+  \section{State Transition: eval let/letrec expression}
+
+  this is largely same as original transition in reference \cite{peyton1992}
+
+  for letrec:
+  
+  \begin{lstlisting}
+    eval (letrec x1 = vs1 \$\pi_1$ xs1 $\mapsto$ e1; ...; in e) $\rho$,
+    s,
+    h,
+    $\sigma$
+
+    $\implies$
+
+    eval e $\rho$', s, h', $\sigma$
+
+    where:
+
+      $\rho$' = $\rho$[x1 $\mapsto$ addr a1, ...]
+      
+      h' = h[a1 $\mapsto$ (vs1 \$\pi_1$ xs1 $\mapsto$ e1)
+             ($\rho_{rhs}$ vs1);
+             ...]
+
+      $\rho_{rhs}$ = $\rho$'
+  \end{lstlisting}
+
+  \vfill\null
+  \columnbreak
+
+  \section{State Transition: eval constructor}
+
+  \begin{lstlisting}
+    eval (c xs) $\rho$, s, h, $\sigma$
+
+    $\implies$
+
+    ReturnCon c (val $\rho$ $\sigma$ xs), s, h, $\sigma$
+  \end{lstlisting}
+
+  \subsection{intermediate state: ReturnCon}
+
+  \begin{lstlisting}
+
+    ReturnCon c ws, ((cf:locals)++s), h, $\sigma$
+
+    where:
+
+      cf = continuation frame
+
+    $\implies$
+
+    eval e $\rho$', s, h, $\sigma$
+
+    where:
+      e = expression to eval after jump to continuation (eg: jump to fr.return_vector[offset])
+
+      offset = computable based on constructor variant 'c' (or tag depending on convention)
+
+      $\rho$' = $\rho$ $\cup$ {vs $\mapsto$ ws}
+
+      $\rho$ = popped 'locals' from continuation frame
+    \end{lstlisting}
+
+    for default pattern match: don't need to add additional \{vs $\mapsto$ ws\} binding to local env.
+    
+    for match-call variable binder pattern: create a closure in the heap for the constructor 'c', introduce a binding to the created closure in the local env., use 'ws' as payload to the closure in order to bind to the constructor parameters
+
+  \vfill\null
+  \columnbreak
+
+  \section{State Transition: eval literal}
+
+  similar logic as constructor
+
+  \begin{lstlisting}
+    eval k $\rho$, s, h, $\sigma$
+
+    $\implies$
+
+    ReturnInt k, s, h, $\sigma$
+  \end{lstlisting}
+
+  eval of a variable bound to a primitive value:
+  
+  \begin{lstlisting}
+    eval (f {}) $\rho$[f $\mapsto$ Int k], s, h, $\sigma$
+
+    $\implies$
+
+    ReturnInt k, s, h, $\sigma$
+  \end{lstlisting}
+
+  \subsection{intermediate state: ReturnInt}
+
+  \begin{lstlisting}
+    ReturnInt k, (cf:locals)++s, h, $\sigma$
+
+    where:
+
+      cf = continuation frame
+
+    $\implies$
+
+    eval e $\rho$, s, h, $\sigma$
+
+    where:
+
+      e = expression to eval after jump to continuation
+
+      $\rho$ = popped 'locals' from continuation frame
+  \end{lstlisting}
+
+  handling alternative with match-all variable binder x:
+
+  create additional local variable that binds to Int primitive:
+  \begin{lstlisting}
+    $\rho$ = popped 'locals' from continuation frame
+             $\cup$ {x $\mapsto$ Int k}
+  \end{lstlisting}
+
+  \section{State Transition: eval builtin operator}
+
+  for example, binary operator $\oplus$ with primitive int parameters:
+
+  \begin{lstlisting}
+    eval $\oplus${x1, x2}
+      $\rho$[x1 $\mapsto$ Int i1, x2 $\mapsto$ Int i2],
+    s,
+    h,
+    $\sigma$
+
+    $\implies$
+
+    ReturnInt ($\oplus$ i1 i2), s, h, $\sigma$
+  \end{lstlisting}
+
+  \vfill\null
+  \columnbreak
+
+  \section{State Transition: eval function application}
+
+  \begin{lstlisting}
+    eval f xs $\rho$, s, h, $\sigma$
+    
+    $\implies$
+
+    // construct the application frame before eval of f to weak head normal form
+    eval f $\rho$, (af:xs)++s, h, $\sigma$
+
+    where:
+
+      af $\equiv$ application frame
+
+      xs $\equiv$ arguments associated with function application
+  \end{lstlisting}
+
+  after eval of the functional value f:
+      
+  \begin{lstlisting}
+    eval f $\rho$, (af:xs)++s, h, $\sigma$
+
+    where:
+
+      f $\equiv$ a value that has already been evaluated to weak head normal form and is a functional type with addr 'a' in the heap
+
+      af $\equiv$ application frame
+
+      xs $\equiv$ arguments associated with the application frame
+    
+    $\implies$
+
+    // exact arguments saturation
+    if arity(f) = len(xs):
+    
+    enter a with xs, s, h, $\sigma$  
+
+    ---
+
+    // over-saturation of arguments
+    if arity(f) < len(xs):
+
+    enter a with xs1, (af':xs2)++s, h, $\sigma$
+
+      where:
+
+        xs1++xs2 = xs, len(xs1) = arity(f)
+
+        af' $\equiv$ adjusted application frame describing over-saturated/remaining arguments 'xs2'
+
+  \end{lstlisting}
+      
+  \vfill\null
+  \columnbreak
+  
+  \begin{lstlisting}
+    ---
+    // under-saturation of arguments
+    if arity(f) > len(xs):
+
+    // pop application frame off the stack
+    //
+    // give control to whatever is next on the stack (eg: continuation / update)
+    return PAP closure, s, h', $\sigma$
+
+      where:
+
+        // create a PAP closure with address a' in the heap and take available args and function from the original stack into closure's payload
+        h' $\equiv$ h[a' $\mapsto$ (f':vs1 \n  vs2 $\mapsto$ f' (vs1++vs2)) a:xs]
+
+        // 'xs' are originally arguments on the stack but transferred in as free variables in the closure's payload
+        len(xs) = len(vs1)
+
+        // 'vs2' are the remaining arguments for function f
+        len(vs1) + len(vs2) = arity(f)
+  \end{lstlisting}
+
+  \vfill\null
+  \columnbreak
+
+  \section{State Transition: eval updatable closure}
+
+  todo
+  
+  \vfill\null
+  \columnbreak
+    
+\bibliographystyle{plain}
+\bibliography{stg}
+    
+\end{multicols*}
+
+\end {document}
