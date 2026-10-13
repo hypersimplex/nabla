@@ -81,7 +81,7 @@
 
 \begin {document}
 
-\lhead{Notes - Runtime Design}
+\lhead{Notes - STG and Runtime Design}
   
 \begin{multicols*}{2}
 
@@ -102,6 +102,22 @@
   For each of the above types of frames, a stack frame header is embedded (pointer to some meta-info describing items associated with the frame that are also pushed earlier onto the stack). The stack frame meta-info is used by the garbage collector (GC) to discriminate pointer/non-pointer types (GC will use this to trace live objects instead of using a separate stack as roots of live objects as in the approach of the 1992 reference \cite{peyton1992}).
 
   These frames are produced and consumed during certain state transitions that are mentioned in the following sections of this document.
+
+  \section{Closure Layout in Memory}
+
+  generic and uniform layout for all closures:
+  \begin{itemize}
+  \item info pointer
+  \item continugous section of pointers
+  \item continugous section of non-pointers
+  \end{itemize}
+  
+  where info pointer points to a data structure containing:
+  \begin{itemize}
+  \item entry code
+  \item GC codes
+  \item possibly other meta-info
+  \end{itemize}
   
   \vfill\null
   \columnbreak
@@ -174,7 +190,9 @@
 
   \subsection{triggered by}
 
-  when thunk / updatable closure is entered for the first time
+  when thunk / updatable closure is entered for the first time, where entry code of the thunk does the push of an Update Frame onto the stack
+
+  note: a thunk is created by at a let/letrec binding (includes saving the free variables into the payload of the thunk on the heap)
 
   \subsection{actions to the stack}
 
@@ -207,9 +225,6 @@
 
   the indirection closure can be removed during a GC sweep since we can use the target closure pointer and remove the intermediate indirection
 
-  \vfill\null
-  \columnbreak
-
   \section{States}
 
   a tuple of:
@@ -220,7 +235,10 @@
   \item $h \equiv$ heap: for locals, closures
   \item $\sigma \equiv$ globals: for top-level variables/binders
   \end{itemize}
-  
+
+  \vfill\null
+  \columnbreak
+
   \section{State Transition: eval case expression}
 
   we enqueue live local variables into the stack along with a continuation frame
@@ -245,6 +263,12 @@
 
   this is largely same as original transition in reference \cite{peyton1992}
 
+  notes:
+
+  free variables are stored into the payload along with each closure on the heap
+
+  thunks can be created from let bindings
+  
   for letrec:
   
   \begin{lstlisting}
@@ -268,9 +292,6 @@
       $\rho_{rhs}$ = $\rho$'
   \end{lstlisting}
 
-  \vfill\null
-  \columnbreak
-
   \section{State Transition: eval constructor}
 
   \begin{lstlisting}
@@ -281,7 +302,10 @@
     ReturnCon c (val $\rho$ $\sigma$ xs), s, h, $\sigma$
   \end{lstlisting}
 
-  \subsection{intermediate state: ReturnCon}
+  \vfill\null
+  \columnbreak
+
+  \section{State Transition: ReturnCon with Continuation Frame on top of the stack}
 
   \begin{lstlisting}
 
@@ -307,10 +331,7 @@
 
     for default pattern match: don't need to add additional \{vs $\mapsto$ ws\} binding to local env.
     
-    for match-call variable binder pattern: create a closure in the heap for the constructor 'c', introduce a binding to the created closure in the local env., use 'ws' as payload to the closure in order to bind to the constructor parameters
-
-  \vfill\null
-  \columnbreak
+    for match-all variable binder pattern: create a closure in the augmented heap h' for the constructor 'c', introduce a binding to the created closure in the local env., use 'ws' as payload to the closure in order to bind to the constructor parameters
 
   \section{State Transition: eval literal}
 
@@ -334,7 +355,10 @@
     ReturnInt k, s, h, $\sigma$
   \end{lstlisting}
 
-  \subsection{intermediate state: ReturnInt}
+  \vfill\null
+  \columnbreak
+
+  \section{State Transition: ReturnInt with Continuation Frame on top of the stack}
 
   \begin{lstlisting}
     ReturnInt k, (cf:locals)++s, h, $\sigma$
@@ -378,13 +402,18 @@
     ReturnInt ($\oplus$ i1 i2), s, h, $\sigma$
   \end{lstlisting}
 
+
+  \section{State Transition: ReturnPAP with Continuation Frame on top of the stack}
+
+  this is disallowed since case scrutinee needs to be a ADT or primitive literal
+
   \vfill\null
   \columnbreak
 
   \section{State Transition: eval function application}
 
   \begin{lstlisting}
-    eval f xs $\rho$, s, h, $\sigma$
+    eval (f xs) $\rho$, s, h, $\sigma$
     
     $\implies$
 
@@ -398,14 +427,15 @@
       xs $\equiv$ arguments associated with function application
   \end{lstlisting}
 
-  after eval of the functional value f:
+  after evaluation of a value to weak head normal form, if that value is determined to be a function-like value:
       
   \begin{lstlisting}
-    eval f $\rho$, (af:xs)++s, h, $\sigma$
+    // inspect meta-info of the object to detect that its type is a function-like value
+    ReturnFun a / ReturnPAP a, (af:xs)++s, h, $\sigma$
 
     where:
 
-      f $\equiv$ a value that has already been evaluated to weak head normal form and is a functional type with addr 'a' in the heap
+      a $\equiv$ address of functional type that has already been evaluated to weak head normal form
 
       af $\equiv$ application frame
 
@@ -443,8 +473,10 @@
 
     // pop application frame off the stack
     //
+    // PAP closure with address a'
+    //
     // give control to whatever is next on the stack (eg: continuation / update)
-    return PAP closure, s, h', $\sigma$
+    ReturnPAP a', s, h', $\sigma$
 
       where:
 
@@ -458,12 +490,155 @@
         len(vs1) + len(vs2) = arity(f)
   \end{lstlisting}
 
+  \section{State Transition: enter non-updatable closure}
+
+  \begin{lstlisting}
+    // alternatively put args on stacks for calling convention
+    enter a with args,
+    s,
+    h[a $\mapsto$ (vs \n xs $\mapsto$ e) ws_f],
+    $\sigma$
+
+    $\implies$
+
+    eval e $\rho$, s, h, $\sigma$
+
+    where:
+
+      $\rho$ = {vs $\mapsto$ ws_f, xs $\mapsto$ args}
+  \end{lstlisting}
+
+  \section{State Transition: enter indirection closure}
+
+  \begin{lstlisting}
+    enter a,
+    s,
+    h[a $\mapsto$ indirection(a_target)],
+    $\sigma$
+
+    $\implies$
+
+    enter a_target, s, h, $\sigma$
+  \end{lstlisting}
+
   \vfill\null
   \columnbreak
 
-  \section{State Transition: eval updatable closure}
+  \section{State Transition: enter an updatable closure}
 
-  todo
+  execute thunk's entry code, which does:
+
+  pushes an Update Frame onto the stack
+
+  overwrite its own info table to point to a blackhole (indicating that the thunk has entered but has not evaluated to completion; possible use this to detect cycle and/or for queuing for multi-threaded runtime)
+
+  \begin{lstlisting}
+    enter a,
+    s,
+    h[a $\mapsto$ (vs \u {} $\mapsto$ e_thunk) free_vars],
+    $\sigma$
+
+    where:
+
+      a is a thunk
+
+    $\implies$
+
+    // thunk's entry code pushes update frame embedded with thunk a onto the stack, and places a blackhole, and continues to execute thunk's body e_thunk
+    eval e_thunk $\rho$,
+    uf:s,
+    h',
+    $\sigma$
+
+    where:
+
+      uf $\equiv$ update frame associated with the thunk a
+
+      $\rho$[vs $\mapsto$ free_vars] $\equiv$ captured free_vars needed by the thunk
+
+      // temporarily update thunk's info pointer to blackhole, but keep payload
+      h' = h[a_thunk $\mapsto$ blackhole_with_payload(free_vars)]
+
+  \end{lstlisting}
+
+  \section{State Transition: ReturnCon with Update Frame on top of the stack}
+
+  the thunk body eventually evaluates to weak head normal form (in this case a constructor) where the control lands on the Update Frame sitting on top of the stack
+
+  the Update Frame's thunk is overwritten with an indirection pointer to point to the evaluated value, and the Update Frame is popped from the stack
+
+  the evaluated value is further returned to the outer context
+
+  \begin{lstlisting}
+
+    ReturnCon c ws, (uf:s), h, $\sigma$
+
+    $\implies$
+
+    ReturnCon c ws, s, h'', $\sigma$
+
+    where:
+
+      uf $\equiv$ update frame
+
+      a_thunk $\equiv$ uf.thunk
+
+      // introduce a closure for the constructor
+      h' = h[a_c $\mapsto$ ({xs} \n {} $\mapsto$ c xs) ws]
+
+      // overwrite thunk to point to the evaluated value
+      h'' = h'[a_thunk $\mapsto$ indirection_closure(a_c)]
+  \end{lstlisting}
+
+  \section{State Transition: ReturnPAP with Update Frame on top of the stack}
+
+  the thunk body eventually evaluates to a weak head normal form (in this case a partial application) and the control lands on the Update Frame sitting on top of the stack
+
+  the Update Frame's thunk is overwritten with an indirection pointer to point to the evaluated value, and the Update Frame is popped from the stack
+
+  the evaluated value is further returned to the outer context
+
+  \begin{lstlisting}
+
+    ReturnPAP a_pap, (uf:s), h, $\sigma$
+
+    $\implies$
+
+    // pop update frame
+    //
+    // return evaluated PAP to outer context
+    ReturnPAP a_pap, s, h', $\sigma$
+
+    where:
+
+      uf $\equiv$ update frame
+
+      a_thunk $\equiv$ uf.thunk
+
+      // overwrite thunk to point to the evaluated value
+      h' = h[a_thunk $\mapsto$ indirection_closure(a_pap)]
+  \end{lstlisting}
+
+  \section{State Transition: ReturnInt with Update Frame on top of the stack}
+
+  [todo] we should really disallow / optimized this scenario as much as possible (repeated boxing and unboxing of primitves)
+
+  \begin{lstlisting}
+    ReturnInt k, (uf:s), h, $\sigma$
+
+    $\implies$
+
+    ReturnInt k, s, h'', $\sigma$
+
+    where:
+
+      a_thunk = uf.thunk
+
+      h' = h[a_boxed $\mapsto$ BoxedInt# k]
+
+      h'' = h'[a_thunk $\mapsto$ indirection(a_boxed)]
+  \end{lstlisting}
+  
   
   \vfill\null
   \columnbreak
