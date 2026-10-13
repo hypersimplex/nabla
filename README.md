@@ -27,8 +27,11 @@ Planned features & non-features:
 
 - STG IR: [some notes on operational semantics](http://github.com/hypersimplex/notes_stg/blob/main/notebook.pdf), [notes on design of STG runtime for this project](http://github.com/hypersimplex/nabla/blob/main/doc/stg.pdf)
 - code generation
+  - high level instructions for VM (for easy of debugging)
+  - native instruction code gen for some parts of the program (eg: convert to CFG and generate via Cranelift, or custom code gen)
 - runtime support
-
+  - VM
+  - hybrid: VM + native instructions
 ## Sample Snippets
 
 ```
