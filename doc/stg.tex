@@ -294,12 +294,14 @@
 
   \section{State Transition: eval constructor}
 
+  largely the same transition as descrbied in the 1992 reference \cite{peyton1992}
+
   \begin{lstlisting}
     eval (c xs) $\rho$, s, h, $\sigma$
 
     $\implies$
 
-    ReturnCon c (val $\rho$ $\sigma$ xs), s, h, $\sigma$
+    ReturnCon c xs (val $\rho$ $\sigma$ xs), s, h, $\sigma$
   \end{lstlisting}
 
   \vfill\null
