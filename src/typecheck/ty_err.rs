@@ -32,6 +32,7 @@ pub(crate) enum TyError {
     },
     AdtError(String),
     PatBinderUniqueness(String), // TODO: move this else where
+    MissingFunctionDefinition(String),
     InternalError(String),
 }
 

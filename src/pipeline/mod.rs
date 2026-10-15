@@ -130,6 +130,26 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         }
     }
 
+    // check declared function signature has a corresponding definition
+    {
+        let defined_fn_names: BTreeSet<&str> = seen_top_level_fn_names
+            .iter()
+            .filter_map(|vvar| match vvar {
+                VVar::Named(VVarName {
+                    token: ConcreteToken::Iden(name),
+                    ..
+                }) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        for sig_name in declared_function_type_schemes.keys() {
+            if !defined_fn_names.contains(sig_name.as_str()) {
+                return Err(TyError::MissingFunctionDefinition(sig_name.clone()))?;
+            }
+        }
+    }
+
     println!("rename user introduced local variables and patterns to uniquify..");
     // top level bindings stays constant (identity map)
     let vvars_outer_scope: BTreeMap<VVar, VVar> = env_v_var_to_ty_scheme
@@ -1639,4 +1659,18 @@ f x =
         compile(content),
         Err(CompileError::Type(TyError::UnknownType(_)))
     ));
+}
+
+// negative test: function signature without accompanying definition
+#[test]
+fn test_pipeline_function_missing_definition() {
+    let content = r###"
+f :: i64 -> i64
+"###;
+    let res = compile(content);
+    assert!(
+        matches!(res, Err(CompileError::Type(TyError::MissingFunctionDefinition(ref name))) if name == "f"),
+        "expected function to be rejected due to missing definition, but got {:?}",
+        res
+    );
 }
