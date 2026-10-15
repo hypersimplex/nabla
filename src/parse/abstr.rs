@@ -224,7 +224,7 @@ fn parse_top_level_identifier(
             ..
         }) => parse_function_signature(item, identifier),
         Some(ConcreteTokenAndLoc { token, .. })
-            if is_pattern_token(&token) || matches!(token, ConcreteToken::Equal) =>
+            if is_pattern_start_token(&token) || matches!(token, ConcreteToken::Equal) =>
         {
             parse_function_definition(item, identifier)
         }
@@ -1146,17 +1146,6 @@ fn pattern_token(pattern: &PatternExpr) -> ConcreteTokenAndLoc {
     }
 }
 
-fn is_pattern_token(token: &ConcreteToken) -> bool {
-    match token {
-        ConcreteToken::Underscore
-        | ConcreteToken::Iden(_)
-        | ConcreteToken::LiteralNumeric(_)
-        | ConcreteToken::LiteralString(_)
-        | ConcreteToken::ParenL => true,
-        _ => false,
-    }
-}
-
 static TEST_CONTENT_ABSTRACT_PARSER: &str = r###"
 // f x = 9 as f32 / ((-7*x as i32) as f32)
 f x y z = 9 / (-7*x+y+z)
@@ -1974,5 +1963,16 @@ mod tests {
 
         // use crate::util::printer::DocPrinter;
         // println!("{}", top_level_items.to_doc());
+    }
+
+    #[test]
+    fn test_abstract_parser_negative_literal_pattern() {
+        let input = r###"
+ff x =
+  case x of
+    -1 -> 1
+    _  -> 0
+"###;
+        test_abstract_parser(input);
     }
 }

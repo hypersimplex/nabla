@@ -22,7 +22,7 @@ pub fn is_type_constructor_name(name: &str) -> bool {
     name.chars().next().map_or(false, char::is_uppercase)
 }
 
-// check if it's starting with: wildcard / literal/ identifier (constructor/variable) / parenthesized pattern
+// check if it's starting with: wildcard / (negative) literal/ identifier (constructor/variable) / parenthesized pattern
 pub(crate) fn is_pattern_start_token(token: &ConcreteToken) -> bool {
     matches!(
         token,
@@ -31,6 +31,7 @@ pub(crate) fn is_pattern_start_token(token: &ConcreteToken) -> bool {
             | ConcreteToken::LiteralString(_)
             | ConcreteToken::Iden(_)
             | ConcreteToken::ParenL
+            | ConcreteToken::Minus
     )
 }
 
@@ -209,6 +210,40 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
                     expr: AExpr::NumericExpr(LiteralNumericExpr { literal: token }),
                     type_expr: None,
                 }))
+            }
+            ConcreteToken::Minus => {
+                let minus_tok = self.next()?.expect("peeked minus must be available");
+                match self.peek()? {
+                    Some(ConcreteTokenAndLoc {
+                        token: ConcreteToken::LiteralNumeric(raw),
+                        ..
+                    }) => {
+                        // negative literal number
+                        let num_tok = self.next()?.expect("peeked literal must be available");
+                        let combined_loc = Location {
+                            file: minus_tok.loc.file.clone(),
+                            span_start: minus_tok.loc.span_start,
+                            span_end: num_tok.loc.span_end,
+                        };
+                        Ok(PatternExpr::Literal(AExprAnnot {
+                            expr: AExpr::NumericExpr(LiteralNumericExpr {
+                                literal: ConcreteTokenAndLoc {
+                                    token: ConcreteToken::LiteralNumeric(format!("-{}", raw)),
+                                    loc: combined_loc,
+                                    starts_a_line: minus_tok.starts_a_line,
+                                },
+                            }),
+                            type_expr: None,
+                        }))
+                    }
+                    Some(other) => Err(PatternParseError::InvalidPattern(format!(
+                        "expected numeric literal after '-' in pattern, got {:?}",
+                        other.token
+                    ))),
+                    None => Err(PatternParseError::InvalidPattern(
+                        "expected numeric literal after '-' in pattern, got EOF".to_string(),
+                    )),
+                }
             }
             ConcreteToken::LiteralString(_) => {
                 let token = self.next()?.expect("peeked literal must be available");
