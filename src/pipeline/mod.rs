@@ -1674,3 +1674,29 @@ f :: i64 -> i64
         res
     );
 }
+
+// negative test: undeclared type in ADT constructor field
+#[test]
+fn test_pipeline_undeclared_type_in_adt_rejected() {
+    let content = r###"
+data Box = Box NoSuchType
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnknownType(_)))
+    ));
+}
+
+// negative test: unbound type variable in ADT constructor field
+#[test]
+fn test_pipeline_unbound_type_variable_in_adt_rejected() {
+    let content = r###"
+data Box = Box a
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnknownType(_)))
+    ));
+}

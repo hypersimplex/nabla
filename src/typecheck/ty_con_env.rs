@@ -96,6 +96,10 @@ impl TyConEnv {
             .ok_or_else(|| TyError::UnknownType(name.to_string()))
     }
 
+    pub fn has_adt(&self, name: &str) -> bool {
+        self.adts.contains_key(name)
+    }
+
     pub fn add_adt(&mut self, adt: ADTDef) {
         self.adts.insert(adt.name.clone(), adt);
     }
