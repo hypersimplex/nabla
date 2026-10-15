@@ -1700,3 +1700,15 @@ f x = 0
         Err(CompileError::Type(TyError::UnknownType(_)))
     ));
 }
+
+// negative test: prefix operator in function application must be parenthesized
+#[test]
+fn test_pipeline_prefix_op_in_app_unparenthesized_rejected() {
+    let content = r###"
+f = g !x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Parse(ParseError::UnexpectedToken { .. }))
+    ));
+}

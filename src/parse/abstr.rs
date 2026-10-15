@@ -661,6 +661,14 @@ where
             continue;
         }
 
+        // purely prefix operator cannot be used as an unparenthesized argument in function application
+        if prefix_op_info(&next.token).is_some() && infix_op_info(&next.token).is_none() {
+            return Err(ParseError::unexpected_token(
+                "prefix operator in function application must be parenthesized, e.g. `(!x)`",
+                Some(next.clone()),
+            ));
+        }
+
         break;
     }
 
@@ -1974,5 +1982,11 @@ ff x =
     _  -> 0
 "###;
         test_abstract_parser(input);
+    }
+
+    #[test]
+    fn test_abstract_parser_prefix_op_in_app() {
+        test_abstract_parser("f = g (!x)\n");
+        test_abstract_parser("f = g (-x)\n");
     }
 }
