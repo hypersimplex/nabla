@@ -409,6 +409,13 @@ fn parse_function_definition(
             ..
         })
     ) {
+        if !param_patterns.is_empty() {
+            let tok = parser.next_concrete()?;
+            return Err(ParseError::unexpected_token(
+                "type annotations on function parameters require parentheses '(x :: Type)'",
+                Some(tok),
+            ));
+        }
         parser.next_concrete()?; // consume `::`
         Some(parse_type_expr_source(parser)?)
     } else {
@@ -477,7 +484,9 @@ fn parse_required_type_annotation(
 ///   (A B) C
 ///   A (B C)
 ///   A (B -> C)
-fn parse_type_expr_source(source: &mut impl ConcreteTokenSource) -> ParseResult<ATypeExprComplex> {
+pub(crate) fn parse_type_expr_source(
+    source: &mut impl ConcreteTokenSource,
+) -> ParseResult<ATypeExprComplex> {
     let mut head = parse_type_atom_source(source)?;
     while let Some(next) = source.peek_concrete()? {
         if !matches!(next.token, ConcreteToken::Iden(_) | ConcreteToken::ParenL) {
@@ -1063,6 +1072,13 @@ fn parse_let_def_item(item: &mut LayoutItemParser<'_>) -> ParseResult<(PatternEx
             ..
         })
     ) {
+        if !parameters.is_empty() {
+            let tok = item.next_concrete()?;
+            return Err(ParseError::unexpected_token(
+                "type annotations on parameters of let expr's definitions require parentheses '(x :: Type)'",
+                Some(tok),
+            ));
+        }
         item.next_concrete()?;
         Some(parse_type_expr_source(item)?)
     } else {
@@ -1146,6 +1162,7 @@ fn pattern_token(pattern: &PatternExpr) -> ConcreteTokenAndLoc {
         },
         PatternExpr::Range { .. } => ConcreteToken::Iden("_range".into()),
         PatternExpr::Constructor { constructor, .. } => constructor.token.clone(),
+        PatternExpr::Typed { pattern, .. } => return pattern_token(pattern),
     };
     ConcreteTokenAndLoc {
         token,
@@ -1277,7 +1294,7 @@ f_let a =
  let x :: u32 -> u32 = \bb -> (1 + bb)
      y :: u32 = 2 + 7
      z :: u32 = 5
-     f arg :: T A -> T A = arg * a
+     f (arg :: T A) = arg * a
  in
    x + y + z + a
 

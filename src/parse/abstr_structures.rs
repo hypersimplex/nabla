@@ -458,6 +458,11 @@ pub(crate) enum PatternExpr {
         constructor: ConcreteTokenAndLoc,       // constructor name
         args: PatternConstructorArgs,           // positional args or record fields
     },
+    Typed {
+        // (pat :: Type) pattern type signature
+        pattern: Box<PatternExpr>,
+        ty: ATypeExprComplex,
+    },
 }
 
 impl DocPrinter for PatternExpr {
@@ -505,6 +510,9 @@ impl DocPrinter for PatternExpr {
                 }
                 doc.cat(constructor.to_doc()).cat(args.to_doc())
             }
+            Typed { pattern, ty } => Doc::lit("(")
+                .cat(pattern.to_doc().cat_space_lit("::").cat_space(ty.to_doc()))
+                .cat_lit(")"),
         }
     }
 }

@@ -66,7 +66,7 @@ isEven n = case n of
   0 -> Bool.True
   _ -> isOdd (n - 1)
 
-isOdd n = case n of
+isOdd (n :: i64) = case n of
   0 -> Bool.False
   _ -> isEven (n - 1)
 

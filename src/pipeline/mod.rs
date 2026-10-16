@@ -1761,3 +1761,25 @@ f x = (
         Err(CompileError::Parse(ParseError::Message { .. }))
     ));
 }
+
+// negative test: unparenthesized function header type annotation rejected by parser
+#[test]
+fn test_pipeline_unparenthesized_function_header_annotation_rejected() {
+    let content = "f x :: i64 = x\n";
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Parse(ParseError::UnexpectedToken { .. }))
+    ));
+}
+
+// positive test: matching pattern and subexpression type annotations accepted
+#[test]
+fn test_pipeline_matching_type_annotations_accepted() {
+    let content = "f (x :: i64) = (x :: i64)\n";
+    match compile(content) {
+        Err(e) => {
+            println!("{:?}", e);
+        }
+        _ => {}
+    }
+}

@@ -4,7 +4,7 @@ use super::abstr_structures::*;
 use super::concrete_token::*;
 use super::layout::{ParserToken, ParserTokenType};
 use super::loc::*;
-use super::parser::{LayoutFeedback, LayoutItemParser, ParseError, Parser};
+use super::parser::{ConcreteTokenSource, LayoutFeedback, LayoutItemParser, ParseError, Parser};
 
 #[derive(Debug)]
 pub enum PatternParseError {
@@ -39,7 +39,12 @@ fn pattern_parser_error(error: ParseError) -> PatternParseError {
     PatternParseError::InvalidPattern(format!("token stream error: {error}"))
 }
 
-pub(crate) trait PatternTokenStream {
+/// stream of tokens for pattern parsing
+///
+/// this requires `ConcreteTokenSource` so pattern parsing can use
+/// `parse_type_expr_source` when parsing pattern type with signatures like
+/// `(x :: Type)`
+pub(crate) trait PatternTokenStream: ConcreteTokenSource {
     fn peek_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError>;
 
     fn next_pattern_concrete(&mut self) -> Result<Option<ConcreteTokenAndLoc>, PatternParseError>;
@@ -142,17 +147,17 @@ pub(crate) fn parse_pattern_item_stream(
     parse_pattern_source(stream)
 }
 
-pub(crate) fn parse_pattern_source<S: PatternTokenStream + ?Sized>(
+pub(crate) fn parse_pattern_source<S: PatternTokenStream>(
     stream: &mut S,
 ) -> Result<PatternExpr, PatternParseError> {
     PatternParser::new(stream).parse_pattern()
 }
 
-struct PatternParser<'stream, S: PatternTokenStream + ?Sized> {
+struct PatternParser<'stream, S: PatternTokenStream> {
     stream: &'stream mut S,
 }
 
-impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
+impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
     fn new(stream: &'stream mut S) -> Self {
         Self { stream }
     }
@@ -274,11 +279,28 @@ impl<'stream, S: PatternTokenStream + ?Sized> PatternParser<'stream, S> {
 
         // [todo]: support parsing tuple and unit
 
-        let inner = self.parse_pattern()?;
+        let mut pattern = self.parse_pattern()?;
+
+        if matches!(
+            self.peek()?,
+            Some(ConcreteTokenAndLoc {
+                token: ConcreteToken::IsType,
+                ..
+            })
+        ) {
+            self.next()?; // consume `::`
+            let ty = super::abstr::parse_type_expr_source(self.stream).map_err(|e| {
+                PatternParseError::InvalidPattern(format!("invalid type in pattern: {e:?}"))
+            })?;
+            pattern = PatternExpr::Typed {
+                pattern: Box::new(pattern),
+                ty,
+            };
+        }
 
         // expect closing `)`
         match self.next()? {
-            Some(token) if matches!(token.token, ConcreteToken::ParenR) => Ok(inner),
+            Some(token) if matches!(token.token, ConcreteToken::ParenR) => Ok(pattern),
             Some(token) => Err(PatternParseError::InvalidPattern(format!(
                 "expected ')', got {:?}",
                 token.token

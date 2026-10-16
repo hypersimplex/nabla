@@ -39,7 +39,7 @@ fn v_expr_from_abstr_expr(
     let params: Vec<VAbstrParam> = param_patterns
         .iter()
         .map(|pattern| {
-            let vpattern = to_v_pattern(pattern);
+            let (vpattern, annot) = to_v_pattern_and_annot(pattern);
             let binder = match &vpattern {
                 VPattern::Variable(var) => var.clone(),
                 _ => v_var_supply.generate(),
@@ -47,7 +47,7 @@ fn v_expr_from_abstr_expr(
             VAbstrParam {
                 binder,
                 pattern: vpattern,
-                annotation: None,
+                annotation: annot,
             }
         })
         .collect();
@@ -231,7 +231,7 @@ fn v_expr_from_let_expr(
                     type_expr,
                 },
             )| {
-                let v_pattern = to_v_pattern(pattern_expr);
+                let (v_pattern, pat_annot) = to_v_pattern_and_annot(pattern_expr);
                 let (vexpr_def, texpr_def_annot) =
                     vexpr_and_ty_annot_from_aexpr(expr_def, v_var_supply);
                 (
@@ -240,6 +240,7 @@ fn v_expr_from_let_expr(
                     type_expr
                         .as_ref()
                         .map(lower_type_annot_to_ty_expr)
+                        .or(pat_annot)
                         .or(texpr_def_annot),
                 )
             },
@@ -340,11 +341,21 @@ fn v_expr_from_constructor_expr(
 
 // helpers related to pattern
 
+fn to_v_pattern_and_annot(pattern: &abstr_structures::PatternExpr) -> (VPattern, Option<TyExpr>) {
+    match pattern {
+        abstr_structures::PatternExpr::Typed { pattern: inner, ty } => {
+            (to_v_pattern(inner), Some(lower_type_annot_to_ty_expr(ty)))
+        }
+        other => (to_v_pattern(other), None),
+    }
+}
+
 fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
     use crate::parse::abstr_structures::AExpr;
     use crate::parse::abstr_structures::PatternExpr;
     match pattern {
         PatternExpr::Wild => VPattern::Wild,
+        PatternExpr::Typed { pattern, .. } => to_v_pattern(pattern),
         PatternExpr::Variable(var) => VPattern::Variable(VVar::Named(VVarName {
             token: var.token.clone(),
             loc: Some(var.loc.clone()),
