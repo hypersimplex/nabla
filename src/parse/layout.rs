@@ -15,6 +15,71 @@ use super::parser::{ParseError, ParseResult};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct LayoutId(u64);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ExplicitDelimiterStart {
+    Brace,
+    Paren,
+    Bracket,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ExplicitDelimiterEnd {
+    Brace,
+    Paren,
+    Bracket,
+}
+
+fn are_matching_delimiters(start: &ExplicitDelimiterStart, end: &ExplicitDelimiterEnd) -> bool {
+    match (start, end) {
+        (ExplicitDelimiterStart::Brace, ExplicitDelimiterEnd::Brace)
+        | (ExplicitDelimiterStart::Paren, ExplicitDelimiterEnd::Paren)
+        | (ExplicitDelimiterStart::Bracket, ExplicitDelimiterEnd::Bracket) => true,
+        _ => false,
+    }
+}
+
+impl<'a> TryFrom<&'a ConcreteToken> for ExplicitDelimiterStart {
+    type Error = ParseError;
+    fn try_from(concrete_token: &'a ConcreteToken) -> Result<Self, Self::Error> {
+        let ret = match concrete_token {
+            ConcreteToken::BraceL => ExplicitDelimiterStart::Brace,
+            ConcreteToken::ParenL => ExplicitDelimiterStart::Paren,
+            ConcreteToken::BracketL => ExplicitDelimiterStart::Bracket,
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: format!(
+                        "internal error: unexpected token {:?} to convert to explicit delimiter",
+                        concrete_token
+                    ),
+                    found: None,
+                });
+            }
+        };
+        Ok(ret)
+    }
+}
+
+impl<'a> TryFrom<&'a ConcreteToken> for ExplicitDelimiterEnd {
+    type Error = ParseError;
+    fn try_from(concrete_token: &'a ConcreteToken) -> Result<Self, Self::Error> {
+        let ret = match concrete_token {
+            ConcreteToken::BraceR => ExplicitDelimiterEnd::Brace,
+            ConcreteToken::ParenR => ExplicitDelimiterEnd::Paren,
+            ConcreteToken::BracketR => ExplicitDelimiterEnd::Bracket,
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: format!(
+                        "internal error: unexpected token {:?} to convert to explicit delimiter",
+                        concrete_token
+                    ),
+                    found: None,
+                });
+            }
+        };
+        Ok(ret)
+    }
+}
+
 /// construct used to represent layout indent/dedent
 #[derive(Clone, Debug)]
 pub(crate) enum LayoutCxt {
@@ -27,6 +92,7 @@ pub(crate) enum LayoutCxt {
 
     // activated from an explicit token
     ExplicitStart {
+        delimiter: ExplicitDelimiterStart,
         loc_start: Location,
     },
 }
@@ -135,28 +201,42 @@ impl LayoutStream {
                 return Ok(None);
             }
             Some(ParserToken {
-                ty: ParserTokenType::Concrete(ConcreteToken::BraceL),
+                ty: ParserTokenType::Concrete(token),
                 loc,
-            }) => {
+            }) if matches!(
+                token,
+                ConcreteToken::BraceL | ConcreteToken::ParenL | ConcreteToken::BracketL
+            ) =>
+            {
+                let delimiter: ExplicitDelimiterStart = token.try_into()?;
+
                 // explict delimiter for starting a new layout block
                 self.layout_stack.push(LayoutCxt::ExplicitStart {
+                    delimiter,
                     loc_start: loc.clone(),
                 });
                 Ok(self.in_progress.pop_front())
             }
             Some(
                 parser_tok @ ParserToken {
-                    ty: ParserTokenType::Concrete(ConcreteToken::BraceR),
-                    loc,
+                    ty: ParserTokenType::Concrete(token),
+                    loc: _,
                 },
-            ) => {
+            ) if matches!(
+                token,
+                ConcreteToken::BraceR | ConcreteToken::ParenR | ConcreteToken::BracketR
+            ) =>
+            {
+                let delimiter_end: ExplicitDelimiterEnd = token.try_into()?;
+
                 // encountered an explict delimiter for ending a layout block
                 //
                 // check that the last item on the layout stack is an explicit start
                 //
                 // remove existing layout block
                 match self.layout_stack.last() {
-                    Some(LayoutCxt::ExplicitStart { .. }) => {} // expect to get this
+                    Some(LayoutCxt::ExplicitStart { delimiter, .. })
+                        if are_matching_delimiters(&delimiter, &delimiter_end) => {} // expect to get this
                     _ => {
                         return Err(ParseError::message(
                             "expect matching explicit layout start",
@@ -201,29 +281,29 @@ impl LayoutStream {
             return Ok(());
         }
 
-        // a physical right brace closes implicit contexts nested inside the
-        // matching explicit context before the brace itself is exposed
+        // a physical closing delimiter closes implicit contexts nested inside the
+        // matching explicit context before the delimiter itself is exposed
         //
         // this is structural layout behavior
-        if let Some(ConcreteTokenAndLoc {
-            token: ConcreteToken::BraceR,
-            loc,
-            ..
-        }) = self.inputs.0.get(self.lex_pos)
-        {
-            let location = loc.to_zero_width_start();
-            let mut closed_implicit = false;
-            while let Some(LayoutCxt::ImplicitStart { id, .. }) = self.layout_stack.last() {
-                let layout_id = *id;
-                self.layout_stack.pop();
-                self.in_progress.push_back(ParserToken {
-                    ty: ParserTokenType::LayoutEnd(layout_id),
-                    loc: location.clone(),
-                });
-                closed_implicit = true;
-            }
-            if closed_implicit {
-                return Ok(());
+        if let Some(ConcreteTokenAndLoc { token, loc, .. }) = self.inputs.0.get(self.lex_pos) {
+            if matches!(
+                token,
+                ConcreteToken::BraceR | ConcreteToken::ParenR | ConcreteToken::BracketR
+            ) {
+                let location = loc.to_zero_width_start();
+                let mut closed_implicit = false;
+                while let Some(LayoutCxt::ImplicitStart { id, .. }) = self.layout_stack.last() {
+                    let layout_id = *id;
+                    self.layout_stack.pop();
+                    self.in_progress.push_back(ParserToken {
+                        ty: ParserTokenType::LayoutEnd(layout_id),
+                        loc: location.clone(),
+                    });
+                    closed_implicit = true;
+                }
+                if closed_implicit {
+                    return Ok(());
+                }
             }
         }
 
@@ -240,7 +320,7 @@ impl LayoutStream {
                 // early return without consuming input token
                 match self.layout_stack.last() {
                     None => {} // nothing to pop
-                    Some(LayoutCxt::ExplicitStart { loc_start }) => {
+                    Some(LayoutCxt::ExplicitStart { loc_start, .. }) => {
                         return Err(ParseError::message(
                             format!(
                                 "no matching explicit layout end found for explicit layout start at {:?}",

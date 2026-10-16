@@ -1712,3 +1712,52 @@ f = g !x
         Err(CompileError::Parse(ParseError::UnexpectedToken { .. }))
     ));
 }
+
+#[test]
+fn test_pipeline_delimiter_closing_paren_at_column_zero() {
+    let content = r###"
+f x = (
+  case x of
+    0 -> 1
+    _ -> 2
+)
+g y = y
+"###;
+    let res = std::panic::catch_unwind(|| compile(content));
+    assert!(
+        res.as_ref().is_ok_and(|r| r.is_ok())
+            || res.as_ref().is_err_and(|e| {
+                e.downcast_ref::<&str>()
+                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
+            }),
+        "compilation failed before reaching core: {:?}",
+        res
+    );
+}
+
+// negative test: mismatched delimiters
+#[test]
+fn test_pipeline_mismatched_delimiter_bracket_paren_rejected() {
+    let content = r###"
+f x = (
+  1 + 2
+]
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Parse(ParseError::Message { .. }))
+    ));
+}
+
+// negative test: unclosed delimiter
+#[test]
+fn test_pipeline_unclosed_delimiter_rejected() {
+    let content = r###"
+f x = (
+  1 + 2
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Parse(ParseError::Message { .. }))
+    ));
+}
