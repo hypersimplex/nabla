@@ -12,6 +12,11 @@ pub enum PatternParseError {
     InvalidPattern(String),
 }
 
+struct ConstructorHead {
+    qualified: Option<ConcreteTokenAndLoc>,
+    constructor: ConcreteTokenAndLoc,
+}
+
 /// data constructor needs to start with an uppercase letter
 pub fn is_data_constructor_name(name: &str) -> bool {
     name.chars().next().map_or(false, char::is_uppercase)
@@ -153,6 +158,13 @@ pub(crate) fn parse_pattern_source<S: PatternTokenStream>(
     PatternParser::new(stream).parse_pattern()
 }
 
+/// parses an atomic pattern
+pub(crate) fn parse_atom_pattern_source<S: PatternTokenStream>(
+    stream: &mut S,
+) -> Result<PatternExpr, PatternParseError> {
+    PatternParser::new(stream).parse_atom_pattern()
+}
+
 struct PatternParser<'stream, S: PatternTokenStream> {
     stream: &'stream mut S,
 }
@@ -171,14 +183,14 @@ impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
     }
 
     fn parse_pattern(&mut self) -> Result<PatternExpr, PatternParseError> {
-        let head = self.parse_atom_pattern()?;
+        let head = self.parse_pattern_application()?;
 
         // optional range suffix: <literal> .. <literal>
         if let Some(peek) = self.peek()? {
             if matches!(peek.token, ConcreteToken::Ellipse) {
                 // consume '..'
                 self.next()?;
-                let tail = self.parse_atom_pattern()?;
+                let tail = self.parse_pattern_application()?;
                 match (head, tail) {
                     (PatternExpr::Literal(start), PatternExpr::Literal(end)) => {
                         return Ok(PatternExpr::Range {
@@ -196,6 +208,24 @@ impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
         }
 
         Ok(head)
+    }
+
+    /// consume pattern application (constructor or atomic pattern);
+    /// if it is a constructor pattern then constructor arguments are
+    /// taken care of by `parse_constructor`
+    fn parse_pattern_application(&mut self) -> Result<PatternExpr, PatternParseError> {
+        let head = match self.peek()? {
+            Some(token) => token,
+            None => return Err(PatternParseError::EmptyPattern),
+        };
+
+        if let ConcreteToken::Iden(name) = &head.token {
+            if is_data_constructor_name(name) {
+                return self.parse_constructor();
+            }
+        }
+
+        self.parse_atom_pattern()
     }
 
     fn parse_atom_pattern(&mut self) -> Result<PatternExpr, PatternParseError> {
@@ -259,10 +289,10 @@ impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
             }
             ConcreteToken::ParenL => self.parse_parenthesized(),
             ConcreteToken::Iden(name) => {
-                let token = self.next()?.expect("peeked identifier must be available");
                 if is_data_constructor_name(name) {
-                    self.parse_constructor(token)
+                    self.parse_atom_constructor()
                 } else {
+                    let token = self.next()?.expect("peeked identifier must be available");
                     Ok(PatternExpr::Variable(token))
                 }
             }
@@ -311,44 +341,71 @@ impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
         }
     }
 
-    fn parse_constructor(
+    /// resolves constructor qualification, returning the constructor head and
+    /// the optional qualifier
+    fn resolve_constructor_qualification(
         &mut self,
         head: ConcreteTokenAndLoc,
-    ) -> Result<PatternExpr, PatternParseError> {
-        let mut qualified = None;
-        let mut constructor = head.clone();
+    ) -> Result<ConstructorHead, PatternParseError> {
+        if matches!(self.peek()?.map(|t| t.token), Some(ConcreteToken::Dot)) {
+            // qualified name detected
+            self.next()?;
+            let ctor_token = self.next()?.ok_or_else(|| {
+                PatternParseError::InvalidPattern(
+                    "expected constructor name after qualification".to_string(),
+                )
+            })?;
 
-        if let Some(next) = self.peek()? {
-            if matches!(next.token, ConcreteToken::Dot) {
-                // qualified name detected
-                self.next()?;
-                let ctor_token = self.next()?.ok_or_else(|| {
-                    PatternParseError::InvalidPattern(
-                        "expected constructor name after qualification".to_string(),
-                    )
-                })?;
-
-                // get constructor name
-                match &ctor_token.token {
-                    ConcreteToken::Iden(name) if is_data_constructor_name(name) => {
-                        qualified = Some(head);
-                        constructor = ctor_token;
-                    }
-                    ConcreteToken::Iden(name) => {
-                        return Err(PatternParseError::InvalidPattern(format!(
-                            "expected constructor name after '.', got {:?}",
-                            name
-                        )));
-                    }
-                    other => {
-                        return Err(PatternParseError::InvalidPattern(format!(
-                            "expected constructor name after '.', got {:?}",
-                            other
-                        )));
-                    }
+            match &ctor_token.token {
+                ConcreteToken::Iden(name) if is_data_constructor_name(name) => {
+                    Ok(ConstructorHead {
+                        qualified: Some(head),
+                        constructor: ctor_token,
+                    })
                 }
+                ConcreteToken::Iden(name) => Err(PatternParseError::InvalidPattern(format!(
+                    "expected constructor name after '.', got {:?}",
+                    name
+                ))),
+                other => Err(PatternParseError::InvalidPattern(format!(
+                    "expected constructor name after '.', got {:?}",
+                    other
+                ))),
             }
+        } else {
+            Ok(ConstructorHead {
+                qualified: None,
+                constructor: head,
+            })
         }
+    }
+
+    /// parses an atomic constructor pattern with no positional arguments,
+    /// used for:
+    /// - nullary constructor (eg: `Nothing`)
+    /// - record pattern (e.g. `Point { x, y }`)
+    fn parse_atom_constructor(&mut self) -> Result<PatternExpr, PatternParseError> {
+        self.parse_constructor_internal(true)
+    }
+
+    /// parses a constructor pattern application that consumes positional atomic
+    /// pattern arguments, used for:
+    /// - constructor applications (eg: `Just x`, `Pair a b`)
+    fn parse_constructor(&mut self) -> Result<PatternExpr, PatternParseError> {
+        self.parse_constructor_internal(false)
+    }
+
+    fn parse_constructor_internal(
+        &mut self,
+        is_atom: bool,
+    ) -> Result<PatternExpr, PatternParseError> {
+        let head = self
+            .next()?
+            .expect("peeked constructor token must be available");
+        let ConstructorHead {
+            qualified,
+            constructor,
+        } = self.resolve_constructor_qualification(head)?;
 
         if let Some(next) = self.peek()? {
             if matches!(next.token, ConcreteToken::BraceL) {
@@ -357,8 +414,14 @@ impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
             }
         }
 
-        // non-record constructor
-        let args = self.parse_constructor_args()?;
+        let args = if is_atom {
+            // atomic constructor patterns have strictly 0 positional arguments
+            Vec::new()
+        } else {
+            // pattern applications consume atomic pattern arguments
+            self.parse_constructor_args()?
+        };
+
         Ok(PatternExpr::Constructor {
             qualified,
             constructor,
@@ -374,7 +437,7 @@ impl<'stream, S: PatternTokenStream> PatternParser<'stream, S> {
                 break;
             }
 
-            let arg = self.parse_pattern()?;
+            let arg = self.parse_atom_pattern()?;
             args.push(arg);
         }
 

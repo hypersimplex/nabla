@@ -35,7 +35,7 @@
 ///                         | data_declaration
 ///   function_signature   := identifier `::` type_expr
 ///   function_definition  := identifier parameter* `=` expr
-///   parameter            := pattern
+///   parameter            := pattern_atom
 ///
 /// ---
 ///
@@ -82,16 +82,28 @@
 ///
 /// patterns
 ///
-///   pattern              := pattern_atom
-///                         | pattern_atom `..` pattern_atom
+///   pattern              := pattern_application
+///                         | pattern_application `..` pattern_application
+///
+///   pattern_application  := constructor pattern_atom*
+///                         | qualified_constructor pattern_atom*
+///                         | pattern_atom
+///
+///   note: `pattern_application` is used to prevent greedy argument consumption
+///     - constructor arguments are strictly `pattern_atom`s, ensuring nested constructors,
+///       eg: `Pair Nothing x` parse as `Pair (Nothing) (x)` instead of  `Pair (Nothing x)`
+///     - distinguishes constructor pattern applications from atomic patterns so that parameter
+///       in function, let, and lambda headers require parentheses around constructor patterns
+///       with arguments (eg: `f (Just x) y = y`); nullary constructors are unparenthesized
+///       (eg: `f Nothing x = x`)
 ///
 ///   pattern_atom         := `_`
 ///                         | variable
 ///                         | literal
 ///                         | `(` pattern `)`
 ///                         | `()`
-///                         | constructor pattern_atom*
-///                         | qualified_constructor pattern_atom*
+///                         | constructor
+///                         | qualified_constructor
 ///                         | constructor record_pattern
 ///                         | qualified_constructor record_pattern
 ///
@@ -396,8 +408,9 @@ fn parse_function_definition(
         if matches!(next.token, ConcreteToken::Equal | ConcreteToken::IsType) {
             break;
         }
-        let pattern = parse_pattern_source(parser)
-            .map_err(|e| ParseError::message(format!("invalid function parameter: {e:?}"), None))?;
+        let pattern = parse_atom_pattern_source(parser).map_err(|e| {
+            ParseError::message(format!("invalid function parameter: {:?}", e), None)
+        })?;
         patterns.push(pattern_token(&pattern));
         param_patterns.push(pattern);
     }
@@ -1061,8 +1074,8 @@ fn parse_let_def_item(item: &mut LayoutItemParser<'_>) -> ParseResult<(PatternEx
         if matches!(next.token, ConcreteToken::IsType | ConcreteToken::Equal) {
             break;
         }
-        let parameter = parse_pattern_source(item)
-            .map_err(|e| ParseError::message(format!("invalid let parameter: {e:?}"), None))?;
+        let parameter = parse_atom_pattern_source(item)
+            .map_err(|e| ParseError::message(format!("invalid let parameter: {:?}", e), None))?;
         parameters.push(parameter);
     }
     let annotation = if matches!(
@@ -1129,8 +1142,8 @@ where
         if matches!(next.token, ConcreteToken::ArrowRight) {
             break;
         }
-        let pattern = parse_pattern_source(source)
-            .map_err(|e| ParseError::message(format!("invalid lambda parameter: {e:?}"), None))?;
+        let pattern = parse_atom_pattern_source(source)
+            .map_err(|e| ParseError::message(format!("invalid lambda parameter: {:?}", e), None))?;
         patterns.push(pattern_token(&pattern));
         param_patterns.push(pattern);
     }

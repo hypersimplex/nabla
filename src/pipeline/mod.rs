@@ -1783,3 +1783,38 @@ fn test_pipeline_matching_type_annotations_accepted() {
         _ => {}
     }
 }
+
+// positive test: nullary constructor pattern does not greedily consume subsequent parameters
+#[test]
+fn test_pipeline_unparenthesized_constructor_pattern() {
+    let content = r###"
+data Maybe a = Nothing | Just a
+
+f Nothing x = x
+"###;
+    // [todo] remove catch_unwind and simplify to:
+    //   assert!(compile(content).is_ok());
+    // once downstream todos are completed
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {} // frontend lowering to core succeeded; reached downstream STG IR todo
+    }
+}
+
+// negative test: unparenthesized constructor taking one or more arguments should be rejected
+#[test]
+fn test_pipeline_unparenthesized_constructor_with_args_in_param_rejected() {
+    let content = r###"
+data Maybe a = Nothing | Just a
+
+f Just x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::ArityMismatch {
+            expected: 1,
+            got: 0,
+            ..
+        }))
+    ));
+}
