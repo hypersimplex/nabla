@@ -463,7 +463,6 @@ fn parse_function_body(parser: &mut Parser) -> ParseResult<BlockExpr> {
 /// parses a type expression, eg:
 ///   A -> B
 ///   C
-///   (A -> B) C
 ///   A B C
 ///   (A B) C
 ///   A (B C)
@@ -492,7 +491,6 @@ fn parse_required_type_annotation(
 /// parses a type expression, eg:
 ///   A -> B
 ///   C
-///   (A -> B) C
 ///   A B C
 ///   (A B) C
 ///   A (B C)
@@ -513,9 +511,9 @@ pub(crate) fn parse_type_expr_source(
         match &mut head {
             ATypeExprComplex::Iden(id) => id.type_parameters.push(arg), // do a type application
             ATypeExprComplex::Fun(_) => {
-                // A B->C is not valid
+                // function types are saturated, thus take no type arguments
                 return Err(ParseError::message(
-                    "function type cannot be applied without parentheses",
+                    "function type cannot be applied to type arguments",
                     None,
                 ));
             }
@@ -2018,5 +2016,16 @@ ff x =
     fn test_abstract_parser_prefix_op_in_app() {
         test_abstract_parser("f = g (!x)\n");
         test_abstract_parser("f = g (-x)\n");
+    }
+
+    #[test]
+    fn test_abstract_parser_function_type_application_rejected() {
+        let input = "f :: (A -> B) C\nf x = x\n";
+        let lexed = parse_content_to_concrete_tokens(Path::new("dummy_path"), input)
+            .expect("lexing should succeed");
+        assert!(matches!(
+            super::parse_concrete_top_level(lexed),
+            Err(super::ParseError::Message { .. })
+        ));
     }
 }
