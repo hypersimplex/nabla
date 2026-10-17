@@ -504,8 +504,15 @@ fn check_no_escaped_rigid_vars(
 /// we thread `local_ty_vars` through various ty_check_* functions where
 /// `local_ty_vars` tracks user-written type variable names in lexical scope
 /// (mapped to `Rigid` type variables) so we can support scoped type type
-/// variables, detect escaping local rigid variables, and prevent inner `let`
-/// bindings from generalizing outer scoped type variables
+/// variables, detect escaping local rigid variables [1], and prevent inner `let`
+/// bindings from generalizing outer scoped type variables [2]
+///
+/// where:
+///   [1]: `f = \x -> (x :: a)` is not allowed since `x` has an outer Auto type
+///        inference variable and the inner subexpression is not allowed to
+///        specify Rigid type variable and bind to an outer inference variable
+///   [2]: an inner binding is not allowed to steal an outer Rigid type variable
+///        and make it generalizable (polymorphic)
 pub(crate) fn ty_check_vexpr_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ty_env: &TyConEnv,
