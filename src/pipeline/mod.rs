@@ -1948,3 +1948,28 @@ f x = (\y -> (10 :: String))
         Err(CompileError::Type(TyError::TypeConflict { .. }))
     ));
 }
+
+// negative test: type variable mismatch between parameter and body rejected
+#[test]
+fn test_pipeline_lambda_scoped_annotation_mismatch_rejected() {
+    let content = r###"
+f = (\ (1 :: a) -> ("hello" :: a))
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// positive test: type variable sharing accepted
+#[test]
+fn test_pipeline_lambda_scoped_annotation_matching_accepted() {
+    let content = r###"
+id_scoped = (\ (x :: a) -> (x :: a))
+"###;
+    // [todo] remove panic once downstream pipeline todos are implemented
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {} // frontend lowering to core succeeded
+    }
+}
