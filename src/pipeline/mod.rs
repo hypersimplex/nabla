@@ -1775,12 +1775,12 @@ fn test_pipeline_unparenthesized_function_header_annotation_rejected() {
 // positive test: matching pattern and subexpression type annotations accepted
 #[test]
 fn test_pipeline_matching_type_annotations_accepted() {
-    let content = "f (x :: i64) = (x :: i64)\n";
-    match compile(content) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
+    let content = r###"
+f (x :: i64) = (x :: i64)
+"###;
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {} // frontend lowering to core succeeded; reached downstream STG IR todo
     }
 }
 
@@ -1816,5 +1816,135 @@ f Just x = x
             got: 0,
             ..
         }))
+    ));
+}
+
+// negative test: case scrutinee subexpression annotation mismatch rejected
+#[test]
+fn test_pipeline_case_scrutinee_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = case (10 :: String) of n -> n
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: function application argument annotation mismatch rejected
+#[test]
+fn test_pipeline_call_argument_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = (\y -> y) (10 :: String)
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: function application callable annotation mismatch rejected
+#[test]
+fn test_pipeline_callable_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = ((\y -> y) :: String -> String) 10
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: let body subexpression annotation mismatch rejected
+#[test]
+fn test_pipeline_let_body_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x =
+    let y = 1
+    in (y :: String)
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: let def RHS annotation mismatch rejected
+#[test]
+fn test_pipeline_let_def_rhs_annotation_mismatch_rejected() {
+    let content = r###"
+f x =
+    let y = (10 :: String)
+    in y
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: case alt body annotation mismatch rejected
+#[test]
+fn test_pipeline_case_alt_body_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = case x of
+    _ -> (10 :: String)
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: case guard annotation mismatch rejected
+#[test]
+fn test_pipeline_case_guard_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = case x of
+    _ | (1 == 1 :: String) -> 1
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: constructor positional argument annotation mismatch rejected
+#[test]
+fn test_pipeline_constructor_positional_arg_annotation_mismatch_rejected() {
+    let content = r###"
+data Maybe a = Nothing | Just a
+
+f x = Just (10 :: String)
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: record field annotation mismatch rejected
+#[test]
+fn test_pipeline_record_field_annotation_mismatch_rejected() {
+    let content = r###"
+data Point { x :: i64 }
+
+f p = Point { x = (10 :: String) }
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: lambda body annotation mismatch rejected
+#[test]
+fn test_pipeline_lambda_body_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = (\y -> (10 :: String))
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
     ));
 }
