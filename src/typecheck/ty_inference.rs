@@ -517,7 +517,7 @@ pub(crate) fn ty_check_vexpr_typed(
 
     let mut expr_ty_vars = local_ty_vars.clone();
     let maybe_annot_inst = match maybe_ty_expr {
-        Some(ty_annot) => Some(instantiate_and_subst_ty_expr(
+        Some(ty_annot) => Some(instantiate_rigid_and_subst_ty_expr(
             ty_annot,
             ty_env,
             ty_var_ns,
@@ -655,8 +655,12 @@ pub(crate) fn ty_check_abstraction_typed(
         env_lambda.apply_subst_to_env_in_place(&subst_params);
 
         if let Some(param_annot) = &param.annotation {
-            let annot_inst =
-                instantiate_and_subst_ty_expr(param_annot, ty_env, ty_var_ns, &mut scoped_ty_vars)?;
+            let annot_inst = instantiate_rigid_and_subst_ty_expr(
+                param_annot,
+                ty_env,
+                ty_var_ns,
+                &mut scoped_ty_vars,
+            )?;
             let annot_resolved = subst_ty(&subst_params, &annot_inst);
             let ty_binder_substituted = subst_ty(&subst_params, &ty_binder);
             subst_params = unify_ty_exprs(&subst_params, &ty_binder_substituted, &annot_resolved)?;
@@ -1163,7 +1167,7 @@ pub(crate) fn ty_check_binding_group(
             // share the same rigid vars and recursive calls constrain the seeded SCC placeholders
             let mut def_ty_vars = local_ty_vars.clone();
             let maybe_annot_inst = match optional_annot {
-                Some(ty_annot) => Some(instantiate_and_subst_ty_expr(
+                Some(ty_annot) => Some(instantiate_rigid_and_subst_ty_expr(
                     ty_annot,
                     ty_env,
                     ty_var_ns,
@@ -2750,19 +2754,22 @@ pub(crate) fn subst_user_defined_ty_vars(
     }
 }
 
-/// instantiate user-defined type variables in `ty` with fresh type variables and
+/// instantiate user-defined type variables in `ty` with fresh rigid type variables and
 /// return the resulting substituted `TyExpr`.
 ///
-/// updates `var_map` with fresh type variables for newly encountered names while
+/// updates `var_map` with fresh rigid type variables for newly encountered names while
 /// reusing existing entries, allowing callers to scope identical names across
-/// multiple annotations (e.g. in lambda abstractions).
-pub(crate) fn instantiate_and_subst_ty_expr(
+/// multiple annotations (e.g. in function signatures, let bindings, and lambda abstractions).
+pub(crate) fn instantiate_rigid_and_subst_ty_expr(
     ty: &TyExpr,
     te: &TyConEnv,
     ns: &mut TyVarNameSupply,
     var_map: &mut BTreeMap<String, TyVarName>,
 ) -> Result<TyExpr, TyError> {
     for name in collect_user_defined_ty_var_names(ty, te)? {
+        // use `Rigid` rather than flexible `Auto` vars so user-annotated
+        // type variables cannot unify with concrete types or other distinct
+        // rigid vars
         var_map.entry(name).or_insert_with(|| ns.generate_rigid());
     }
     Ok(subst_user_defined_ty_vars(ty, var_map))
