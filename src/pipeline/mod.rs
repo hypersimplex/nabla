@@ -84,13 +84,13 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     // note: builtin name does not change
     init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);
 
-    // function name -> top-level type schemes
-    let mut declared_function_type_schemes: BTreeMap<String, TyScheme> = BTreeMap::new();
+    // function name -> top-level declared signature type expressions
+    let mut declared_function_signatures: BTreeMap<String, TyExpr> = BTreeMap::new();
     insert_declared_fun_signatures(
         top_level.0.as_slice(),
         &ty_env,
         &mut env_v_var_to_ty_scheme,
-        &mut declared_function_type_schemes,
+        &mut declared_function_signatures,
         &mut ty_var_ns,
     )?;
 
@@ -143,7 +143,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
             })
             .collect();
 
-        for sig_name in declared_function_type_schemes.keys() {
+        for sig_name in declared_function_signatures.keys() {
             if !defined_fn_names.contains(sig_name.as_str()) {
                 return Err(TyError::MissingFunctionDefinition(sig_name.clone()))?;
             }
@@ -164,7 +164,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     // collect binding, definition, and optional signature for each top level
     // function
     let def_indices: Vec<usize> = funcs.keys().copied().collect();
-    let defs: Vec<(VPattern, VExpr, Option<TyScheme>)> = def_indices
+    let defs: Vec<(VPattern, VExpr, Option<TyExpr>)> = def_indices
         .iter()
         .map(|idx| {
             let (var_binder_to_fn, vexpr) = funcs.get(idx).unwrap().clone();
@@ -173,7 +173,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
                 VVar::Named(VVarName {
                     token: ConcreteToken::Iden(name),
                     ..
-                }) => declared_function_type_schemes.get(name.as_str()).cloned(),
+                }) => declared_function_signatures.get(name.as_str()).cloned(),
                 _ => None,
             };
             (VPattern::Variable(var_binder_to_fn), vexpr, opt_signature)
@@ -195,6 +195,7 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         &ty_env,
         &mut ty_var_ns,
         &defs,
+        &BTreeMap::new(),
     )?;
 
     // ordered in mutually dependent function groups
@@ -363,14 +364,15 @@ fn insert_declared_fun_signatures(
     items: &[TopLevelItem],
     ty_env: &TyConEnv,
     env: &mut EnvVVarToTyScheme,
-    declared_function_type_schemes: &mut BTreeMap<String, TyScheme>,
+    declared_function_signatures: &mut BTreeMap<String, TyExpr>,
     ty_var_ns: &mut TyVarNameSupply,
 ) -> Result<(), TyError> {
     for i in items.iter() {
         if let TopLevelItem::FunctionSignature(sig) = i {
             if let ConcreteToken::Iden(name) = &sig.identifier.token {
-                let ty_scheme = build_scheme_from_signature(sig, ty_env, ty_var_ns)?;
-                declared_function_type_schemes.insert(name.clone(), ty_scheme.clone());
+                let ty_expr = lower_type_annot_to_ty_expr(&sig.ty);
+                let ty_scheme = build_scheme_from_ty_expr(&ty_expr, ty_env, ty_var_ns)?;
+                declared_function_signatures.insert(name.clone(), ty_expr);
                 let v_var = VVar::Named(VVarName {
                     token: sig.identifier.token.clone(),
                     loc: Some(sig.identifier.loc.clone()),
@@ -381,18 +383,6 @@ fn insert_declared_fun_signatures(
         }
     }
     Ok(())
-}
-
-/// build a type scheme from a declared function signature
-/// by generalizing free user-defined type variables that are not ADT names
-/// in the type environment
-fn build_scheme_from_signature(
-    sig: &FnSig,
-    ty_env: &TyConEnv,
-    ns: &mut TyVarNameSupply,
-) -> Result<TyScheme, TyError> {
-    let ty_expr = lower_type_annot_to_ty_expr(&sig.ty);
-    build_scheme_from_ty_expr(&ty_expr, ty_env, ns)
 }
 
 static TEST_PIPELINE_CONTENT_SIMPLE: &str = r###"
@@ -1922,4 +1912,3 @@ f x =
         Err(CompileError::Type(TyError::TypeConflict { .. }))
     ));
 }
-
