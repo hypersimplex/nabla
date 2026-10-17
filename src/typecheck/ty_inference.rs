@@ -473,46 +473,67 @@ pub(crate) fn apply_subst_typed_pattern(
     }
 }
 
-/// type check value-level expression with type annotation
+/// type check value-level expression with optional type annotation
 pub(crate) fn ty_check_vexpr_typed(
     env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
     ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
-    vexpr: &VExpr,
+    vexpr_and_annot: &VExprAndTyAnnot,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
-    match vexpr {
+    let mut local_ty_vars = BTreeMap::new();
+    ty_check_vexpr_typed_scoped(
+        env_var_to_ty_scheme,
+        ty_env,
+        ty_var_ns,
+        vexpr_and_annot,
+        &mut local_ty_vars,
+    )
+}
+
+/// type check value-level expression with an optional type annotation in an
+/// existing local type variable scope (e.g. within an abstraction)
+pub(crate) fn ty_check_vexpr_typed_scoped(
+    env_var_to_ty_scheme: &mut EnvVVarToTyScheme,
+    ty_env: &TyConEnv,
+    ty_var_ns: &mut TyVarNameSupply,
+    vexpr_and_annot: &VExprAndTyAnnot,
+    local_ty_vars: &mut BTreeMap<String, TyVarName>,
+) -> Result<(Substitution, TypedVExpr), TyError> {
+    let (vexpr, maybe_ty_expr) = vexpr_and_annot;
+
+    let (subst, typed_expr_raw) = match vexpr {
         VExpr::Abstraction(expr) => {
-            ty_check_abstraction_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)
+            ty_check_abstraction_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)?
         }
         VExpr::Application(expr) => {
-            ty_check_application_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)
+            ty_check_application_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)?
         }
-        VExpr::Case(expr) => ty_check_case_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr),
-        VExpr::Let(expr) => ty_check_let_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr),
+        VExpr::Case(expr) => ty_check_case_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)?,
+        VExpr::Let(expr) => ty_check_let_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)?,
 
         VExpr::LitNumeric(lit) => {
             let (subst, ty) = ty_check_lit_numeric(env_var_to_ty_scheme, ty_var_ns, lit)?;
-            Ok((
+            (
                 subst,
                 TypedVExpr::LitNumeric(TypedVLitNumeric {
                     val: lit.clone(),
                     ty,
                 }),
-            ))
+            )
         }
         VExpr::LitString(lit) => {
             let (subst, ty) = ty_check_lit_string(env_var_to_ty_scheme, ty_var_ns, lit)?;
-            Ok((
+            (
                 subst,
                 TypedVExpr::LitString(TypedVLitString {
                     val: lit.clone(),
                     ty,
                 }),
-            ))
+            )
         }
         VExpr::Variable(var) => {
             let (subst, ty, ty_args) = ty_check_variable(env_var_to_ty_scheme, ty_var_ns, var)?;
-            Ok((
+            (
                 subst,
                 TypedVExpr::Variable(TypedVVariable {
                     var: var.clone(),
@@ -520,11 +541,25 @@ pub(crate) fn ty_check_vexpr_typed(
                     ty_args,
                     ty_schematic: env_var_to_ty_scheme.get(var).unwrap().clone(),
                 }),
-            ))
+            )
         }
         VExpr::Constructor(expr) => {
-            ty_check_constructor_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)
+            ty_check_constructor_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, expr)?
         }
+    };
+
+    match maybe_ty_expr {
+        Some(ty_annot) => {
+            // if explicit type annotation is present, then check consistency
+            // between the annotation and the inferred type
+            let annot_inst =
+                instantiate_and_subst_ty_expr(ty_annot, ty_env, ty_var_ns, local_ty_vars)?;
+            let annot_resolved = subst_ty(&subst, &annot_inst);
+            let subst_unified = unify_ty_exprs(&subst, typed_expr_raw.ty(), &annot_resolved)?;
+            let typed_expr = apply_subst_typed_expr(&subst_unified, typed_expr_raw);
+            Ok((subst_unified, typed_expr))
+        }
+        _ => Ok((subst, typed_expr_raw)),
     }
 }
 
@@ -604,31 +639,16 @@ pub(crate) fn ty_check_abstraction_typed(
 
     env_lambda.apply_subst_to_env_in_place(&subst_params);
 
-    let (body_vexpr, body_optional_texpr) = v_abstr_expr.body.as_ref();
-    let (body_subst, typed_body_raw) =
-        ty_check_vexpr_typed(&mut env_lambda, ty_env, ty_var_ns, body_vexpr)?;
+    let (body_subst, typed_body_raw) = ty_check_vexpr_typed_scoped(
+        &mut env_lambda,
+        ty_env,
+        ty_var_ns,
+        &v_abstr_expr.body,
+        &mut local_ty_vars,
+    )?;
 
-    let mut phi = subst_compose(&body_subst, &subst_params);
-    let mut typed_body = apply_subst_typed_expr(&phi, typed_body_raw);
-
-    if let Some(ty_annot_body) = body_optional_texpr {
-        let annot_inst =
-            instantiate_and_subst_ty_expr(ty_annot_body, ty_env, ty_var_ns, &mut local_ty_vars)?;
-        let annot_resolved = subst_ty(&phi, &annot_inst);
-        match unify_ty_exprs(&phi, typed_body.ty(), &annot_resolved) {
-            Ok(phi2) => {
-                phi = phi2;
-                typed_body = apply_subst_typed_expr(&phi, typed_body);
-            }
-            Err(_) => {
-                return Err(TyError::TypeConflict {
-                    ty1: annot_resolved,
-                    ty2: typed_body.ty().clone(),
-                    msg: Some("body expression does not match type annotation".to_string()),
-                });
-            }
-        }
-    }
+    let phi = unify_substs(&subst_params, &body_subst)?;
+    let typed_body = apply_subst_typed_expr(&phi, typed_body_raw);
 
     // update params with new substitution
     let typed_params: Vec<TypedVAbstrParam> = typed_params
@@ -669,17 +689,17 @@ pub(crate) fn ty_check_application_typed(
     vexpr: &VAppExpr,
 ) -> Result<(Substitution, TypedVExpr), TyError> {
     let (subst_fun, typed_fun) =
-        ty_check_vexpr_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, &vexpr.callable.0)?;
+        ty_check_vexpr_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, &vexpr.callable)?;
     let mut ty_fun = typed_fun.ty().clone();
     let mut subst_acc = subst_fun.clone();
     let mut typed_vexpr_callable = apply_subst_typed_expr(&subst_fun, typed_fun);
     let mut typed_vexpr_args = Vec::new();
 
-    for (arg_expr, _) in vexpr.args.iter() {
+    for arg_and_annot in vexpr.args.iter() {
         let mut env_arg = env_var_to_ty_scheme.apply_subst_to_env(&subst_acc);
 
         let (subst_arg, typed_arg_raw) =
-            ty_check_vexpr_typed(&mut env_arg, ty_env, ty_var_ns, arg_expr)?;
+            ty_check_vexpr_typed(&mut env_arg, ty_env, ty_var_ns, arg_and_annot)?;
         let ty_arg = typed_arg_raw.ty().clone();
         subst_acc = subst_compose(&subst_arg, &subst_acc);
         ty_fun = subst_ty(&subst_arg, &ty_fun);
@@ -735,15 +755,15 @@ pub(crate) fn ty_check_case_typed(
 ) -> Result<(Substitution, TypedVExpr), TyError> {
     // type check argument/scrutinee
     let (phi, typed_scrutinee_raw) =
-        ty_check_vexpr_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, &vexpr.arg.0)?;
+        ty_check_vexpr_typed(env_var_to_ty_scheme, ty_env, ty_var_ns, &vexpr.arg)?;
     // carry scrutinee constraints forward
     // affect patterns and downstream typing
     let mut typed_scrutinee = apply_subst_typed_expr(&phi, typed_scrutinee_raw);
 
     let mut env_augmented = env_var_to_ty_scheme.apply_subst_to_env(&phi);
 
-    struct AltInfo {
-        body_expr: VExpr,
+    struct AltInfo<'a> {
+        body: &'a VExprAndTyAnnot,
         env: EnvVVarToTyScheme,
         typed_pattern: TypedVPattern,
         typed_guard: Option<TypedVExpr>,
@@ -751,7 +771,7 @@ pub(crate) fn ty_check_case_typed(
     }
 
     // for each alt, get: (body expr, env, typed pattern, typed guard, substitution)
-    let mut alt_infos: Vec<AltInfo> = Vec::new();
+    let mut alt_infos: Vec<AltInfo<'_>> = Vec::new();
     for alt in vexpr.alts.iter() {
         let mut env_alt = env_augmented.clone();
         let (subst_pattern, _bound_vars, typed_pattern) =
@@ -764,9 +784,9 @@ pub(crate) fn ty_check_case_typed(
         env_alt.apply_subst_to_env_in_place(&subst_pattern_unified);
 
         let (subst_alt, typed_guard) = match &alt.guard {
-            Some((guard_expr, _)) => {
+            Some(guard_expr_and_annot) => {
                 let (subst_guard, typed_guard_raw) =
-                    ty_check_vexpr_typed(&mut env_alt, ty_env, ty_var_ns, guard_expr)?;
+                    ty_check_vexpr_typed(&mut env_alt, ty_env, ty_var_ns, guard_expr_and_annot)?;
                 let mut subst_alt = subst_compose(&subst_guard, &subst_pattern_unified);
                 let typed_guard_subst = apply_subst_typed_expr(&subst_alt, typed_guard_raw);
                 let subst_guard_bool =
@@ -786,9 +806,8 @@ pub(crate) fn ty_check_case_typed(
         env_augmented.apply_subst_to_env_in_place(&subst_alt);
         typed_scrutinee = apply_subst_typed_expr(&subst_alt, typed_scrutinee);
 
-        let vexpr = alt.body.0.clone();
         alt_infos.push(AltInfo {
-            body_expr: vexpr,
+            body: &alt.body,
             env: env_alt,
             typed_pattern,
             typed_guard,
@@ -831,7 +850,7 @@ pub(crate) fn ty_check_case_typed(
             alt_info.env.apply_subst_to_env_in_place(&subst_bodies);
 
             let (subst_body, typed_body) =
-                ty_check_vexpr_typed(&mut alt_info.env, ty_env, ty_var_ns, &alt_info.body_expr)?;
+                ty_check_vexpr_typed(&mut alt_info.env, ty_env, ty_var_ns, alt_info.body)?;
             subst_bodies = subst_compose(&subst_body, &subst_bodies);
             typed_bodies.push(typed_body);
         }
@@ -1074,7 +1093,7 @@ pub(crate) fn ty_check_binding_group(
                 env_v_var_to_ty_scheme_binding_seed,
                 ty_env,
                 ty_var_ns,
-                def_expr,
+                &(def_expr.clone(), None),
             )?;
             subst_accum = subst_compose(&subst, &subst_accum);
 
@@ -1440,7 +1459,7 @@ pub(crate) fn ty_check_let_typed(
     env_working.apply_subst_to_env_in_place(&subst_accum);
 
     let (subst_body, typed_body_expr) =
-        ty_check_vexpr_typed(&mut env_working, ty_env, ty_var_ns, &vexpr.body.0)?;
+        ty_check_vexpr_typed(&mut env_working, ty_env, ty_var_ns, &vexpr.body)?;
 
     subst_accum = subst_compose(&subst_body, &subst_accum);
     let typed_body_expr = apply_subst_typed_expr(&subst_accum, typed_body_expr);
@@ -1551,41 +1570,40 @@ pub(crate) fn ty_check_constructor_typed(
         ));
     }
 
-    let (positional_args, record_order) = if let Some(rec) = &qualified_ctor.record_fields {
-        // case: a record => map fields to positions
+    let (positional_args, record_order): (Vec<&VExprAndTyAnnot>, Option<Vec<String>>) =
+        if let Some(rec) = &qualified_ctor.record_fields {
+            // case: a record => map fields to positions
 
-        let expected_field_names = ctor_def.field_names.as_ref().ok_or_else(|| {
-            TyError::Unexpected(
-                format!(
-                    "Constructor {} is not a record, but record syntax was used",
-                    qualified_ctor.constructor
-                )
-                .to_string(),
-            )
-        })?;
-        use std::collections::HashMap;
-        // collect field name -> (value expr, optional type expr)
-        let mut vexpr_fieldname_mapping: HashMap<&String, &(VExpr, Option<TyExpr>)> =
-            HashMap::new();
-        for (field_name, vexpr_and_ty_annot) in rec.iter() {
-            if vexpr_fieldname_mapping
-                .insert(field_name, vexpr_and_ty_annot)
-                .is_some()
-            {
-                return Err(TyError::Unexpected(
+            let expected_field_names = ctor_def.field_names.as_ref().ok_or_else(|| {
+                TyError::Unexpected(
                     format!(
-                        "Duplicate field {} in record constructor {}",
-                        field_name, qualified_ctor.constructor
+                        "Constructor {} is not a record, but record syntax was used",
+                        qualified_ctor.constructor
                     )
                     .to_string(),
-                ));
+                )
+            })?;
+            use std::collections::HashMap;
+            // collect field name -> (value expr, optional type expr)
+            let mut vexpr_fieldname_mapping: HashMap<&String, &VExprAndTyAnnot> = HashMap::new();
+            for (field_name, vexpr_and_ty_annot) in rec.iter() {
+                if vexpr_fieldname_mapping
+                    .insert(field_name, vexpr_and_ty_annot)
+                    .is_some()
+                {
+                    return Err(TyError::Unexpected(
+                        format!(
+                            "Duplicate field {} in record constructor {}",
+                            field_name, qualified_ctor.constructor
+                        )
+                        .to_string(),
+                    ));
+                }
             }
-        }
-        let mut ordered = Vec::new();
-        // check against expected field names of the target record
-        for fname in expected_field_names.iter() {
-            let (vexpr, optional_ty_annot) =
-                vexpr_fieldname_mapping.get(fname).ok_or_else(|| {
+            let mut ordered = Vec::new();
+            // check against expected field names of the target record
+            for fname in expected_field_names.iter() {
+                let annot = vexpr_fieldname_mapping.get(fname).ok_or_else(|| {
                     TyError::Unexpected(
                         format!(
                             "Missing field {} in record constructor {}",
@@ -1594,22 +1612,22 @@ pub(crate) fn ty_check_constructor_typed(
                         .to_string(),
                     )
                 })?;
-            ordered.push((vexpr.clone(), optional_ty_annot.clone()));
-        }
-        if vexpr_fieldname_mapping.len() != expected_field_names.len() {
-            return Err(TyError::Unexpected(
-                format!(
-                    "Unknown field in record constructor {}",
-                    qualified_ctor.constructor
-                )
-                .to_string(),
-            ));
-        }
-        (ordered, Some(expected_field_names.clone()))
-    } else {
-        // case: not a record => just collect positional args
-        (qualified_ctor.args.clone(), None)
-    };
+                ordered.push(*annot);
+            }
+            if vexpr_fieldname_mapping.len() != expected_field_names.len() {
+                return Err(TyError::Unexpected(
+                    format!(
+                        "Unknown field in record constructor {}",
+                        qualified_ctor.constructor
+                    )
+                    .to_string(),
+                ));
+            }
+            (ordered, Some(expected_field_names.clone()))
+        } else {
+            // case: not a record => just collect positional args
+            (qualified_ctor.args.iter().collect(), None)
+        };
 
     let mut subst = subst_id();
     let expected_field_len = expected_field_types.len();
@@ -1617,7 +1635,7 @@ pub(crate) fn ty_check_constructor_typed(
     let mut typed_args = Vec::new();
 
     // type infer and check each positional argument
-    for (arg_expr, _) in positional_args.iter() {
+    for arg_and_annot in positional_args.iter() {
         if remaining_expected_field_types.is_empty() {
             return Err(TyError::ArityMismatch {
                 constructor: qualified_ctor.constructor.clone(),
@@ -1632,7 +1650,7 @@ pub(crate) fn ty_check_constructor_typed(
         let mut env_with_subst = env_var_to_ty_scheme.apply_subst_to_env(&subst);
 
         let (arg_subst, typed_arg_raw) =
-            ty_check_vexpr_typed(&mut env_with_subst, ty_env, ty_var_ns, arg_expr)?;
+            ty_check_vexpr_typed(&mut env_with_subst, ty_env, ty_var_ns, *arg_and_annot)?;
         let ty_arg = typed_arg_raw.ty().clone();
 
         // update substitution: subst' = (arg_subst. subst)
@@ -1854,7 +1872,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                 VPatternLiteral::String(lit) => VExpr::LitString(lit.clone()),
             };
             let (subst, typed_expr) =
-                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &vexpr)?;
+                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &(vexpr, None))?;
             let ty = typed_expr.ty().clone();
             Ok((
                 subst.clone(),
@@ -1880,12 +1898,12 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                 },
             };
             let (subst_start, typed_start) =
-                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &v_expr_start)?;
+                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &(v_expr_start, None))?;
 
             env_clone.apply_subst_to_env_in_place(&subst_start);
 
             let (subst_end, typed_end) =
-                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &v_expr_end)?;
+                ty_check_vexpr_typed(&mut env_clone, ty_env, ty_var_ns, &(v_expr_end, None))?;
             let mut subst = subst_compose(&subst_end, &subst_start);
             subst = unify_ty_exprs(&subst, typed_start.ty(), typed_end.ty())?;
             Ok((
