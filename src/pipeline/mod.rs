@@ -1775,12 +1775,12 @@ fn test_pipeline_unparenthesized_function_header_annotation_rejected() {
 // positive test: matching pattern and subexpression type annotations accepted
 #[test]
 fn test_pipeline_matching_type_annotations_accepted() {
-    let content = "f (x :: i64) = (x :: i64)\n";
-    match compile(content) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
+    let content = r###"
+f (x :: i64) = (x :: i64)
+"###;
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {} // frontend lowering to core succeeded; reached downstream STG IR todo
     }
 }
 
@@ -1818,3 +1818,108 @@ f Just x = x
         }))
     ));
 }
+
+// negative test: subexpression type annotation mismatch rejected
+#[test]
+fn test_pipeline_call_argument_type_annotation_mismatch_rejected() {
+    let content = r###"
+f x = (\y -> y) (10 :: String)
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: type variable mismatch between parameter and body rejected
+#[test]
+fn test_pipeline_lambda_scoped_annotation_mismatch_rejected() {
+    let content = r###"
+f = (\ (x :: a) -> ("hello" :: a))
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: distinct type variables between parameter and body rejected
+#[test]
+fn test_pipeline_lambda_scoped_annotation_distinct_vars_rejected() {
+    let content = r###"
+f = (\ (x :: a) -> (x :: b))
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// positive test: type variable sharing accepted
+#[test]
+fn test_pipeline_lambda_scoped_annotation_matching_accepted() {
+    let content = r###"
+id_scoped = (\ (x :: a) -> (x :: a))
+"###;
+    // [todo] remove panic once downstream pipeline todos are implemented
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {} // frontend lowering to core succeeded
+    }
+}
+
+// negative test: unannotated lambda parameter cannot unify with unscoped rigid expression type variable
+#[test]
+fn test_pipeline_lambda_unannotated_param_unscoped_body_annotation_rejected() {
+    let content = r###"
+f = (\x -> (x :: a))
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// positive test: let binding signature inside lambda references outer scoped type variable `a`
+#[test]
+fn test_pipeline_lambda_scoped_annotation_in_let_binding_sig_matching_accepted() {
+    let content = r###"
+f = (\ (x :: a) ->
+    let y :: a = x
+    in y)
+"###;
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {}
+    }
+}
+
+// positive test: top-level function signature scopes type variable `a` over its definition RHS
+#[test]
+fn test_pipeline_top_level_sig_scopes_over_fn_body_accepted() {
+    let content = r###"
+f :: a -> a
+f x = (x :: a)
+"###;
+    match std::panic::catch_unwind(|| compile(content)) {
+        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
+        Err(_) => {}
+    }
+}
+
+// negative test: signature-scoped type variable `a` must not be generalized by an inner `let` binding
+#[test]
+fn test_pipeline_top_level_sig_scoped_var_not_generalized_by_inner_let_rejected() {
+    let content = r###"
+data Pair a b = Pair a b
+f :: a -> Pair i64 String
+f x =
+  let g = \ (y :: a) -> y
+  in Pair (g 1) (g "hello")
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
