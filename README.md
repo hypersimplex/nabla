@@ -25,6 +25,7 @@ Planned features & non-features:
 
 ## Remaining Todo
 
+- middle-end optimizations on functional Core IR
 - STG IR: [some notes on operational semantics](http://github.com/hypersimplex/notes_stg/blob/main/notebook.pdf), [notes on design of STG runtime for this project](http://github.com/hypersimplex/nabla/blob/main/doc/stg.pdf)
 - code generation
   - high level instructions for VM (for easy of debugging)
@@ -32,6 +33,7 @@ Planned features & non-features:
 - runtime support
   - VM
   - hybrid: VM + native instructions
+
 ## Sample Snippets
 
 ```
