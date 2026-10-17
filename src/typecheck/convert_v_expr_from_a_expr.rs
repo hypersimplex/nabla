@@ -25,6 +25,20 @@ pub(crate) fn vexpr_and_ty_annot_from_aexpr(
     }
 }
 
+/// convert to vexpr and gather explicit type annotation if it exists
+pub(crate) fn vexpr_and_ty_annot_from_aexpr_annot(
+    annot: &abstr_structures::AExprAnnot,
+    v_var_supply: &mut VVarNameSupply,
+) -> VExprAndTyAnnot {
+    let (vexpr, inner_annot) = vexpr_and_ty_annot_from_aexpr(&annot.expr, v_var_supply);
+    let ty_annot = annot
+        .type_expr
+        .as_ref()
+        .map(lower_type_annot_to_ty_expr)
+        .or(inner_annot); // [todo]: if both type annotations exist, then we should check equivalence
+    (vexpr, ty_annot)
+}
+
 fn v_expr_from_abstr_expr(
     a_abtr_expr: &abstr_structures::AbstractionExpr,
     v_var_supply: &mut VVarNameSupply,
@@ -52,7 +66,7 @@ fn v_expr_from_abstr_expr(
         })
         .collect();
 
-    let body = Box::new(vexpr_and_ty_annot_from_aexpr(&expr.expr, v_var_supply));
+    let body = Box::new(vexpr_and_ty_annot_from_aexpr_annot(expr, v_var_supply));
     (
         VExpr::Abstraction(VAbstrExpr { params, body }),
         type_expr.as_ref().map(lower_type_annot_to_ty_expr),
@@ -65,28 +79,11 @@ fn v_expr_from_app_expr(
 ) -> VExprAndTyAnnot {
     let abstr_structures::AppExpr { fun, arguments } = a_app_expr;
 
-    let (vexpr_fun, texpr_fun_annot) = vexpr_and_ty_annot_from_aexpr(&fun.expr, v_var_supply);
-
-    let callable = Box::new((
-        vexpr_fun,
-        fun.type_expr
-            .as_ref()
-            .map(lower_type_annot_to_ty_expr)
-            .or(texpr_fun_annot),
-    ));
+    let callable = Box::new(vexpr_and_ty_annot_from_aexpr_annot(fun, v_var_supply));
 
     let args: Vec<_> = arguments
         .iter()
-        .map(|abstr_structures::AExprAnnot { expr, type_expr }| {
-            let (vexpr_arg, texpr_arg_annot) = vexpr_and_ty_annot_from_aexpr(expr, v_var_supply);
-            (
-                vexpr_arg,
-                type_expr
-                    .as_ref()
-                    .map(lower_type_annot_to_ty_expr)
-                    .or(texpr_arg_annot),
-            )
-        })
+        .map(|arg| vexpr_and_ty_annot_from_aexpr_annot(arg, v_var_supply))
         .collect();
 
     if args.is_empty() {
@@ -95,7 +92,7 @@ fn v_expr_from_app_expr(
                 callable,
                 args: Vec::new(),
             }),
-            fun.type_expr.as_ref().map(lower_type_annot_to_ty_expr),
+            None, // this is the type of the result of this application, just leave it empty
         );
     }
 
@@ -112,26 +109,16 @@ fn v_expr_from_app_expr(
         });
     }
 
-    (f, fun.type_expr.as_ref().map(lower_type_annot_to_ty_expr))
+    (f, None)
 }
 
 fn v_expr_from_block_expr(
     block_expr: &abstr_structures::BlockExpr,
     v_var_supply: &mut VVarNameSupply,
 ) -> VExprAndTyAnnot {
-    assert!(block_expr.0.len() == 1); // currently expect only single expression
-    let abstr_structures::AExprAnnot {
-        ref expr,
-        ref type_expr,
-    } = block_expr.0[0];
-    let (vexpr_body, texpr_body_annot) = vexpr_and_ty_annot_from_aexpr(expr, v_var_supply);
-    (
-        vexpr_body,
-        type_expr
-            .as_ref()
-            .map(lower_type_annot_to_ty_expr)
-            .or(texpr_body_annot),
-    )
+    // currently expect only single expression, but may be used for sequencing (such as in do notation)
+    assert!(block_expr.0.len() == 1);
+    vexpr_and_ty_annot_from_aexpr_annot(&block_expr.0[0], v_var_supply)
 }
 
 fn v_expr_from_case_expr(
@@ -143,50 +130,24 @@ fn v_expr_from_case_expr(
         argument,
         alts,
     } = case_expr;
-    let (vexpr_arg, texpr_arg_annot) = vexpr_and_ty_annot_from_aexpr(&argument.expr, v_var_supply);
+    let arg = Box::new(vexpr_and_ty_annot_from_aexpr_annot(argument, v_var_supply));
 
-    let arg = Box::new((
-        vexpr_arg,
-        argument
-            .type_expr
-            .as_ref()
-            .map(lower_type_annot_to_ty_expr)
-            .or(texpr_arg_annot),
-    ));
+    let alts =
+        alts.iter()
+            .map(|alt| {
+                let v_pattern = to_v_pattern(&alt.pattern);
+                let guard = alt.guard.as_ref().map(|guard_expr| {
+                    vexpr_and_ty_annot_from_aexpr_annot(guard_expr, v_var_supply)
+                });
 
-    let alts = alts
-        .iter()
-        .map(|alt| {
-            let v_pattern = to_v_pattern(&alt.pattern);
-            let guard = alt.guard.as_ref().map(|guard_expr| {
-                let (vexpr_guard, texpr_guard_annot) =
-                    vexpr_and_ty_annot_from_aexpr(&guard_expr.expr, v_var_supply);
-                (
-                    vexpr_guard,
-                    guard_expr
-                        .type_expr
-                        .as_ref()
-                        .map(lower_type_annot_to_ty_expr)
-                        .or(texpr_guard_annot),
-                )
-            });
-
-            let abstr_structures::AExprAnnot { expr, type_expr } = &*alt.body;
-            let (vexpr_alt_body, texpr_alt_body_annot) =
-                vexpr_and_ty_annot_from_aexpr(expr, v_var_supply);
-            VCaseAlt {
-                pattern: v_pattern,
-                guard,
-                body: Box::new((
-                    vexpr_alt_body,
-                    type_expr
-                        .as_ref()
-                        .map(lower_type_annot_to_ty_expr)
-                        .or(texpr_alt_body_annot),
-                )),
-            }
-        })
-        .collect();
+                let body = Box::new(vexpr_and_ty_annot_from_aexpr_annot(&alt.body, v_var_supply));
+                VCaseAlt {
+                    pattern: v_pattern,
+                    guard,
+                    body,
+                }
+            })
+            .collect();
     (
         VExpr::Case(VCaseExpr {
             keyword: keyword.clone(),
@@ -223,41 +184,20 @@ fn v_expr_from_let_expr(
 
     let defs: Vec<(VPattern, VExpr, Option<TyExpr>)> = defs
         .iter()
-        .map(
-            |(
-                pattern_expr,
-                abstr_structures::AExprAnnot {
-                    expr: expr_def,
-                    type_expr,
-                },
-            )| {
-                let (v_pattern, pat_annot) = to_v_pattern_and_annot(pattern_expr);
-                let (vexpr_def, texpr_def_annot) =
-                    vexpr_and_ty_annot_from_aexpr(expr_def, v_var_supply);
-                (
-                    v_pattern,
-                    vexpr_def,
-                    type_expr
-                        .as_ref()
-                        .map(lower_type_annot_to_ty_expr)
-                        .or(pat_annot)
-                        .or(texpr_def_annot),
-                )
-            },
-        )
+        .map(|(pattern_expr, expr_annot)| {
+            let (v_pattern, pat_annot) = to_v_pattern_and_annot(pattern_expr);
+            let (vexpr_def, texpr_def_annot) =
+                vexpr_and_ty_annot_from_aexpr_annot(expr_annot, v_var_supply);
+            // [todo] if both pat_annot and texpr_def_annot exist then we should check equivalence
+            (v_pattern, vexpr_def, pat_annot.or(texpr_def_annot))
+        })
         .collect();
 
-    let (vexpr_body, texpr_body_annot) =
-        vexpr_and_ty_annot_from_aexpr(&expr_and_ty_annot.expr, v_var_supply);
-
-    let body = Box::new((vexpr_body, texpr_body_annot));
-    (
-        VExpr::Let(VLetExpr { defs, body }),
-        expr_and_ty_annot
-            .type_expr
-            .as_ref()
-            .map(lower_type_annot_to_ty_expr),
-    )
+    let body = Box::new(vexpr_and_ty_annot_from_aexpr_annot(
+        expr_and_ty_annot,
+        v_var_supply,
+    ));
+    (VExpr::Let(VLetExpr { defs, body }), None)
 }
 
 fn v_expr_from_lit_num_expr(
@@ -305,7 +245,7 @@ fn v_expr_from_constructor_expr(
 
     let vargs: Vec<(VExpr, Option<TyExpr>)> = args
         .iter()
-        .map(|arg| vexpr_and_ty_annot_from_aexpr(&arg.expr, v_var_supply))
+        .map(|arg| vexpr_and_ty_annot_from_aexpr_annot(arg, v_var_supply))
         .collect();
     let vrec: Option<Vec<(String, (VExpr, Option<TyExpr>))>> =
         record_fields.as_ref().map(|fields| {
@@ -313,16 +253,9 @@ fn v_expr_from_constructor_expr(
                 .iter()
                 .map(|(name_tok, expr)| {
                     let name = identifier_from_token(name_tok, "record field name");
-                    let (vx, tx) = vexpr_and_ty_annot_from_aexpr(&expr.expr, v_var_supply);
                     (
                         name,
-                        (
-                            vx,
-                            expr.type_expr
-                                .as_ref()
-                                .map(lower_type_annot_to_ty_expr)
-                                .or(tx),
-                        ),
+                        vexpr_and_ty_annot_from_aexpr_annot(expr, v_var_supply),
                     )
                 })
                 .collect()
