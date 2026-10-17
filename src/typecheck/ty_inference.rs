@@ -1006,6 +1006,8 @@ pub(crate) fn ty_check_binding_group(
     env_outer: &mut EnvVVarToTyScheme,
     ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
+    // signatures are kept as `Option<TyExpr>` (rather than pre-generalized `TyScheme`)
+    // so user-written type variable names remain available for lexical scoping over each RHS
     defs: &[(VPattern, VExpr, Option<TyExpr>)],
     local_ty_vars: &BTreeMap<String, TyVarName>,
 ) -> Result<(Substitution, Vec<BTreeMap<usize, TypedBindingGroupDef>>), TyError> {
@@ -1050,6 +1052,9 @@ pub(crate) fn ty_check_binding_group(
             //   preparation for type inference/check (following the approach of
             //   look to the variables ref. SPJ 1987 S.9.5.2)
             // - no polymorphic recursion support
+            // - `_annot` is intentionally ignored here: recursive call sites start with
+            //   `ty_args = []` against this monomorphic `Auto` placeholder and are backfilled
+            //   after SCC generalization
             env_v_var_to_ty_scheme_binding_seed.insert(
                 pat_var.clone(),
                 TyScheme {
@@ -1153,6 +1158,9 @@ pub(crate) fn ty_check_binding_group(
             // typecheck RHS (enforcing explicit signature annotation if present)
             env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env_in_place(&subst_accum);
 
+            // instantiate free user-defined type vars in `optional_annot` as `Rigid` vars in
+            // `def_ty_vars` before checking `def_expr`, so scoped annotations inside `def_expr`
+            // share the same rigid vars and recursive calls constrain the seeded SCC placeholders
             let mut def_ty_vars = local_ty_vars.clone();
             let maybe_annot_inst = match optional_annot {
                 Some(ty_annot) => Some(instantiate_and_subst_ty_expr(
@@ -1176,12 +1184,10 @@ pub(crate) fn ty_check_binding_group(
             if let Some(annot_inst) = maybe_annot_inst {
                 let annot_resolved = subst_ty(&subst_accum, &annot_inst);
                 subst_accum = unify_ty_exprs(&subst_accum, &annot_resolved, typed_rhs_vexpr.ty())?;
-                check_no_escaped_rigid_vars(
-                    env_outer,
-                    &subst_accum,
-                    local_ty_vars,
-                    &def_ty_vars,
-                )?;
+                // check escape against `env_outer` (not `env_v_var_to_ty_scheme_binding_seed`)
+                // because in-group seeded placeholders in `env_v_var_to_ty_scheme_binding_seed`
+                // are expected to unify with signature `Rigid` vars during recursive SCC checking
+                check_no_escaped_rigid_vars(env_outer, &subst_accum, local_ty_vars, &def_ty_vars)?;
             }
 
             // unify LHS with RHS
@@ -1250,7 +1256,8 @@ pub(crate) fn ty_check_binding_group(
                 .collect()
         };
 
-        // scc-wide map from generalized unification vars to canonical scheme vars
+        // scc-wide map from generalized unification vars (both `Auto` and signature-introduced
+        // `Rigid` vars not in `free_ty_vars_in_env`) to canonical `Auto` scheme vars
         //
         // keeps mutually recursive binders in sync when they share a generalized var,
         // so one scc_subst can rewrite all RHSs/patterns and ty_args consistently
@@ -2318,6 +2325,10 @@ pub(crate) fn fill_missing_ty_args(
                 && let Some(scheme) = scheme_info_for_scc.get(&var)
             {
                 // perform back filling at use site
+                //
+                // note: `scheme` comes from the SCC generalization pass where `scc_subst` has
+                // already rewritten any generalized `Rigid` signature vars into canonical `Auto`
+                // scheme vars on both `scheme.ty_expr` and this call-site `ty`
 
                 // sanity check for matching the binder scheme against
                 // this call-site type
