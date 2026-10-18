@@ -7,6 +7,7 @@
 Experimenting and learning about lazy functional language implementation from
 first principles, with inspiration from Miranda, Haskell, Rust, and various
 literatures from SPJ (1987, 1992), Wolfe (1995), and Banerjee (1993).
+A Secondary goal would be to make it usable as an embeddable language in Rust.
 
 Planned features & non-features:
 - simple forward sequenced compile pipeline for now
@@ -26,10 +27,10 @@ Planned features & non-features:
 - middle-end optimizations on functional Core IR
 - STG IR: [some notes on operational semantics](http://github.com/hypersimplex/notes_stg/blob/main/notebook.pdf), [notes on design of STG runtime for this project](http://github.com/hypersimplex/nabla/blob/main/doc/stg.pdf)
 - code generation
-  - high level instructions for VM (for easy of debugging)
+  - instructions for VM (focus on ease of debugging and instrumentation)
   - native instruction code gen for some parts of the program (eg: convert to CFG and generate via Cranelift, or code gen via custom dialect lowering in Pliron/MLIR framework)
 - runtime support
-  - VM
+  - VM implementation in Rust
   - hybrid: VM + native instructions
 
 ## Sample Snippets
