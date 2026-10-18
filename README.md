@@ -13,13 +13,11 @@ Planned features & non-features:
 - not optimizing for efficient compilation for now
 - no support for type classes for now (eg: have "System F"-like core)
 - no support for polymorphic recursion
-- STG-based backend and runtime
-- evaluation strategy: weak head normal form
-- inferred types, using HM algo (Algorithm W), and optional user specified types
-- strictness analysis and related optimization [planned]
-- pattern matching decision tree compilation [todo]
+- inferred types, optional user specified types
+- value level variable shadowing
+- scoped type variable
 - basic builtin ops have hardcoded precedence and associativity for now
-- support for infix list notation [todo]
+- user opt-in strictness [possibly/experimental]
 - builtin tabular(arrays/matrices) support [possibly/experimental]
 - experimental construct for explicit finite iterations (eg: like recursion and loops but with termination guarantee) on tabular data + strictness opt-in => enabling polyhedral analysis [possibly/experimental]
 
