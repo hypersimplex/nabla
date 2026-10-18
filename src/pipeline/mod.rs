@@ -443,7 +443,7 @@ data T B { // record
 static TEST_PIPELINE_CONTENT_PATTERN_SUM_TYPE: &str = r###"
 data Tree Tx =
   Leaf i64 Tx
-  | Node Tree Tree
+  | Node (Tree Tx) (Tree Tx)
 
 f x = case x of
         Leaf num num_float -> num_float * 7.0
@@ -453,7 +453,7 @@ f x = case x of
 static TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE: &str = r###"
 data Tree Tx =
   Leaf i64 Tx
-  | Node Tree Tree
+  | Node (Tree Tx) (Tree Tx)
 
 f x = case x of
         Leaf a b -> 1
@@ -757,22 +757,30 @@ fn test_pipeline_record() {
 
 #[test]
 fn test_pipeline_pattern_sum_type() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_SUM_TYPE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    let res = std::panic::catch_unwind(|| compile(TEST_PIPELINE_CONTENT_PATTERN_SUM_TYPE));
+    assert!(
+        res.as_ref().is_ok_and(|r| r.is_ok())
+            || res.as_ref().is_err_and(|e| {
+                e.downcast_ref::<&str>()
+                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
+            }),
+        "compilation failed before reaching core: {:?}",
+        res
+    );
 }
 
 #[test]
 fn test_pipeline_polymorphic_sum_type() {
-    match compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    let res = std::panic::catch_unwind(|| compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE));
+    assert!(
+        res.as_ref().is_ok_and(|r| r.is_ok())
+            || res.as_ref().is_err_and(|e| {
+                e.downcast_ref::<&str>()
+                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
+            }),
+        "compilation failed before reaching core: {:?}",
+        res
+    );
 }
 
 #[test]
