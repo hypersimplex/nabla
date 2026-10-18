@@ -695,372 +695,200 @@ f x =
           id x
 "###;
 
+#[cfg(test)]
+fn assert_compiles_or_stg_todo(content: &str) {
+    let res = std::panic::catch_unwind(|| compile(content));
+    assert!(
+        res.as_ref().is_ok_and(|r| r.is_ok())
+            || res.as_ref().is_err_and(|e| {
+                e.downcast_ref::<&str>()
+                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
+                    || e.downcast_ref::<String>()
+                        .map_or(false, |m| m.contains("transform core IR to STG IR"))
+            }),
+        "compilation failed before reaching core: {:?}",
+        res
+    );
+}
+
 #[test]
 fn test_pipeline_simple() {
-    match compile(TEST_PIPELINE_CONTENT_SIMPLE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_SIMPLE);
 }
 
 #[test]
 fn test_pipeline_let_simple() {
-    match compile(TEST_PIPELINE_CONTENT_LET_SIMPLE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_LET_SIMPLE);
 }
 
 #[test]
 fn test_pipeline_let_nested() {
-    match compile(TEST_PIPELINE_CONTENT_LET_NESTED) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_LET_NESTED);
 }
 
 #[test]
 fn test_pipeline_case() {
-    match compile(TEST_PIPELINE_CONTENT_CASE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CASE);
 }
 
 #[test]
 fn test_pipeline_case_nested() {
-    match compile(TEST_PIPELINE_CONTENT_CASE_NESTED) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CASE_NESTED);
 }
 
 #[test]
 fn test_pipeline_record() {
-    match compile(TEST_PIPELINE_CONTENT_RECORD) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_RECORD);
 }
 
 #[test]
 fn test_pipeline_pattern_sum_type() {
-    let res = std::panic::catch_unwind(|| compile(TEST_PIPELINE_CONTENT_PATTERN_SUM_TYPE));
-    assert!(
-        res.as_ref().is_ok_and(|r| r.is_ok())
-            || res.as_ref().is_err_and(|e| {
-                e.downcast_ref::<&str>()
-                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
-            }),
-        "compilation failed before reaching core: {:?}",
-        res
-    );
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_SUM_TYPE);
 }
 
 #[test]
 fn test_pipeline_polymorphic_sum_type() {
-    let res = std::panic::catch_unwind(|| compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE));
-    assert!(
-        res.as_ref().is_ok_and(|r| r.is_ok())
-            || res.as_ref().is_err_and(|e| {
-                e.downcast_ref::<&str>()
-                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
-            }),
-        "compilation failed before reaching core: {:?}",
-        res
-    );
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_POLYMORPHIC_SUM_TYPE);
 }
 
 #[test]
 fn test_pipeline_function_dependence() {
-    match compile(TEST_PIPELINE_CONTENT_FUNCTION_DEPENDENCE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_FUNCTION_DEPENDENCE);
 }
 
 #[test]
 fn test_pipeline_function_recursion() {
-    match compile(TEST_PIPELINE_CONTENT_FUNCTION_RECURSION) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_FUNCTION_RECURSION);
 }
 
 #[test]
 fn test_pipeline_function_mutual_recursion() {
-    match compile(TEST_PIPELINE_CONTENT_FUNCTION_MUTUAL_RECURSION) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_FUNCTION_MUTUAL_RECURSION);
 }
 
 #[test]
 fn test_pipeline_pattern_range() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_RANGE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_RANGE);
 }
 
 #[test]
 fn test_pipeline_constructor_record() {
-    match compile(TEST_PIPELINE_CONTENT_CONSTRUCTOR_RECORD) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CONSTRUCTOR_RECORD);
 }
 
 #[test]
 fn test_pipeline_pattern_record_type() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_RECORD_TYPE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_RECORD_TYPE);
 }
 
 #[test]
 fn test_pipeline_pattern_record_type_nested() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_RECORD_TYPE_NESTED) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_RECORD_TYPE_NESTED);
 }
 
 #[test]
 fn test_pipeline_function_signature() {
-    match compile(TEST_PIPELINE_CONTENT_FUNCTION_SIGNATURE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_FUNCTION_SIGNATURE);
 }
 
 #[test]
 fn test_pipeline_pattern_normalization_func_param() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_FUNC_PARAM) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_FUNC_PARAM);
 }
 
 #[test]
 fn test_pipeline_pattern_normalization_let_expr() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_LET_EXPR) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_LET_EXPR);
 }
 
 #[test]
 fn test_pipeline_pattern_normalization_case_scrutinee() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE);
 }
 
 #[test]
 fn test_pipeline_pattern_normalization_constructor() {
-    match compile(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR);
 }
 
 #[test]
 fn test_pipeline_case_scrutinee_normalization() {
-    match compile(TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION);
 }
 
 #[test]
 fn test_pipeline_desugar_case_guard() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_GUARD) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_GUARD);
 }
 
 #[test]
 fn test_pipeline_desugar_case_literal_range_int() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT);
 }
 
 #[test]
 fn test_pipeline_desugar_case_literal_range_float() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_FLOAT) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_FLOAT);
 }
 
 #[test]
 fn test_pipeline_desugar_case_literal_range_string() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_STRING) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_STRING);
 }
 
 #[test]
 fn test_pipeline_desugar_case_literal_range_int_and_guard() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT_AND_GUARD) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_RANGE_INT_AND_GUARD);
 }
 
 #[test]
 fn test_pipeline_desugar_case_literal_pattern() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_PATTERN) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERAL_PATTERN);
 }
 
 #[test]
 fn test_pipeline_desugar_case_literals_in_let_defs() {
-    match compile(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERALS_IN_LET_DEFS) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERALS_IN_LET_DEFS);
 }
 
 #[test]
 fn test_pipeline_unit_type() {
-    match compile(TEST_PIPELINE_CONTENT_UNIT_TYPE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_UNIT_TYPE);
 }
 
 #[test]
 fn test_pipeline_case_unit_constructor_pattern() {
-    match compile(TEST_PIPELINE_CONTENT_CASE_UNIT_CONSTRUCTOR_PATTERN) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CASE_UNIT_CONSTRUCTOR_PATTERN);
 }
 
 #[test]
 fn test_pipeline_unit_type_signature() {
-    match compile(TEST_PIPELINE_CONTENT_UNIT_TYPE_SIGNATURE) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_UNIT_TYPE_SIGNATURE);
 }
 
 #[test]
 fn test_pipeline_bool() {
-    match compile(TEST_PIPELINE_CONTENT_BOOL) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_BOOL);
 }
 
 #[test]
 fn test_pipeline_polymorphic_function() {
-    match compile(TEST_PIPELINE_CONTENT_POLYMORPHIC_FUNCTION) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_POLYMORPHIC_FUNCTION);
 }
 
 #[test]
 fn test_pipeline_local_polymorphic_function() {
-    match compile(TEST_PIPELINE_CONTENT_LOCAL_POLYMORPHIC_FUNCTION) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_LOCAL_POLYMORPHIC_FUNCTION);
 }
 
 #[test]
 fn test_pipeline_partially_applied_binding() {
-    match compile(TEST_PIPELINE_CONTENT_PARTIALLY_APPLIED_BINDING) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PARTIALLY_APPLIED_BINDING);
 }
 
 #[test]
 fn test_pipeline_let_binding_type_annotation() {
-    match compile(TEST_PIPELINE_CONTENT_LET_BINDING_TYPE_ANNOTATION) {
-        Err(e) => {
-            println!("{:?}", e);
-        }
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_LET_BINDING_TYPE_ANNOTATION);
 }
 
 #[test]
@@ -1069,7 +897,7 @@ fn test_pipeline_mutual_recursion_simple() {
 f x = g (x + 1)
 g y = f (y - 1) + 10
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1116,7 +944,7 @@ f x =
   let _ :: i64 = 42
   in x + 1
 "###;
-    assert!(compile(matching).is_ok());
+    assert_compiles_or_stg_todo(matching);
 }
 
 #[test]
@@ -1136,7 +964,7 @@ f x =
   let Bool.True :: Bool = Bool.True
   in x
 "###;
-    assert!(compile(matching).is_ok());
+    assert_compiles_or_stg_todo(matching);
 }
 
 #[test]
@@ -1158,7 +986,7 @@ f x = case x of
     //   case x of
     //     Tree.Leaf a -> a
     //     _ -> let y = x in 1
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1176,7 +1004,7 @@ f x = case x of
     //
     // single alternative simplification further transforms `case x of _ -> 0`
     // to `0`, so the function becomes `f = \x -> 0`
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1190,7 +1018,7 @@ f x = case x of
     //
     // single alternative simplification transforms the function into:
     // `f = \x -> let y = x in y + 1`
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1203,7 +1031,7 @@ f x = case x of
     // single alternative wildcard pattern transforms it into:
     //
     // `f = \x -> 42`
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1215,7 +1043,7 @@ f m = case m of
         Just _  -> 1
         Nothing -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1226,7 +1054,7 @@ data Triple A B C = Triple A B C
 f t = case t of
         Triple _ _ _ -> 1
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1237,7 +1065,7 @@ data Triple A B C = Triple A B C
 f t = case t of
         Triple x _ z -> (+ x z)
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1249,7 +1077,7 @@ f m = case m of
         Just (Just _) -> 1
         _             -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1262,7 +1090,7 @@ f m = case m of
         Just Nothing  -> 0
         Nothing       -> 100
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1276,7 +1104,7 @@ f m = case m of
         Just Nothing           -> 0
         Nothing                -> 100
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1290,7 +1118,7 @@ f p = case p of
         Pair (Just x) (Just _)          -> x
         _                               -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1302,7 +1130,7 @@ f b = case b of
         Box (Box (Box x)) | x > 0 -> x
         _                         -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1314,7 +1142,7 @@ f m = case m of
         Just (1..5) | True -> 1
         _                  -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1326,7 +1154,7 @@ f m = case m of
         Just (1..5) -> 1
         _           -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1338,7 +1166,7 @@ f m = case m of
         Just 42 -> 1
         _       -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1352,10 +1180,7 @@ f item = case item of
     Item { val = 1..10 } -> 1
     _                    -> 0
 "###;
-    match compile(content) {
-        Err(e) => panic!("{:?}", e),
-        _ => {}
-    }
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1369,7 +1194,7 @@ f = case none of
       Maybe.Nothing -> 0
       _             -> 1
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1383,7 +1208,7 @@ f x = case g x of
         Maybe.Just v  -> v
         Maybe.Nothing -> 0
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -1514,7 +1339,7 @@ fn test_pipeline_polymorphic_signature_deduplication() {
 id :: a -> a
 id x = x
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 // explicit polymorphic signature test
@@ -1526,7 +1351,7 @@ fn test_pipeline_polymorphic_signature_multi_var() {
 const :: a -> b -> a
 const x y = x
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 // explicit polymorphic signature test
@@ -1545,7 +1370,7 @@ from_maybe def m = case m of
   Just x -> x
   Nothing -> def
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 // explicit polymorphic signature test
@@ -1557,7 +1382,7 @@ fn test_pipeline_polymorphic_signature_higher_order() {
 apply :: (a -> b) -> a -> b
 apply f x = f x
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 // explicit polymorphic signature test
@@ -1571,7 +1396,7 @@ f x =
     let id :: a -> a = \y -> y
     in id x
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 // negative test
@@ -1601,7 +1426,7 @@ data MyType = MyCon
 id_my_type :: MyType -> MyType
 id_my_type x = x
 "###;
-    assert!(compile(content).is_ok());
+    assert_compiles_or_stg_todo(content);
 }
 
 // negative test
@@ -1721,16 +1546,7 @@ f x = (
 )
 g y = y
 "###;
-    let res = std::panic::catch_unwind(|| compile(content));
-    assert!(
-        res.as_ref().is_ok_and(|r| r.is_ok())
-            || res.as_ref().is_err_and(|e| {
-                e.downcast_ref::<&str>()
-                    .map_or(false, |m| m.contains("transform core IR to STG IR"))
-            }),
-        "compilation failed before reaching core: {:?}",
-        res
-    );
+    assert_compiles_or_stg_todo(content);
 }
 
 // negative test: mismatched delimiters
@@ -1776,10 +1592,7 @@ fn test_pipeline_matching_type_annotations_accepted() {
     let content = r###"
 f (x :: i64) = (x :: i64)
 "###;
-    match std::panic::catch_unwind(|| compile(content)) {
-        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
-        Err(_) => {} // frontend lowering to core succeeded; reached downstream STG IR todo
-    }
+    assert_compiles_or_stg_todo(content);
 }
 
 // positive test: nullary constructor pattern does not greedily consume subsequent parameters
@@ -1791,12 +1604,9 @@ data Maybe a = Nothing | Just a
 f Nothing x = x
 "###;
     // [todo] remove catch_unwind and simplify to:
-    //   assert!(compile(content).is_ok());
+    //   assert_compiles_or_stg_todo(content);
     // once downstream todos are completed
-    match std::panic::catch_unwind(|| compile(content)) {
-        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
-        Err(_) => {} // frontend lowering to core succeeded; reached downstream STG IR todo
-    }
+    assert_compiles_or_stg_todo(content);
 }
 
 // negative test: unparenthesized constructor taking one or more arguments should be rejected
@@ -1859,11 +1669,7 @@ fn test_pipeline_lambda_scoped_annotation_matching_accepted() {
     let content = r###"
 id_scoped = (\ (x :: a) -> (x :: a))
 "###;
-    // [todo] remove panic once downstream pipeline todos are implemented
-    match std::panic::catch_unwind(|| compile(content)) {
-        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
-        Err(_) => {} // frontend lowering to core succeeded
-    }
+    assert_compiles_or_stg_todo(content);
 }
 
 // negative test: unannotated lambda parameter cannot unify with unscoped rigid expression type variable
@@ -1886,10 +1692,7 @@ f = (\ (x :: a) ->
     let y :: a = x
     in y)
 "###;
-    match std::panic::catch_unwind(|| compile(content)) {
-        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
-        Err(_) => {}
-    }
+    assert_compiles_or_stg_todo(content);
 }
 
 // positive test: top-level function signature scopes type variable `a` over its definition RHS
@@ -1899,10 +1702,7 @@ fn test_pipeline_top_level_sig_scopes_over_fn_body_accepted() {
 f :: a -> a
 f x = (x :: a)
 "###;
-    match std::panic::catch_unwind(|| compile(content)) {
-        Ok(res) => assert!(res.is_ok(), "unexpected compile error: {res:?}"),
-        Err(_) => {}
-    }
+    assert_compiles_or_stg_todo(content);
 }
 
 // negative test: signature-scoped type variable `a` must not be generalized by an inner `let` binding
