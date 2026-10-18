@@ -640,7 +640,31 @@
 
       h'' = h'[a_thunk $\mapsto$ indirection(a_boxed)]
   \end{lstlisting}
-  
+
+  \vfill\null
+  \columnbreak
+
+  \section{GC Codes}
+
+  if assuming 2-space copying algorithm: each closure needs evacuation and scavenge codes
+
+  \subsection{evacuation code}
+
+  copy closure to to-space, overwrite from-space copy with a forwarding pointer, and returns the new address in to-space
+
+  forwarding pointer implementable with a closure (with destination pointer as the closure payload) with its evacuation code that returns the to-space destination address $\implies$ using uniform representation of closure, all closures need to have space to store atleast 1 word in payload
+
+  \subsection{scavenge code}
+
+  once a closure's evacuation code is complete, run scavenge code on the closure in the to-space
+
+  purpose: recursively run evacuation code on all items in its payloadthat are pointers which also returns the new address of the evacuated object in to-space, then update the pointers in the payload with the updated addresses in to-space
+
+  note: these compiled codes can be made layout-aware of its payload and not require extra runtime assistance/interpretation
+
+  \subsection{indirection closure}
+
+  its evacuation code jumps to the destination closure's evacuation code (if the destination is an indirection closure, then the indirection closure's evacuation code will have an extra indirection that returns its target closure's address in to-space $\implies$ removal of the indirection after GC cycle completes)
   
   \vfill\null
   \columnbreak
