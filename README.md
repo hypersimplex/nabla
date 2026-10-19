@@ -7,7 +7,7 @@
 Experimenting and learning about lazy functional language implementation from
 first principles, with inspiration from Miranda, Haskell, Rust, and various
 literatures from SPJ (1987, 1992), Wolfe (1995), and Banerjee (1993).
-A Secondary goal would be to make it usable as an embeddable language in Rust.
+A secondary goal would be to make it usable as an embeddable language in Rust.
 
 Planned features & non-features:
 - simple forward sequenced compile pipeline for now
@@ -19,7 +19,7 @@ Planned features & non-features:
 - scoped type variable
 - basic builtin ops have hardcoded precedence and associativity for now
 - user opt-in strictness [possibly/experimental]
-- builtin tabular(arrays/matrices) support [possibly/experimental]
+- builtin tabular(arrays/matrices) support to enable tile-based computation [possibly/experimental]
 - experimental construct for explicit finite iterations (eg: like recursion and loops but with termination guarantee) on tabular data + strictness opt-in => enabling polyhedral analysis [possibly/experimental]
 
 ## Remaining Todo
