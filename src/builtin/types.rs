@@ -4,23 +4,24 @@ use crate::parse::loc;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
 
-/// resolve a builtin type name (as it appears in source) to a TyExpr
-/// Bool maps to the builtin ADT
-///
-/// [todo, fix]: these should be type constructors instead
-pub(crate) fn resolve_builtin_type(name: &str) -> Option<TyExpr> {
+/// resolve a builtin primitive type name to its type constructor
+pub(crate) fn resolve_builtin_ty_con(name: &str) -> Option<TyConBuiltin> {
     match name {
-        "i64" => Some(TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))),
-        "f64" => Some(TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::F64))),
-        "String" => Some(TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))),
+        "i64" => Some(TyConBuiltin::I64),
+        "f64" => Some(TyConBuiltin::F64),
+        "Bytes" => Some(TyConBuiltin::Bytes),
+        "->" => Some(TyConBuiltin::Arrow),
         _ => None,
     }
 }
 
+/// resolve a builtin type name to a TyExpr
+pub(crate) fn resolve_builtin_ty_expr(name: &str) -> Option<TyExpr> {
+    resolve_builtin_ty_con(name).map(|b| TyExpr::TyCon(TyCon::Builtin(b)))
+}
+
 /// convert type annotation to internal TyExpr, resolving builtin type names
 /// and converting function arrows to builtin Arrow
-///
-/// [todo, fix]: these should be type constructors instead
 pub(crate) fn lower_type_annot_to_ty_expr(ty_expr: &abstr_structures::ATypeExprComplex) -> TyExpr {
     match ty_expr {
         abstr_structures::ATypeExprComplex::Iden(iden) => {
@@ -30,7 +31,7 @@ pub(crate) fn lower_type_annot_to_ty_expr(ty_expr: &abstr_structures::ATypeExprC
             } = &iden;
             let mut head = match token {
                 concrete_token::ConcreteToken::Iden(name)
-                    if let Some(builtin) = resolve_builtin_type(name) =>
+                    if let Some(builtin) = resolve_builtin_ty_expr(name) =>
                 {
                     builtin
                 }

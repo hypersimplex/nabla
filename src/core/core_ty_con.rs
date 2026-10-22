@@ -126,20 +126,16 @@ pub(crate) fn get_vvar_for_adt_constructor_fn(
 }
 
 // helper conversion functions --->>
+
+/// convert to core type constructor
 impl CoreConDef {
-    pub(crate) fn from_constructor_def(
-        core_ty_con_env: &crate::core::core_ty_con_env::CoreTyConEnv,
-        constructor_def: &ConstructorDef,
-    ) -> Self {
+    pub(crate) fn from_constructor_def(constructor_def: &ConstructorDef) -> Self {
         let ConstructorDef {
             name, field_types, ..
         } = constructor_def;
         CoreConDef {
             name: name.clone(),
-            field_types: field_types
-                .iter()
-                .map(|x| core_ty_from_ty_expr(core_ty_con_env, x))
-                .collect(),
+            field_types: field_types.iter().map(core_ty_from_ty_expr).collect(),
         }
     }
 }

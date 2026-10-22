@@ -47,7 +47,11 @@ impl PartialOrd for VVarName {
 
 impl DocPrinter for VVarName {
     fn to_doc(&self) -> Box<Doc> {
-        self.token.to_doc()
+        if self.builtin.is_some() {
+            self.token.to_doc().cat_lit("#")
+        } else {
+            self.token.to_doc()
+        }
     }
 }
 

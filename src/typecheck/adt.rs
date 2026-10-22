@@ -27,9 +27,47 @@ pub(crate) struct ADTDef {
     //   1 variant : product type
     //   >=2 variants : sum type
     pub constructors: Vec<ConstructorDef>,
+
+    pub origin: ADTOrigin,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ADTOrigin {
+    Builtin,
+    User,
 }
 
 impl ADTDef {
+    pub fn is_builtin(&self) -> bool {
+        self.origin == ADTOrigin::Builtin
+    }
+
+    pub fn new_builtin(
+        name: String,
+        ty_params: Vec<TyVarName>,
+        constructors: Vec<ConstructorDef>,
+    ) -> Self {
+        Self {
+            name,
+            ty_params,
+            constructors,
+            origin: ADTOrigin::Builtin,
+        }
+    }
+
+    pub fn new_user(
+        name: String,
+        ty_params: Vec<TyVarName>,
+        constructors: Vec<ConstructorDef>,
+    ) -> Self {
+        Self {
+            name,
+            ty_params,
+            constructors,
+            origin: ADTOrigin::User,
+        }
+    }
+
     pub fn is_product_type(&self) -> bool {
         self.constructors.len() == 1
     }
@@ -83,9 +121,9 @@ impl DataParams {
         let mut param_map = HashMap::new();
 
         for param in params {
-            let pname = match param {
+            let (pname, ploc) = match param {
                 ATypeExprComplex::Iden(iden) => match &iden.identifier.token {
-                    ConcreteToken::Iden(s) => s.clone(),
+                    ConcreteToken::Iden(s) => (s.clone(), iden.identifier.loc.clone()),
                     other => {
                         return Err(TyError::AdtError(format!(
                             "expected identifier for type parameter, got {:?}",
@@ -99,6 +137,12 @@ impl DataParams {
                     ));
                 }
             };
+            if param_map.contains_key(&pname) {
+                return Err(TyError::AdtError(format!(
+                    "duplicate type parameter `{pname}` in definition of `{name}` at {:?}",
+                    ploc
+                )));
+            }
             let tvn = mk_ty_var_name_userdef(&pname);
             param_map.insert(pname, tvn.clone());
             param_vars.push(tvn);
@@ -166,15 +210,15 @@ fn build_record_type_definition(
         .map(|(_, ty)| ty_expr_from_field_type(env, &params.param_map, ty))
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(ADTDef {
-        name: params.name.clone(),
-        ty_params: params.param_vars.clone(),
-        constructors: vec![ConstructorDef {
+    Ok(ADTDef::new_user(
+        params.name.clone(),
+        params.param_vars.clone(),
+        vec![ConstructorDef {
             name: params.name.clone(),
             field_types,
             field_names: Some(field_names),
         }],
-    })
+    ))
 }
 
 fn build_sum_type_definition(
@@ -207,18 +251,18 @@ fn build_sum_type_definition(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(ADTDef {
-        name: params.name.clone(),
-        ty_params: params.param_vars.clone(),
-        constructors: ctors,
-    })
+    Ok(ADTDef::new_user(
+        params.name.clone(),
+        params.param_vars.clone(),
+        ctors,
+    ))
 }
 
-fn init_builtin_adts(env: &mut TyConEnv, ty_var_ns: &mut TyVarNameSupply) {
-    env.add_adt(ADTDef {
-        name: "Bool".to_string(),
-        ty_params: Vec::new(),
-        constructors: vec![
+pub(crate) fn init_builtin_adts(env: &mut TyConEnv) {
+    env.add_adt(ADTDef::new_builtin(
+        "Bool".to_string(),
+        Vec::new(),
+        vec![
             ConstructorDef {
                 name: "True".to_string(),
                 field_types: Vec::new(),
@@ -230,13 +274,13 @@ fn init_builtin_adts(env: &mut TyConEnv, ty_var_ns: &mut TyVarNameSupply) {
                 field_names: None,
             },
         ],
-    });
+    ));
 
-    let ty_var_name = ty_var_ns.generate();
-    env.add_adt(ADTDef {
-        name: "Maybe".to_string(),
-        ty_params: vec![ty_var_name.clone()],
-        constructors: vec![
+    let ty_var_name = mk_ty_var_name_userdef("a");
+    env.add_adt(ADTDef::new_builtin(
+        "Maybe".to_string(),
+        vec![ty_var_name.clone()],
+        vec![
             ConstructorDef {
                 name: "Nothing".to_string(),
                 field_types: Vec::new(),
@@ -248,17 +292,47 @@ fn init_builtin_adts(env: &mut TyConEnv, ty_var_ns: &mut TyVarNameSupply) {
                 field_names: None,
             },
         ],
-    });
+    ));
 
-    env.add_adt(ADTDef {
-        name: "Unit".to_string(),
-        ty_params: Vec::new(),
-        constructors: vec![ConstructorDef {
+    env.add_adt(ADTDef::new_builtin(
+        "Unit".to_string(),
+        Vec::new(),
+        vec![ConstructorDef {
             name: "Unit".to_string(),
             field_types: Vec::new(),
             field_names: None,
         }],
-    });
+    ));
+
+    env.add_adt(ADTDef::new_builtin(
+        "String".to_string(),
+        Vec::new(),
+        vec![ConstructorDef {
+            name: "String".to_string(),
+            field_types: vec![mk_ty_bytes()],
+            field_names: None,
+        }],
+    ));
+
+    env.add_adt(ADTDef::new_builtin(
+        "Int64".to_string(),
+        Vec::new(),
+        vec![ConstructorDef {
+            name: "Int64".to_string(),
+            field_types: vec![mk_ty_i64()],
+            field_names: Some(vec!["val".to_string()]),
+        }],
+    ));
+
+    env.add_adt(ADTDef::new_builtin(
+        "Float64".to_string(),
+        Vec::new(),
+        vec![ConstructorDef {
+            name: "Float64".to_string(),
+            field_types: vec![mk_ty_f64()],
+            field_names: Some(vec!["val".to_string()]),
+        }],
+    ));
 }
 
 /// add info about ADT from top level items into the type env
@@ -267,13 +341,12 @@ fn init_builtin_adts(env: &mut TyConEnv, ty_var_ns: &mut TyVarNameSupply) {
 ///
 /// pass 2 fills constructors
 pub(crate) fn register_adt_into_type_env(
-    ty_var_ns: &mut TyVarNameSupply,
+    _ty_var_ns: &mut TyVarNameSupply,
     items: &[TopLevelItem],
 ) -> Result<TyConEnv, TyError> {
-    validate_no_builtin_type_shadowing(items)?;
-    validate_no_duplicate_adt_definitions(items)?;
     let mut env = TyConEnv::new();
-    init_builtin_adts(&mut env, ty_var_ns);
+    validate_no_builtin_type_shadowing(&env, items)?;
+    validate_no_duplicate_adt_definitions(items)?;
 
     // pass 1: register skeletons
     for item in items.iter() {
@@ -337,14 +410,22 @@ fn ty_expr_from_field_type(
             // 2. builtin primitive type, eg: `i64`
             // 3. registered ADT type constructor
             // 4. o/w: undeclared type constructor or unbound type variable
+            let num_args = iden.type_parameters.len();
             let mut head = if let Some(tvn) = params.get(head_name) {
+                if num_args > 0 {
+                    return Err(TyError::ArityMismatch {
+                        constructor: head_name.to_string(),
+                        expected: 0,
+                        got: num_args,
+                        msg: Some(format!(
+                            "type parameter `{head_name}` cannot take arguments"
+                        )),
+                    });
+                }
                 TyExpr::TyVar(tvn.clone())
-            } else if let Some(builtin) = resolve_builtin_type(head_name) {
-                builtin
-            } else if env.has_adt(head_name) {
-                TyExpr::TyVar(mk_ty_var_name_userdef(head_name))
             } else {
-                return Err(TyError::UnknownType(head_name.to_string()));
+                let ty_con = env.validate_and_resolve_ty_con(head_name, num_args)?;
+                TyExpr::TyCon(ty_con)
             };
 
             // apply any type parameters
@@ -391,19 +472,34 @@ fn get_data_type_name(identifier: &ConcreteTokenAndLoc) -> Result<String, TyErro
     }
 }
 
-fn validate_no_builtin_type_shadowing(items: &[TopLevelItem]) -> Result<(), TyError> {
+fn validate_no_builtin_type_shadowing(
+    env: &TyConEnv,
+    items: &[TopLevelItem],
+) -> Result<(), TyError> {
     for item in items.iter() {
-        let identifier = match item {
-            TopLevelItem::DataRecord(rec) => &rec.identifier,
-            TopLevelItem::DataSum(sum) => &sum.identifier,
+        let (identifier, params) = match item {
+            TopLevelItem::DataRecord(rec) => (&rec.identifier, &rec.params),
+            TopLevelItem::DataSum(sum) => (&sum.identifier, &sum.params),
             _ => continue,
         };
         let name: String = get_data_type_name(identifier)?;
-        if resolve_builtin_type(&name).is_some() {
+        if env.is_reserved_type_name(&name) {
             return Err(TyError::AdtError(format!(
                 "type name `{name}` conflicts with builtin type at {:?}",
                 identifier.loc
             )));
+        }
+        for param in params {
+            if let ATypeExprComplex::Iden(iden) = param {
+                if let ConcreteToken::Iden(pname) = &iden.identifier.token {
+                    if env.is_reserved_type_name(pname) {
+                        return Err(TyError::AdtError(format!(
+                            "type parameter `{pname}` conflicts with builtin type at {:?}",
+                            iden.identifier.loc
+                        )));
+                    }
+                }
+            }
         }
     }
     Ok(())

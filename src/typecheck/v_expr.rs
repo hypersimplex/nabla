@@ -130,7 +130,7 @@ pub(crate) struct VLitString {
 
 impl VLitString {
     pub(crate) fn ty(&self) -> TyExpr {
-        mk_ty_string()
+        mk_ty_bytes()
     }
 }
 

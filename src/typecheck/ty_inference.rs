@@ -1,4 +1,4 @@
-use crate::builtin::types::resolve_builtin_type;
+use crate::builtin::types::resolve_builtin_ty_con;
 use crate::parse::abstr_pattern::is_type_constructor_name;
 use crate::parse::concrete_token::*;
 use crate::typecheck::adt::*;
@@ -14,6 +14,7 @@ use crate::typecheck::ty_var_name::*;
 use crate::typecheck::ty_var_name_supply::*;
 use crate::typecheck::v_expr::*;
 use crate::typecheck::v_expr_typed::*;
+use crate::util::printer::DocPrinter;
 
 use std::collections::*;
 
@@ -47,17 +48,13 @@ pub(crate) fn free_tvns_in_ty_env(ty_scheme: &EnvVVarToTyScheme) -> Vec<TyVarNam
     out.into_iter().collect()
 }
 
+// compute free type variables for the type expression
 pub(crate) fn free_ty_vars(ty_expr: &TyExpr) -> BTreeSet<TyVarName> {
     let mut vars: BTreeSet<TyVarName> = BTreeSet::new();
     let mut stack: Vec<&TyExpr> = vec![ty_expr];
     while let Some(current) = stack.pop() {
         match current {
-            TyExpr::TyVar(var)
-                if matches!(
-                    var,
-                    TyVarName::Auto(_) | TyVarName::UserDefined(_) | TyVarName::Rigid(_)
-                ) =>
-            {
+            TyExpr::TyVar(var) => {
                 vars.insert(var.clone());
             }
             TyExpr::TyApp(app) => {
@@ -70,39 +67,57 @@ pub(crate) fn free_ty_vars(ty_expr: &TyExpr) -> BTreeSet<TyVarName> {
     vars
 }
 
-// compute free type variables for the type expression, but ignore ADT type
-// constructors; only true type variables should be generalized
-pub(crate) fn free_ty_vars_excluding_adts(
-    ty_expr: &TyExpr,
-    ty_env: &TyConEnv,
-) -> BTreeSet<TyVarName> {
-    free_ty_vars(ty_expr)
-        .into_iter()
-        .filter(|tvn: &TyVarName| !is_adt_type_var(ty_env, tvn))
-        .collect()
-}
-
 /// finds a most general unifier, substitution `s`, such that s(t1) = s(t2)
 ///
 /// notes:
-///   - auto type variables act as variables in type equations, these can unify
-///     with anything
-///   - concrete types (Builtin, UserDefined) are rigid, they only unify with
-///     same type
+///   - concrete types are rigid, they only unify with the same type
 ///   - TyApp unifies structurally: T1 A ~ T2 B iff T1 ~ T2 and A ~ B,
 ///     where `~` means `unifies with`
 ///   - prevents infinite types (handled in `extend`) by occurs check
 ///
-/// type variable classification:
-///   - Auto(n): Unification variables - can be substituted with any type
-///   - Builtin(I64|String|...): Concrete primitive types - rigid
-///   - UserDefined(name): Concrete ADT types - rigid, only unifies with same name
+///   - type variable classification:
+///     - Auto:
+///         - acts as variable in type equations, these can unify with anything
+///     - Rigid:
+///       - represents a universal quantified generic variable (cannot assume
+///         anything about it)
+///       - cannot unify with concrete types
+///     - UserDefined:
+///       - source-level identifer; acts as a brige to be able to unify with a concrete type
 pub(crate) fn unify_ty_exprs(
     subst: &Substitution,
     ty_expr1: &TyExpr,
     ty_expr2: &TyExpr,
 ) -> Result<Substitution, TyError> {
     match (ty_expr1, ty_expr2) {
+        // TyCon vs TyCon: identical constructors unify
+        (TyExpr::TyCon(c1), TyExpr::TyCon(c2)) => {
+            if c1 == c2 {
+                Ok(subst.clone())
+            } else {
+                Err(TyError::TypeConflict {
+                    ty1: ty_expr1.clone(),
+                    ty2: ty_expr2.clone(),
+                    msg: Some(format!(
+                        "incompatible type constructors: `{}` vs `{}`",
+                        c1.to_doc(),
+                        c2.to_doc()
+                    )),
+                })
+            }
+        }
+
+        // TyCon vs TyApp: incompatible
+        (TyExpr::TyCon(_), TyExpr::TyApp(_)) | (TyExpr::TyApp(_), TyExpr::TyCon(_)) => {
+            Err(TyError::TypeConflict {
+                ty1: ty_expr1.clone(),
+                ty2: ty_expr2.clone(),
+                msg: Some(
+                    "cannot unify concrete type constructor with type application".to_string(),
+                ),
+            })
+        }
+
         (TyExpr::TyVar(tvn), other) => {
             // apply current substitution to see what the type variable resolves to
             let sub_ty_expr1 = subst.get(tvn).unwrap();
@@ -112,18 +127,18 @@ pub(crate) fn unify_ty_exprs(
                     // type constructors (builtin and user-defined) are rigid/concrete types:
                     //   unify with themselves or with Auto variables
                     match (x, other) {
-                        // Builtin vs Builtin: must be the same type
-                        (TyVarName::Builtin(b1), TyExpr::TyVar(TyVarName::Builtin(b2))) => {
-                            if b1 == b2 {
-                                Ok(subst.clone())
-                            } else {
-                                Err(TyError::TypeConflict {
-                                    ty1: ty_expr1.clone(),
-                                    ty2: ty_expr2.clone(),
-                                    msg: Some("incompatible builtin types".to_string()),
-                                })
-                            }
-                        }
+                        // Rigid vs TyCon: cannot bind rigid to concrete constructor
+                        (TyVarName::Rigid(_), TyExpr::TyCon(_)) => Err(TyError::TypeConflict {
+                            ty1: ty_expr1.clone(),
+                            ty2: ty_expr2.clone(),
+                            msg: Some(
+                                "cannot unify rigid type variable with concrete type constructor"
+                                    .to_string(),
+                            ),
+                        }),
+
+                        // Auto vs TyCon: substitute the Auto variable `x`
+                        (TyVarName::Auto(_), TyExpr::TyCon(_)) => extend(subst, x, other),
 
                         // UserDefined vs UserDefined: must have the same name
                         (TyVarName::UserDefined(u1), TyExpr::TyVar(TyVarName::UserDefined(u2))) => {
@@ -138,15 +153,27 @@ pub(crate) fn unify_ty_exprs(
                             }
                         }
 
-                        // Builtin vs UserDefined: incompatible
-                        (TyVarName::Builtin(_), TyExpr::TyVar(TyVarName::UserDefined(_)))
-                        | (TyVarName::UserDefined(_), TyExpr::TyVar(TyVarName::Builtin(_))) => {
+                        // UserDefined vs TyCon
+                        (TyVarName::UserDefined(u), TyExpr::TyCon(con)) => {
+                            if let TyCon::User(name) = con {
+                                if let ConcreteToken::Iden(uname) = &u.token {
+                                    if uname == name {
+                                        return Ok(subst.clone());
+                                    }
+                                }
+                            }
                             Err(TyError::TypeConflict {
                                 ty1: ty_expr1.clone(),
                                 ty2: ty_expr2.clone(),
-                                msg: Some(
-                                    "cannot unify builtin type with user-defined type".to_string(),
-                                ),
+                                msg: match con {
+                                    TyCon::User(_) => {
+                                        Some("incompatible user-defined types".to_string())
+                                    }
+                                    TyCon::Builtin(_) => Some(
+                                        "cannot unify builtin type with user-defined type"
+                                            .to_string(),
+                                    ),
+                                },
                             })
                         }
 
@@ -175,20 +202,17 @@ pub(crate) fn unify_ty_exprs(
                         }
 
                         // Rigid vs Concrete type produces error
-                        (
-                            TyVarName::Rigid(_),
-                            TyExpr::TyVar(TyVarName::Builtin(_) | TyVarName::UserDefined(_)),
-                        )
-                        | (
-                            TyVarName::Builtin(_) | TyVarName::UserDefined(_),
-                            TyExpr::TyVar(TyVarName::Rigid(_)),
-                        ) => Err(TyError::TypeConflict {
-                            ty1: ty_expr1.clone(),
-                            ty2: ty_expr2.clone(),
-                            msg: Some(
-                                "cannot unify rigid type variable with concrete type".to_string(),
-                            ),
-                        }),
+                        (TyVarName::Rigid(_), TyExpr::TyVar(TyVarName::UserDefined(_)))
+                        | (TyVarName::UserDefined(_), TyExpr::TyVar(TyVarName::Rigid(_))) => {
+                            Err(TyError::TypeConflict {
+                                ty1: ty_expr1.clone(),
+                                ty2: ty_expr2.clone(),
+                                msg: Some(
+                                    "cannot unify rigid type variable with concrete type"
+                                        .to_string(),
+                                ),
+                            })
+                        }
 
                         // Rigid vs type application produces error
                         (TyVarName::Rigid(_), TyExpr::TyApp(_)) => Err(TyError::TypeConflict {
@@ -201,18 +225,17 @@ pub(crate) fn unify_ty_exprs(
                         }),
 
                         // Auto vs. Concrete type: substitute the Auto variable
-                        (
-                            TyVarName::Builtin(_) | TyVarName::UserDefined(_),
-                            TyExpr::TyVar(TyVarName::Auto(_)),
-                        ) => unify_ty_exprs(subst, ty_expr2, ty_expr1),
+                        (TyVarName::UserDefined(_), TyExpr::TyVar(TyVarName::Auto(_))) => {
+                            // mirror
+                            unify_ty_exprs(subst, ty_expr2, ty_expr1)
+                        }
 
-                        (
-                            TyVarName::Auto(_),
-                            TyExpr::TyVar(TyVarName::Builtin(_) | TyVarName::UserDefined(_)),
-                        ) => extend(subst, x, other),
+                        (TyVarName::Auto(_), TyExpr::TyVar(TyVarName::UserDefined(_))) => {
+                            extend(subst, x, other)
+                        }
 
                         // concrete type vs type application: incompatible
-                        (TyVarName::Builtin(_) | TyVarName::UserDefined(_), TyExpr::TyApp(_)) => {
+                        (TyVarName::UserDefined(_), TyExpr::TyApp(_)) => {
                             Err(TyError::TypeConflict {
                                 ty1: ty_expr1.clone(),
                                 ty2: ty_expr2.clone(),
@@ -236,6 +259,7 @@ pub(crate) fn unify_ty_exprs(
         }
 
         // symmetry
+        (TyExpr::TyCon(_), TyExpr::TyVar(_)) => unify_ty_exprs(subst, ty_expr2, ty_expr1),
         (TyExpr::TyApp(_), TyExpr::TyVar(_)) => unify_ty_exprs(subst, ty_expr2, ty_expr1),
 
         // structural unification for type applications, eg:
@@ -490,7 +514,7 @@ fn check_no_escaped_rigid_vars(
             if newly_introduced_rigid_vars.contains(&tvn) {
                 return Err(TyError::TypeConflict {
                     ty1: TyExpr::TyVar(tvn.clone()),
-                    ty2: TyExpr::TyVar(tvn.clone()),
+                    ty2: TyExpr::TyVar(tvn.clone()), // [todo] fix / use another error variant
                     msg: Some(format!("rigid type variable {:?} escapes", tvn)),
                 });
             }
@@ -1284,8 +1308,7 @@ pub(crate) fn ty_check_binding_group(
                 TypedLhsRhsPair::SimpleVarBindingPair((_typed_binding_vexpr, typed_def_vexpr)) => {
                     // set subtract: free type variables in def texpr \ free type variables (schematic vars) from env
 
-                    let free_ty_vars_in_def =
-                        free_ty_vars_excluding_adts(typed_def_vexpr.ty(), ty_env);
+                    let free_ty_vars_in_def = free_ty_vars(typed_def_vexpr.ty());
                     let ty_vars_generalizable: Vec<_> = free_ty_vars_in_def
                         .into_iter()
                         .filter(|tvn| !free_ty_vars_in_env.contains(tvn))
@@ -1323,11 +1346,10 @@ pub(crate) fn ty_check_binding_group(
                     };
 
                     // recompute per-binder generalized vars so the ordering stays local and fresh
-                    let ty_vars_generalizable: Vec<_> =
-                        free_ty_vars_excluding_adts(typed_def_vexpr.ty(), ty_env)
-                            .into_iter()
-                            .filter(|tvn| !free_ty_vars_in_env.contains(tvn))
-                            .collect();
+                    let ty_vars_generalizable: Vec<_> = free_ty_vars(typed_def_vexpr.ty())
+                        .into_iter()
+                        .filter(|tvn| !free_ty_vars_in_env.contains(tvn))
+                        .collect();
                     let scheme_ty_vars: Vec<_> = ty_vars_generalizable
                         .iter()
                         .map(|tvn| {
@@ -1544,6 +1566,11 @@ pub(crate) fn ty_check_let_typed(
         typed_defs.extend(defs);
     }
 
+    for (typed_pat, typed_rhs) in &typed_defs {
+        validate_no_unboxed_let_binding(typed_pat, typed_rhs)?;
+        validate_pattern_no_unboxed_vars(typed_pat)?;
+    }
+
     Ok((
         subst_accum,
         TypedVExpr::Let(TypedVLetExpr {
@@ -1552,6 +1579,82 @@ pub(crate) fn ty_check_let_typed(
             ty: ty_body,
         }),
     ))
+}
+
+// we follow the convention that let binding are always on the heap
+fn validate_no_unboxed_let_binding(pat: &TypedVPattern, rhs: &TypedVExpr) -> Result<(), TyError> {
+    if rhs.ty().is_unboxed_primitive() {
+        return Err(TyError::UnboxedLetBinding {
+            ty: rhs.ty().clone(),
+            msg: Some(format!(
+                "unboxed primitive type `{}` cannot be bound in let expression; use boxed ADT instead",
+                rhs.ty().to_doc().to_string()
+            )),
+        });
+    }
+    Ok(())
+}
+
+// [todo]: check if this is necesary
+fn validate_pattern_no_unboxed_vars(pat: &TypedVPattern) -> Result<(), TyError> {
+    match pat {
+        TypedVPattern::Variable { binder, ty, .. } => {
+            if ty.is_unboxed_primitive() {
+                return Err(TyError::UnboxedLetBinding {
+                    ty: ty.clone(),
+                    msg: Some(format!(
+                        "cannot bind unboxed primitive type `{}` to variable `{}` in let expression; use boxed ADT instead",
+                        ty.to_doc().to_string(),
+                        binder.to_doc().to_string()
+                    )),
+                });
+            }
+        }
+        TypedVPattern::Wild { ty } => {
+            if ty.is_unboxed_primitive() {
+                return Err(TyError::UnboxedLetBinding {
+                    ty: ty.clone(),
+                    msg: Some(format!(
+                        "cannot bind unboxed primitive type `{}` in wildcard pattern in let expression; use boxed ADT instead",
+                        ty.to_doc().to_string()
+                    )),
+                });
+            }
+        }
+        TypedVPattern::Literal { ty, .. } => {
+            if ty.is_unboxed_primitive() {
+                return Err(TyError::UnboxedLetBinding {
+                    ty: ty.clone(),
+                    msg: Some(format!(
+                        "cannot bind unboxed primitive type `{}` in literal pattern in let expression; use boxed ADT instead",
+                        ty.to_doc().to_string()
+                    )),
+                });
+            }
+        }
+        TypedVPattern::Range { ty, .. } => {
+            if ty.is_unboxed_primitive() {
+                return Err(TyError::UnboxedLetBinding {
+                    ty: ty.clone(),
+                    msg: Some(format!(
+                        "cannot bind unboxed primitive type `{}` in range pattern in let expression; use boxed ADT instead",
+                        ty.to_doc().to_string()
+                    )),
+                });
+            }
+        }
+        TypedVPattern::Constructor { args, .. } => {
+            for arg in args {
+                validate_pattern_no_unboxed_vars(arg)?;
+            }
+        }
+        TypedVPattern::Record { fields, .. } => {
+            for (_, field_pat) in fields {
+                validate_pattern_no_unboxed_vars(field_pat)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// type check ADT constructor application C e1 e2 ... ek where C is a
@@ -1807,7 +1910,7 @@ pub(crate) fn ty_check_lit_string(
     vexpr: &VLitString,
 ) -> Result<(Substitution, TyExpr), TyError> {
     match &vexpr.token {
-        ConcreteToken::LiteralString(_string) => Ok((subst_id(), mk_ty_string())),
+        ConcreteToken::LiteralString(_string) => Ok((subst_id(), mk_ty_bytes())),
         _ => Err(TyError::Unexpected(
             format!("type checking literal (string) failed for {:?}", vexpr).to_string(),
         )),
@@ -2182,16 +2285,6 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                 ),
             ))
         }
-    }
-}
-
-fn is_adt_type_var(type_env: &TyConEnv, tvn: &TyVarName) -> bool {
-    match tvn {
-        TyVarName::UserDefined(ud) => match &ud.token {
-            ConcreteToken::Iden(name) => type_env.get_adt(name).is_ok(),
-            _ => false,
-        },
-        _ => false,
     }
 }
 
@@ -2693,38 +2786,63 @@ fn schematic_info_without_binders(
     next
 }
 
-/// collect unique user-defined type variable names (excluding registered ADTs in TyConEnv)
-/// in left-to-right appearance order.
+/// collect unique `TyVarName::UserDefined` type variable names (excluding
+/// registered ADTs in TyConEnv) in left-to-right appearance order
+///
+/// we also validate that all type constructors and builtin types are applied
+/// with the correct arity
+///
+/// expects `ty` to be canonicalized via `canonicalize_ty_cons`
 pub(crate) fn collect_user_defined_ty_var_names(
     ty: &TyExpr,
     te: &TyConEnv,
 ) -> Result<Vec<String>, TyError> {
-    fn collect<'a>(
-        ty: &'a TyExpr,
+    fn collect(
+        ty: &TyExpr,
         te: &TyConEnv,
-        seen: &mut BTreeSet<&'a str>,
+        seen: &mut BTreeSet<String>,
         ordered: &mut Vec<String>,
     ) -> Result<(), TyError> {
-        match ty {
+        let (head, args) = collect_spine(ty.clone());
+        let num_args = args.len();
+        match head {
+            TyExpr::TyCon(con) => {
+                te.validate_and_resolve_ty_con(con.name(), num_args)?;
+            }
             TyExpr::TyVar(TyVarName::UserDefined(u)) => {
                 if let ConcreteToken::Iden(name) = &u.token {
-                    if te.get_adt(name).is_ok() || resolve_builtin_type(name).is_some() {
-                        // registered ADT or builtin type
-                    } else if is_type_constructor_name(name) {
-                        // no match
+                    if is_type_constructor_name(name) {
                         return Err(TyError::UnknownType(name.clone()));
-                    } else if !seen.contains(name.as_str()) {
-                        // previous check determined that is is not a type constructor
-                        seen.insert(name.as_str());
+                    }
+                    if num_args > 0 {
+                        return Err(TyError::ArityMismatch {
+                            constructor: name.clone(),
+                            expected: 0,
+                            got: num_args,
+                            msg: Some(format!("type variable `{name}` cannot take arguments")),
+                        });
+                    }
+                    if !seen.contains(name) {
+                        seen.insert(name.clone());
                         ordered.push(name.clone());
                     }
                 }
             }
-            TyExpr::TyVar(_) => {}
-            TyExpr::TyApp(app) => {
-                collect(&app.ty_func, te, seen, ordered)?;
-                collect(&app.ty_arg, te, seen, ordered)?;
+            TyExpr::TyVar(_) => {
+                if num_args > 0 {
+                    return Err(TyError::ArityMismatch {
+                        constructor: head.to_doc().to_string(),
+                        expected: 0,
+                        got: num_args,
+                        msg: Some("type variable cannot take arguments".to_string()),
+                    });
+                }
             }
+            TyExpr::TyApp(_) => unreachable!("collect_spine strips all TyApp"),
+        }
+
+        for arg in args {
+            collect(&arg, te, seen, ordered)?;
         }
         Ok(())
     }
@@ -2754,6 +2872,7 @@ pub(crate) fn subst_user_defined_ty_vars(
             ty.clone()
         }
         TyExpr::TyVar(_) => ty.clone(),
+        TyExpr::TyCon(_) => ty.clone(),
         TyExpr::TyApp(app) => ty_app(
             subst_user_defined_ty_vars(&app.ty_func, var_map),
             subst_user_defined_ty_vars(&app.ty_arg, var_map),
@@ -2761,36 +2880,67 @@ pub(crate) fn subst_user_defined_ty_vars(
     }
 }
 
+/// canonicalize any user-defined type variable identifiers that name
+/// registered ADTs or builtin types into first-class `TyCon` constructors
+pub(crate) fn canonicalize_ty_cons(te: &TyConEnv, ty: &TyExpr) -> TyExpr {
+    match ty {
+        TyExpr::TyCon(_) => ty.clone(),
+        TyExpr::TyVar(TyVarName::UserDefined(u)) => {
+            if let ConcreteToken::Iden(name) = &u.token {
+                if let Some(b) = resolve_builtin_ty_con(name) {
+                    return TyExpr::TyCon(TyCon::Builtin(b));
+                }
+                if te.has_adt(name) {
+                    return TyExpr::TyCon(TyCon::User(name.clone()));
+                }
+            }
+            ty.clone()
+        }
+        TyExpr::TyVar(_) => ty.clone(),
+        TyExpr::TyApp(app) => ty_app(
+            canonicalize_ty_cons(te, &app.ty_func),
+            canonicalize_ty_cons(te, &app.ty_arg),
+        ),
+    }
+}
+
 /// instantiate user-defined type variables in `ty` with fresh rigid type variables and
-/// return the resulting substituted `TyExpr`.
+/// return the resulting substituted `TyExpr`
+///
+/// this internally canonicalizes `ty`
 ///
 /// updates `var_map` with fresh rigid type variables for newly encountered names while
 /// reusing existing entries, allowing callers to scope identical names across
 /// multiple annotations (e.g. in function signatures, let bindings, and lambda abstractions).
+///
+/// note: rigid type variable acts like a universal generic type
 pub(crate) fn instantiate_rigid_and_subst_ty_expr(
     ty: &TyExpr,
     te: &TyConEnv,
     ns: &mut TyVarNameSupply,
     var_map: &mut BTreeMap<String, TyVarName>,
 ) -> Result<TyExpr, TyError> {
-    for name in collect_user_defined_ty_var_names(ty, te)? {
+    let canonical = canonicalize_ty_cons(te, ty);
+    for name in collect_user_defined_ty_var_names(&canonical, te)? {
         // use `Rigid` rather than flexible `Auto` vars so user-annotated
         // type variables cannot unify with concrete types or other distinct
         // rigid vars
         var_map.entry(name).or_insert_with(|| ns.generate_rigid());
     }
-    Ok(subst_user_defined_ty_vars(ty, var_map))
+    Ok(subst_user_defined_ty_vars(&canonical, var_map))
 }
 
-/// build a type scheme from a `ty_expr` type annotation
-/// by generalizing free user-defined type variables that are not ADT names
-/// in the type environment
+/// build a type scheme from a `ty_expr` type annotation by generalizing free
+/// user-defined type variables that are not ADT names in the type environment
+///
+/// this internally canonicalizes `ty_expr`
 pub(crate) fn build_scheme_from_ty_expr(
     ty_expr: &TyExpr,
     ty_env: &TyConEnv,
     ns: &mut TyVarNameSupply,
 ) -> Result<TyScheme, TyError> {
-    let var_names = collect_user_defined_ty_var_names(ty_expr, ty_env)?;
+    let canonical = canonicalize_ty_cons(ty_env, ty_expr);
+    let var_names = collect_user_defined_ty_var_names(&canonical, ty_env)?;
     let mut var_map = BTreeMap::new();
     let mut ty_vars_schematic = Vec::new();
 
@@ -2800,7 +2950,7 @@ pub(crate) fn build_scheme_from_ty_expr(
         var_map.insert(name, fresh);
     }
 
-    let ty_expr_generalized = subst_user_defined_ty_vars(ty_expr, &var_map);
+    let ty_expr_generalized = subst_user_defined_ty_vars(&canonical, &var_map);
 
     Ok(TyScheme {
         ty_vars_schematic,
@@ -2843,26 +2993,38 @@ mod tests {
     // --- unification tests ---
 
     #[test]
-    fn test_unify_incompatible_builtins_yields_type_conflict() {
+    fn test_unify_type_conflicts_and_bridging() {
         let subst = subst_id();
         let ty_int = mk_ty_i64();
-        let ty_str = mk_ty_string();
+        let ty_bytes = mk_ty_bytes();
+        let ty_user = mk_ty_user("Foo");
+        let ty_user_foo = TyExpr::TyCon(TyCon::User("Foo".to_string()));
+        let ty_user_bar = TyExpr::TyCon(TyCon::User("Bar".to_string()));
 
-        let res = unify_ty_exprs(&subst, &ty_int, &ty_str);
-        match res {
-            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
-                assert!(matches!(
-                    ty1,
-                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-                ));
-                assert!(matches!(
-                    ty2,
-                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
-                ));
-                assert_eq!(msg, Some("incompatible builtin types".to_string()));
-            }
-            other => panic!("expected TypeConflict, got {:?}", other),
-        }
+        // incompatible builtins
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_int, &ty_bytes),
+            Err(TyError::TypeConflict { .. })
+        ));
+
+        // user-defined bridging to matching TyCon::User succeeds
+        assert!(unify_ty_exprs(&subst, &ty_user, &ty_user_foo).is_ok());
+
+        // user-defined vs distinct TyCon::User fails
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_user, &ty_user_bar),
+            Err(TyError::TypeConflict { .. })
+        ));
+
+        // user-defined vs TyCon::Builtin fails (tested symmetrically)
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_user, &ty_int),
+            Err(TyError::TypeConflict { .. })
+        ));
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_int, &ty_user),
+            Err(TyError::TypeConflict { .. })
+        ));
     }
 
     #[test]
@@ -2871,130 +3033,72 @@ mod tests {
         let ty_int = mk_ty_i64();
         let ty_app = mk_ty_arrow(mk_ty_i64(), mk_ty_i64());
 
-        let res = unify_ty_exprs(&subst, &ty_int, &ty_app);
-        match res {
-            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
-                assert!(matches!(
-                    ty1,
-                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-                ));
-                assert!(matches!(ty2, TyExpr::TyApp(_)));
-                assert!(msg.is_some());
-            }
-            other => panic!("expected TypeConflict, got {:?}", other),
-        }
-
-        // symmetric call
-        let res_rev = unify_ty_exprs(&subst, &ty_app, &ty_int);
-        match res_rev {
-            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
-                assert!(matches!(
-                    ty1,
-                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-                ));
-                assert!(matches!(ty2, TyExpr::TyApp(_)));
-                assert!(msg.is_some());
-            }
-            other => panic!("expected TypeConflict, got {:?}", other),
-        }
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_int, &ty_app),
+            Err(TyError::TypeConflict { .. })
+        ));
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_app, &ty_int),
+            Err(TyError::TypeConflict { .. })
+        ));
     }
 
     #[test]
     fn test_unify_occurs_check_yields_infinite_type() {
-        let subst = subst_id();
-        let auto_var = TyVarName::Auto(100);
-        let ty_var = TyExpr::TyVar(auto_var.clone());
-        let ty_app = mk_ty_arrow(ty_var.clone(), mk_ty_i64());
-
-        let res = unify_ty_exprs(&subst, &ty_var, &ty_app);
-        match res {
-            Err(TyError::InfiniteType { var, ty: _, msg }) => {
-                assert_eq!(var, auto_var);
-                assert!(msg.is_some());
-            }
-            other => panic!("expected InfiniteType, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_unify_occurs_check_indirect_cycle_yields_infinite_type() {
         let subst = subst_id();
         let var_a = TyVarName::Auto(100);
         let var_b = TyVarName::Auto(101);
         let ty_a = TyExpr::TyVar(var_a.clone());
         let ty_b = TyExpr::TyVar(var_b.clone());
 
-        // unify b ~ (a -> i64)
+        // direct cycle: a ~ (a -> i64)
+        assert!(matches!(
+            unify_ty_exprs(&subst, &ty_a, &mk_ty_arrow(ty_a.clone(), mk_ty_i64())),
+            Err(TyError::InfiniteType { var, .. }) if var == var_a
+        ));
+
+        // indirect cycle: b ~ (a -> i64), then a ~ b
         let subst1 =
             unify_ty_exprs(&subst, &ty_b, &mk_ty_arrow(ty_a.clone(), mk_ty_i64())).unwrap();
-
-        // unify a ~ b
-        // this should fail with InfiniteType because b contains a
-        let res = unify_ty_exprs(&subst1, &ty_a, &ty_b);
-        match res {
-            Err(TyError::InfiniteType { var, .. }) => {
-                assert_eq!(var, var_a);
-            }
-            other => panic!("expected InfiniteType, got {:?}", other),
-        }
+        assert!(matches!(
+            unify_ty_exprs(&subst1, &ty_a, &ty_b),
+            Err(TyError::InfiniteType { var, .. }) if var == var_a
+        ));
     }
 
     #[test]
-    fn test_unify_substs_conflicting_builtins_yields_type_conflict() {
-        let var = TyVarName::Auto(100);
-        let subst1 = subst_delta(&var, &mk_ty_i64());
-        let subst2 = subst_delta(&var, &mk_ty_string());
-
-        let res = unify_substs(&subst1, &subst2);
-        match res {
-            Err(TyError::TypeConflict { ty1, ty2, msg }) => {
-                assert!(matches!(
-                    ty1,
-                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-                ));
-                assert!(matches!(
-                    ty2,
-                    TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
-                ));
-            }
-            other => panic!("expected type conflict, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_unify_substs_compatible_unification() {
+    fn test_unify_substs() {
         let var_a = TyVarName::Auto(100);
         let var_b = TyVarName::Auto(101);
-        let subst1 = subst_delta(&var_a, &TyExpr::TyVar(var_b.clone()));
-        let subst2 = subst_delta(&var_b, &mk_ty_i64());
 
-        let res = unify_substs(&subst1, &subst2).unwrap();
-        assert!(matches!(
-            subst_ty(&res, &TyExpr::TyVar(var_a)),
-            TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-        ));
-        assert!(matches!(
-            subst_ty(&res, &TyExpr::TyVar(var_b)),
-            TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-        ));
-    }
+        // compatible: a -> b and b -> i64
+        let s_comp1 = subst_delta(&var_a, &TyExpr::TyVar(var_b.clone()));
+        let s_comp2 = subst_delta(&var_b, &mk_ty_i64());
+        let res = unify_substs(&s_comp1, &s_comp2).unwrap();
+        let is_i64 = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::I64)));
+        assert!(is_i64(&subst_ty(&res, &TyExpr::TyVar(var_a.clone()))));
+        assert!(is_i64(&subst_ty(&res, &TyExpr::TyVar(var_b))));
 
-    // --- let-binding pattern type annotation tests ---
-
-    #[test]
-    fn test_let_binding_wildcard_pattern_annotation() {
-        // mismatch: let _ :: String = 42
+        // conflict: a -> i64 vs a -> Bytes
+        let s_conf1 = subst_delta(&var_a, &mk_ty_i64());
+        let s_conf2 = subst_delta(&var_a, &mk_ty_bytes());
         assert!(matches!(
-            check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_string())),
+            unify_substs(&s_conf1, &s_conf2),
             Err(TyError::TypeConflict { .. })
         ));
-
-        // matching: let _ :: i64 = 42
-        assert!(check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_i64())).is_ok());
     }
 
+    // --- let-binding unboxed pattern rejection tests ---
+
     #[test]
-    fn test_let_binding_literal_pattern_annotation() {
+    fn test_unboxed_let_binding_patterns_rejected() {
+        // wildcard pattern: let _ :: i64 = 42
+        assert!(matches!(
+            check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_i64())),
+            Err(TyError::UnboxedLetBinding { .. })
+        ));
+
+        // literal pattern: let 10 :: i64 = 10
         let pat_lit = VPattern::Literal(VPatternLiteral::Numeric(VLitNumeric {
             token: ConcreteToken::LiteralNumeric("10".to_string()),
             loc: None,
@@ -3003,15 +3107,10 @@ mod tests {
                 parsed: Some(10),
             },
         }));
-
-        // mismatch: let 10 :: String = 10
         assert!(matches!(
-            check_let(pat_lit.clone(), mk_lit_int(10), Some(mk_ty_string())),
-            Err(TyError::TypeConflict { .. })
+            check_let(pat_lit, mk_lit_int(10), Some(mk_ty_i64())),
+            Err(TyError::UnboxedLetBinding { .. })
         ));
-
-        // matching: let 10 :: i64 = 10
-        assert!(check_let(pat_lit, mk_lit_int(10), Some(mk_ty_i64())).is_ok());
     }
 
     // --- user-defined type variable handling tests ---
@@ -3062,22 +3161,30 @@ mod tests {
         assert!(scheme_mono.ty_vars_schematic.is_empty());
 
         // undeclared capitalized type name yields UnknownType error
-        let ty_unknown = mk_ty_user("Unknown");
-        assert!(matches!(
-            build_scheme_from_ty_expr(&ty_unknown, &te, &mut ns),
-            Err(TyError::UnknownType(_))
-        ));
-
-        let ty_arrow_unknown = mk_ty_arrow(mk_ty_user("a"), mk_ty_user("Person"));
-        assert!(matches!(
-            build_scheme_from_ty_expr(&ty_arrow_unknown, &te, &mut ns),
-            Err(TyError::UnknownType(_))
-        ));
-
         let ty_nested_unknown = ty_app(mk_ty_user("Maybe"), mk_ty_user("Item"));
         assert!(matches!(
             build_scheme_from_ty_expr(&ty_nested_unknown, &te, &mut ns),
             Err(TyError::UnknownType(_))
+        ));
+
+        // arity validation: under-applied ADT and applied type variable
+        assert!(matches!(
+            build_scheme_from_ty_expr(&mk_ty_user("Maybe"), &te, &mut ns),
+            Err(TyError::ArityMismatch {
+                expected: 1,
+                got: 0,
+                ..
+            })
+        ));
+
+        let var_applied = ty_app(mk_ty_user("a"), mk_ty_user("b"));
+        assert!(matches!(
+            build_scheme_from_ty_expr(&var_applied, &te, &mut ns),
+            Err(TyError::ArityMismatch {
+                expected: 0,
+                got: 1,
+                ..
+            })
         ));
     }
 }

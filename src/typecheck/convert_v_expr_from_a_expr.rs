@@ -1,4 +1,5 @@
 use crate::builtin::types::*;
+use crate::builtin::values;
 use crate::parse::abstr_structures;
 use crate::parse::concrete_token::ConcreteToken;
 use crate::parse::loc::ConcreteTokenAndLoc;
@@ -163,11 +164,18 @@ fn v_expr_from_iden_expr(
     _v_var_supply: &mut VVarNameSupply,
 ) -> VExprAndTyAnnot {
     let abstr_structures::IdenExpr { iden, builtin } = iden_expr;
+    let builtin_resolved = builtin
+        .as_ref()
+        .map(|x| x.into())
+        .or_else(|| match &iden.token {
+            ConcreteToken::Iden(name) => values::resolve_builtin_fn(name),
+            _ => None,
+        });
     (
         VExpr::Variable(VVar::Named(VVarName {
             token: iden.token.clone(),
             loc: Some(iden.loc.clone()),
-            builtin: builtin.as_ref().map(|x| x.into()),
+            builtin: builtin_resolved,
         })),
         None,
     )

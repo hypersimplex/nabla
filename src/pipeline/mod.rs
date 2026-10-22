@@ -391,31 +391,31 @@ f x y z = 9 / (-7*x+y+z)
 
 static TEST_PIPELINE_CONTENT_LET_SIMPLE: &str = r###"
 f_let a =
- let x :: i64 = 1
-     y :: i64 = 2
-     z :: i64 = 5
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
    x + y + a
 "###;
 
 static TEST_PIPELINE_CONTENT_LET_NESTED: &str = r###"
 f_let_1 a =
- let x :: i64 = 1
-     y = 2
-     z = 5
+ let x :: Int64 = Int64 1
+     y = Int64 2
+     z = Int64 5
  in
-   let b = 10
+   let b = Int64 10
        c = b * b
    in x + a + b * c
 "###;
 
 static TEST_PIPELINE_CONTENT_CASE: &str = r###"
 ff x z =
- let y = 1-(case z of
-             "a"         -> (0 * 5)
-             "something" -> x
-             _           -> 2
-           )*7
+ let y = (Int64 1) - (case z of
+                       "a"         -> (Int64 0 * Int64 5)
+                       "something" -> x
+                       _           -> Int64 2
+                     ) * Int64 7
  in y
 "###;
 
@@ -423,13 +423,13 @@ static TEST_PIPELINE_CONTENT_CASE_NESTED: &str = r###"
 fff x z =
  let y = (
           case z of
-            "a"         -> (0 * 5)
+            "a"         -> (Int64 0 * Int64 5)
             "something" -> case x of
-                             0 -> 10
-                             1 -> 11
-                             _ -> 2 * x
-            _           -> 2
-         ) * 7
+                             Int64 0 -> Int64 10
+                             Int64 1 -> Int64 11
+                             _       -> Int64 2 * x
+            _           -> Int64 2
+         ) * Int64 7
  in y
 "###;
 
@@ -465,7 +465,7 @@ f4 yy zz = yy * (f5 zz)
 
 f3 x =
   let a = f4
-      b :: i64 = 7
+      b :: Int64 = Int64 7
   in
     a b x
 
@@ -541,46 +541,29 @@ g x = x
 "###;
 
 static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_FUNC_PARAM: &str = r###"
-data Maybe T
-  = Just T
-  | Nothing
-
 f (Just x) True = x + 5
 "###;
 
 static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_LET_EXPR: &str = r###"
-data Maybe T
-  = Just T
-  | Nothing
-
 f x y = let Just(a) = x
             Just(b) = y
         in a + b
 "###;
 
 static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE: &str = r###"
-data Maybe T
-  = Just T
-  | Nothing
-
-f_get y = Just 5
-f x = case let Just(y) = x in y*10 of
-        50 -> 1
-        _ -> 0
+f_get y = Just (Int64 5)
+f x = case let Just(y) = x in y * (Int64 10) of
+        _ -> Int64 0
 "###;
 
 static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR: &str = r###"
-data Pair { x :: i64, y :: i64 }
+data Pair { x :: Int64, y :: Int64 }
 
 f a = let Pair { x, y } = a
       in x * y
 "###;
 
 static TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION: &str = r###"
-data Maybe T
-  = Just T
-  | Nothing
-
 f_get y = Just(y + 5)
 f x = case f_get x of
         Just(val) -> 1
@@ -630,9 +613,9 @@ f x = case x of
 static TEST_PIPELINE_CONTENT_DESUGAR_CASE_LITERALS_IN_LET_DEFS: &str = r###"
 ff z =
  let y = case z of
-           0..10         -> 10
-           120           -> 20
-           _             -> 30
+           0..10         -> Int64 10
+           120           -> Int64 20
+           _             -> Int64 30
  in y
 "###;
 
@@ -911,14 +894,9 @@ bad = f 0
     let res = compile(content);
     match res {
         Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
-            assert!(matches!(
-                ty1,
-                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
-            ));
-            assert!(matches!(
-                ty2,
-                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-            ));
+            let is_str = matches!(ty1, TyExpr::TyCon(TyCon::User(ref s)) if s == "String");
+            let is_i64 = matches!(ty2, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::I64)));
+            assert!(is_str && is_i64);
         }
         other => panic!(
             "expected TypeConflict between String and I64, got {:?}",
@@ -931,7 +909,7 @@ bad = f 0
 fn test_pipeline_let_wildcard_pattern_annotation_type_conflict() {
     let mismatch = r###"
 f x =
-  let _ :: String = 42
+  let _ :: String = Int64 42
   in x + 1
 "###;
     assert!(matches!(
@@ -941,7 +919,7 @@ f x =
 
     let matching = r###"
 f x =
-  let _ :: i64 = 42
+  let _ :: Int64 = Int64 42
   in x + 1
 "###;
     assert_compiles_or_stg_todo(matching);
@@ -1037,8 +1015,6 @@ f x = case x of
 #[test]
 fn test_pipeline_pattern_constructor_wildcard() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just _  -> 1
         Nothing -> 0
@@ -1071,8 +1047,6 @@ f t = case t of
 #[test]
 fn test_pipeline_pattern_constructor_nested_wildcard() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just (Just _) -> 1
         _             -> 0
@@ -1083,8 +1057,6 @@ f m = case m of
 #[test]
 fn test_pipeline_pattern_nested_sum_type() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just (Just x) -> x
         Just Nothing  -> 0
@@ -1096,8 +1068,6 @@ f m = case m of
 #[test]
 fn test_pipeline_pattern_nested_constructor_guard() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just (Just x) | x > 10 -> x
         Just (Just _)          -> 10
@@ -1111,7 +1081,6 @@ f m = case m of
 fn test_pipeline_pattern_nested_constructor_multiple_args_guard() {
     let content = r###"
 data Pair A B = Pair A B
-data Maybe T = Just T | Nothing
 
 f p = case p of
         Pair (Just x) (Just y) | x > y -> x
@@ -1136,8 +1105,6 @@ f b = case b of
 #[test]
 fn test_pipeline_pattern_nested_range_in_constructor_with_guard() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just (1..5) | True -> 1
         _                  -> 0
@@ -1148,8 +1115,6 @@ f m = case m of
 #[test]
 fn test_pipeline_pattern_nested_range_in_constructor() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just (1..5) -> 1
         _           -> 0
@@ -1160,8 +1125,6 @@ f m = case m of
 #[test]
 fn test_pipeline_pattern_nested_literal_in_constructor() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 f m = case m of
         Just 42 -> 1
         _       -> 0
@@ -1186,8 +1149,6 @@ f item = case item of
 #[test]
 fn test_pipeline_case_scrutinee_polymorphic_variable() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 none = Maybe.Nothing
 
 f = case none of
@@ -1200,8 +1161,6 @@ f = case none of
 #[test]
 fn test_pipeline_case_scrutinee_compound_expression() {
     let content = r###"
-data Maybe T = Just T | Nothing
-
 g x = Maybe.Just x
 
 f x = case g x of
@@ -1220,25 +1179,15 @@ fn test_pipeline_case_guard_typing_error() {
     let content = r###"
 f z = case 0 of
         _ | (z + 1) == 2 -> 10
-        _ | z == "hello" -> 20
+        _ | z == (String "hello") -> 20
 "###;
 
     let res = compile(content);
     match res {
         Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
-            let is_i64_and_str = (matches!(
-                ty1,
-                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-            ) && matches!(
-                ty2,
-                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
-            )) || (matches!(
-                ty1,
-                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::String))
-            ) && matches!(
-                ty2,
-                TyExpr::TyVar(TyVarName::Builtin(TyVarNameBuiltin::I64))
-            ));
+            let is_i64 = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::I64)));
+            let is_str = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::User(s)) if s == "String");
+            let is_i64_and_str = (is_i64(&ty1) && is_str(&ty2)) || (is_str(&ty1) && is_i64(&ty2));
             assert!(
                 is_i64_and_str,
                 "expect guards to fail with type conflict between i64 and String"
@@ -1270,6 +1219,64 @@ f x = 0
 "###;
     assert!(matches!(
         compile(content_rec),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+#[test]
+fn test_pipeline_builtin_adt_shadowing_rejected() {
+    let content_bool = r###"
+data Bool = Yes | No
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content_bool),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+
+    let content_unit = r###"
+data Unit = CustomUnit
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content_unit),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+
+    let content_maybe = r###"
+data Maybe = CustomMaybe
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content_maybe),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+#[test]
+fn test_pipeline_builtin_type_parameter_shadowing_rejected() {
+    for name in &[
+        "i64", "f64", "Bytes", "String", "Int64", "Float64", "Bool", "Unit", "Maybe",
+    ] {
+        let content = format!("data Container {name} = Box {name}\nf x = 0\n");
+        assert!(
+            matches!(
+                compile(&content),
+                Err(CompileError::Type(TyError::AdtError(_)))
+            ),
+            "expected shadowing of builtin {name} as type parameter to be rejected"
+        );
+    }
+}
+
+#[test]
+fn test_pipeline_duplicate_type_parameter_rejected() {
+    let content = r###"
+data Pair a a = Pair a a
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content),
         Err(CompileError::Type(TyError::AdtError(_)))
     ));
 }
@@ -1361,10 +1368,6 @@ const x y = x
 #[test]
 fn test_pipeline_polymorphic_signature_with_adt() {
     let content = r###"
-data Maybe a
-  = Just a
-  | Nothing
-
 from_maybe :: a -> Maybe a -> a
 from_maybe def m = case m of
   Just x -> x
@@ -1399,6 +1402,73 @@ f x =
     assert_compiles_or_stg_todo(content);
 }
 
+#[test]
+fn test_builtin_i64_from_f64() {
+    let content = r###"
+f = (i64_from_f64 3.14)
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_f64_from_i64() {
+    let content = r###"
+f = (f64_from_i64 42)
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_int64_from_float64() {
+    let content = r###"
+f = (int64_from_float64 (Float64 3.14))
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_float64_from_int64() {
+    let content = r###"
+f = (float64_from_int64 (Int64 42))
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_boxed_conversions_in_let() {
+    let content = r###"
+f x =
+  let a = int64_from_float64 (Float64 3.14)
+      b = float64_from_int64 (Int64 42)
+  in a
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+// negative test: int64_from_float64 rejects unboxed primitive float literal
+#[test]
+fn test_builtin_int64_from_float64_rejects_unboxed_literal() {
+    let content = r###"
+bad = int64_from_float64 3.14
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: float64_from_int64 rejects unboxed primitive int literal
+#[test]
+fn test_builtin_float64_from_int64_rejects_unboxed_literal() {
+    let content = r###"
+bad = float64_from_int64 42
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
 // negative test
 //
 // distinct user-defined types (e.g. `Foo` vs `Bar`) must not unify
@@ -1409,6 +1479,23 @@ data Foo = Foo
 data Bar = Bar
 
 bad :: Foo -> Bar
+bad x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test
+//
+// user-defined type and primitive type (e.g. `Foo` vs `i64`) must not unify
+#[test]
+fn test_pipeline_user_defined_vs_primitive_conflict() {
+    let content = r###"
+data Foo = Foo
+
+bad :: Foo -> i64
 bad x = x
 "###;
     assert!(matches!(
@@ -1475,7 +1562,7 @@ f x = 0
 fn test_pipeline_undeclared_type_in_let_annotation_rejected() {
     let content = r###"
 f x =
-  let y :: Person = 1
+  let y :: Person = Int64 1
   in y
 "###;
     assert!(matches!(
@@ -1599,13 +1686,8 @@ f (x :: i64) = (x :: i64)
 #[test]
 fn test_pipeline_unparenthesized_constructor_pattern() {
     let content = r###"
-data Maybe a = Nothing | Just a
-
 f Nothing x = x
 "###;
-    // [todo] remove catch_unwind and simplify to:
-    //   assert_compiles_or_stg_todo(content);
-    // once downstream todos are completed
     assert_compiles_or_stg_todo(content);
 }
 
@@ -1613,8 +1695,6 @@ f Nothing x = x
 #[test]
 fn test_pipeline_unparenthesized_constructor_with_args_in_param_rejected() {
     let content = r###"
-data Maybe a = Nothing | Just a
-
 f Just x = x
 "###;
     assert!(matches!(
@@ -1713,10 +1793,261 @@ data Pair a b = Pair a b
 f :: a -> Pair i64 String
 f x =
   let g = \ (y :: a) -> y
-  in Pair (g 1) (g "hello")
+  in Pair (g 1) (g (String "hello"))
 "###;
     assert!(matches!(
         compile(content),
         Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: primitive i64 takes 0 type arguments
+#[test]
+fn test_pipeline_primitive_i64_with_type_arg_rejected() {
+    let content = r###"
+f :: i64 a -> i64
+f x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::ArityMismatch { ref constructor, expected: 0, got: 1, .. }))
+        if constructor == "i64"
+    ));
+}
+
+// negative test: nullary ADT Bool takes 0 type arguments
+#[test]
+fn test_pipeline_nullary_adt_with_type_arg_rejected() {
+    let content = r###"
+f :: Bool a -> Bool
+f x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::ArityMismatch { ref constructor, expected: 0, got: 1, .. }))
+        if constructor == "Bool"
+    ));
+}
+
+// negative test: ADT field applying arguments to primitive i64 is rejected
+#[test]
+fn test_pipeline_adt_field_primitive_with_type_arg_rejected() {
+    let content = r###"
+data Bad = Bad (i64 a)
+f x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::ArityMismatch { ref constructor, expected: 0, got: 1, .. }))
+        if constructor == "i64"
+    ));
+}
+
+// negative test: ADT Maybe takes 1 type argument, rejected when given 2
+#[test]
+fn test_pipeline_adt_arity_mismatch_rejected() {
+    let content = r###"
+f :: Maybe a b -> Maybe a
+f x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::ArityMismatch { ref constructor, expected: 1, got: 2, .. }))
+        if constructor == "Maybe"
+    ));
+}
+
+// negative test: unknown type constructor in type signature is rejected
+#[test]
+fn test_pipeline_unknown_type_constructor_rejected() {
+    let content = r###"
+f :: NonExistentType -> i64
+f x = 0
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnknownType(ref name)))
+        if name == "NonExistentType"
+    ));
+}
+
+// negative test: user cannot shadow builtin primitive Bytes
+#[test]
+fn test_pipeline_bytes_redefinition_rejected() {
+    let content = r###"
+data Bytes = MyBytes
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+// negative test: user cannot shadow builtin ADT String
+#[test]
+fn test_pipeline_string_redefinition_rejected() {
+    let content = r###"
+data String = MyString
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+// negative test: user cannot shadow builtin ADT Int64
+#[test]
+fn test_pipeline_int64_redefinition_rejected() {
+    let content = r###"
+data Int64 = MyInt
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+// negative test: user cannot shadow builtin ADT Float64
+#[test]
+fn test_pipeline_float64_redefinition_rejected() {
+    let content = r###"
+data Float64 = MyFloat
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+// positive test: constructing String ADT from Bytes and pattern matching to deconstruct
+#[test]
+fn test_pipeline_string_adt_constructor_and_pattern_accepted() {
+    let content = r###"
+wrap :: Bytes -> String
+wrap b = String b
+
+unwrap :: String -> Bytes
+unwrap s = case s of
+             String b -> b
+
+main = unwrap (wrap "hello world")
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+// positive test: constructing Int64 and Float64 ADT and pattern matching to deconstruct
+#[test]
+fn test_pipeline_int64_and_float64_adt_constructor_and_pattern_accepted() {
+    let content = r###"
+wrapI :: i64 -> Int64
+wrapI n = Int64 n
+
+unwrapI :: Int64 -> i64
+unwrapI x = case x of
+              Int64 n -> n
+
+wrapF :: f64 -> Float64
+wrapF n = Float64 n
+
+unwrapF :: Float64 -> f64
+unwrapF x = case x of
+              Float64 n -> n
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+// negative test: unboxed integer cannot be bound in let expression
+#[test]
+fn test_pipeline_unboxed_let_binding_int_rejected() {
+    let content = r###"
+f x =
+  let y = 42
+  in y
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnboxedLetBinding { .. }))
+    ));
+}
+
+// negative test: unboxed float cannot be bound in let expression
+#[test]
+fn test_pipeline_unboxed_let_binding_float_rejected() {
+    let content = r###"
+f x =
+  let y = 3.14
+  in y
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnboxedLetBinding { .. }))
+    ));
+}
+
+// negative test: unboxed string literal (Bytes#) cannot be bound in let expression
+#[test]
+fn test_pipeline_unboxed_let_binding_bytes_rejected() {
+    let content = r###"
+f x =
+  let y = "hello"
+  in y
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnboxedLetBinding { .. }))
+    ));
+}
+
+// negative test: naked literal string ("hello") has type Bytes# and cannot be passed where String is expected
+#[test]
+fn test_pipeline_naked_string_literal_rejected_where_string_adt_expected() {
+    let content = r###"
+f :: String -> String
+f s = s
+
+bad = f "hello"
+"###;
+    let res = compile(content);
+    match res {
+        Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
+            let is_bytes =
+                |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Bytes)));
+            let is_str = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::User(s)) if s == "String");
+            assert!((is_str(&ty1) && is_bytes(&ty2)) || (is_bytes(&ty1) && is_str(&ty2)));
+        }
+        other => panic!(
+            "expected TypeConflict between String and Bytes, got {:?}",
+            other
+        ),
+    }
+}
+
+// negative test: record pattern binding unboxed primitive field in let expression is rejected
+#[test]
+fn test_pipeline_unboxed_let_binding_in_record_pattern_rejected() {
+    let content = r###"
+data Item { val :: i64 }
+
+f a =
+  let Item { val } = a
+  in val
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnboxedLetBinding { .. }))
+    ));
+}
+
+// negative test: constructor pattern binding unboxed primitive field in let expression is rejected
+#[test]
+fn test_pipeline_unboxed_let_binding_in_constructor_pattern_rejected() {
+    let content = r###"
+f a =
+  let Int64 n = a
+  in n
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::UnboxedLetBinding { .. }))
     ));
 }

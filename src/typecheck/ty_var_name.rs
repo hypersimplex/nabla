@@ -10,9 +10,6 @@ use crate::util::printer::*;
 pub(crate) enum TyVarName {
     UserDefined(TyVarNameUserDefined),
 
-    // basic type supported by the compiler
-    Builtin(TyVarNameBuiltin),
-
     // auto-generated unique name
     Auto(u64),
 
@@ -47,14 +44,6 @@ impl PartialOrd for TyVarNameUserDefined {
     }
 }
 
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
-pub(crate) enum TyVarNameBuiltin {
-    I64,
-    F64,
-    String,
-    Arrow, // internally maps to a type scheme
-}
-
 // helpers ---
 
 pub(crate) fn mk_ty_var_name_userdef(name: &str) -> TyVarName {
@@ -71,7 +60,6 @@ impl DocPrinter for TyVarName {
         use TyVarName::*;
         match self {
             UserDefined(ty_var_name_user_defined) => ty_var_name_user_defined.to_doc(),
-            Builtin(ty_var_name_builtin) => ty_var_name_builtin.to_doc(),
             Auto(auto_id) => Doc::lit(&format!("TyAuto({})", auto_id)),
             Rigid(rigid_id) => Doc::lit(&format!("TyRigid({})", rigid_id)),
         }
@@ -85,18 +73,6 @@ impl DocPrinter for TyVarNameUserDefined {
             _ => {
                 unreachable!()
             }
-        }
-    }
-}
-
-impl DocPrinter for TyVarNameBuiltin {
-    fn to_doc(&self) -> Box<Doc> {
-        use TyVarNameBuiltin::*;
-        match self {
-            I64 => Doc::lit("i64"),
-            F64 => Doc::lit("f64"),
-            String => Doc::lit("String"),
-            Arrow => Doc::lit("->"),
         }
     }
 }

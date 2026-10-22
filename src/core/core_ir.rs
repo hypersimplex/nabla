@@ -225,21 +225,25 @@ pub(crate) enum CoreTyCon {
 pub(crate) enum CoreTyConBuiltin {
     Int,
     Float,
-    String,
+    Bytes,
     Arrow,
 }
 
-// [todo,fix]: convert to ty con to start with, and remove this conversion
-impl<'a> From<&'a TyVarNameBuiltin> for CoreTyConBuiltin {
-    /// temporary hack to convert builtin ty var to type constructor
-    fn from(builtin: &'a TyVarNameBuiltin) -> Self {
-        use TyVarNameBuiltin::*;
+impl<'a> From<&'a TyConBuiltin> for CoreTyConBuiltin {
+    fn from(builtin: &'a TyConBuiltin) -> Self {
+        use TyConBuiltin::*;
         match builtin {
             I64 => CoreTyConBuiltin::Int,
             F64 => CoreTyConBuiltin::Float,
-            String => CoreTyConBuiltin::String,
+            Bytes => CoreTyConBuiltin::Bytes,
             Arrow => CoreTyConBuiltin::Arrow,
         }
+    }
+}
+
+impl From<TyConBuiltin> for CoreTyConBuiltin {
+    fn from(builtin: TyConBuiltin) -> Self {
+        (&builtin).into()
     }
 }
 
@@ -384,7 +388,7 @@ pub(crate) struct CoreLitString {
 
 impl CoreLitString {
     fn ty(&self) -> CoreTy {
-        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::String))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Bytes))
     }
 }
 
@@ -457,35 +461,27 @@ pub(crate) enum CoreAltConPattern {
 }
 
 /// mechanical translation
-///
-/// [todo, fix]: convert builtin ty var to type constructor from the start
-pub(crate) fn core_ty_from_ty_expr(core_ty_con_env: &CoreTyConEnv, ty_expr: &TyExpr) -> CoreTy {
+pub(crate) fn core_ty_from_ty_expr(ty_expr: &TyExpr) -> CoreTy {
     match ty_expr {
-        TyExpr::TyVar(ty_var_name) => match ty_var_name {
-            TyVarName::Builtin(builtin) => {
-                CoreTy::TyConstructor(CoreTyCon::Builtin(builtin.into()))
+        TyExpr::TyCon(ty_con) => match ty_con {
+            TyCon::Builtin(builtin) => CoreTy::TyConstructor(CoreTyCon::Builtin(builtin.into())),
+            TyCon::User(name) => {
+                CoreTy::TyConstructor(CoreTyCon::User(CoreTyConUser { name: name.clone() }))
             }
-            TyVarName::UserDefined(user_defined) => match &user_defined.token {
-                ConcreteToken::Iden(name) if core_ty_con_env.has_adt(name) => {
-                    CoreTy::TyConstructor(CoreTyCon::User(CoreTyConUser { name: name.clone() }))
-                }
-                _ => CoreTy::Var(ty_var_name.clone()),
-            },
-            _ => CoreTy::Var(ty_var_name.clone()),
         },
+        TyExpr::TyVar(ty_var_name) => CoreTy::Var(ty_var_name.clone()),
         TyExpr::TyApp(TyApplication { ty_func, ty_arg }) => CoreTy::App(CoreTyApp {
-            ty_fun: Box::new(core_ty_from_ty_expr(core_ty_con_env, &ty_func)),
-            ty_arg: Box::new(core_ty_from_ty_expr(core_ty_con_env, &ty_arg)),
+            ty_fun: Box::new(core_ty_from_ty_expr(&ty_func)),
+            ty_arg: Box::new(core_ty_from_ty_expr(&ty_arg)),
         }),
     }
 }
 
 /// note: schematic type variables are translated to `ForAll`s and these
 /// schematic type variables are wrapped outside by convention
-fn core_ty_from_ty_scheme(core_ty_con_env: &CoreTyConEnv, ty_scheme: &TyScheme) -> CoreTy {
+fn core_ty_from_ty_scheme(ty_scheme: &TyScheme) -> CoreTy {
     // note: right associative so process in reverse order
-    core_ty_from_ty_expr(core_ty_con_env, &ty_scheme.ty_expr)
-        .wrap_foralls(&ty_scheme.ty_vars_schematic)
+    core_ty_from_ty_expr(&ty_scheme.ty_expr).wrap_foralls(&ty_scheme.ty_vars_schematic)
 }
 
 /// wrap type abstractions around a core expression for schematic type variables
@@ -545,7 +541,7 @@ pub(crate) fn core_top_level_binding_from_typed_top_level_function(
     // so we construct explicit type parameters for these `ForAll`s
     let top_level_fn_binder = CoreVar::ValueVariable(CoreVVar {
         vvar: top_lvl_fn.name.clone(),
-        ty: core_ty_from_ty_scheme(core_ty_con_env, &top_lvl_fn.scheme),
+        ty: core_ty_from_ty_scheme(&top_lvl_fn.scheme),
     });
 
     Ok(CoreTopLevelBinding {
@@ -590,10 +586,10 @@ pub(crate) fn core_expr_from_abstraction(
         core_expr = CoreExpr::Abstraction(CoreAbstr {
             param: CoreVar::ValueVariable(CoreVVar {
                 vvar: param.binder.clone(),
-                ty: core_ty_from_ty_expr(core_ty_con_env, &param.ty),
+                ty: core_ty_from_ty_expr(&param.ty),
             }),
             body: Box::new(core_expr),
-            ty: core_ty_from_ty_expr(core_ty_con_env, &ty_abstraction),
+            ty: core_ty_from_ty_expr(&ty_abstraction),
         });
     }
     Ok(core_expr)
@@ -681,7 +677,7 @@ pub(crate) fn core_expr_from_case(
         scrutinee: Box::new(core_expr_scrutinee),
         result: scrutinee_var,
         alts,
-        ty: core_ty_from_ty_expr(core_ty_con_env, &expr.ty),
+        ty: core_ty_from_ty_expr(&expr.ty),
     };
     Ok(CoreExpr::Case(core_expr))
 }
@@ -703,8 +699,8 @@ pub(crate) fn core_expr_from_let(
                 ty_schematic,
             } => {
                 // explicitly include generic/parameteric types in type expr
-                let ty_expr = core_ty_from_ty_expr(core_ty_con_env, ty)
-                    .wrap_foralls(&ty_schematic.ty_vars_schematic);
+                let ty_expr =
+                    core_ty_from_ty_expr(ty).wrap_foralls(&ty_schematic.ty_vars_schematic);
 
                 let lhs_var = CoreVar::ValueVariable(CoreVVar {
                     vvar: binder.clone(),
@@ -732,7 +728,7 @@ pub(crate) fn core_expr_from_let(
             ns,
             &*expr.body,
         )?),
-        ty: core_ty_from_ty_expr(core_ty_con_env, &expr.ty),
+        ty: core_ty_from_ty_expr(&expr.ty),
     }))
 }
 
@@ -786,7 +782,7 @@ fn core_expr_from_variable(
     } = expr;
     let core_vvar = CoreExpr::Variable(CoreVar::ValueVariable(CoreVVar {
         vvar: var.clone(),
-        ty: core_ty_from_ty_scheme(core_ty_con_env, ty_schematic), // this may contain `ForAll`
+        ty: core_ty_from_ty_scheme(ty_schematic), // this may contain `ForAll`
     }));
 
     let mut core_expr = core_vvar;
@@ -798,7 +794,7 @@ fn core_expr_from_variable(
     let mut ty_schematic_substitued = ty_schematic.clone();
     assert_eq!(ty_args.len(), ty_schematic.ty_vars_schematic.len());
     for (ty_arg, ty_schematic_var) in ty_args.iter().zip(ty_schematic.ty_vars_schematic.iter()) {
-        let core_ty_arg = core_ty_from_ty_expr(core_ty_con_env, ty_arg);
+        let core_ty_arg = core_ty_from_ty_expr(ty_arg);
 
         // do a reduction, ty_schematic[ty_arg\ty_schematic_var],
         // eg: beta reduction by type by substituting `ty_arg` for
@@ -809,7 +805,7 @@ fn core_expr_from_variable(
 
         // result type after applying the current type argument `core_ty_arg` to
         // `core_expr`
-        let core_ty = core_ty_from_ty_scheme(core_ty_con_env, &ty_schematic_substitued);
+        let core_ty = core_ty_from_ty_scheme(&ty_schematic_substitued);
 
         core_expr = CoreExpr::Application(CoreApp {
             callable: Box::new(core_expr),
@@ -856,7 +852,7 @@ fn core_expr_from_constructor(
 
         // apply type arguments to binder from left to right
         for ty_arg in ty_args.iter() {
-            let core_ty_arg = core_ty_from_ty_expr(core_ty_con_env, ty_arg);
+            let core_ty_arg = core_ty_from_ty_expr(ty_arg);
 
             let ty_callable = core_expr.ty();
 
@@ -953,7 +949,7 @@ fn core_case_alt_from_pattern_and_body(
                     TypedVPattern::Variable { binder, ty, .. } => {
                         Ok(CoreVar::ValueVariable(CoreVVar {
                             vvar: binder.clone(),
-                            ty: core_ty_from_ty_expr(core_ty_con_env, ty),
+                            ty: core_ty_from_ty_expr(ty),
                         }))
                     }
                     _ => unreachable!(
@@ -1205,9 +1201,9 @@ impl DocPrinter for CoreTyConBuiltin {
     fn to_doc(&self) -> Box<Doc> {
         use CoreTyConBuiltin::*;
         match self {
-            Int => Doc::lit("Int"),
-            Float => Doc::lit("Float"),
-            String => Doc::lit("String"),
+            Int => Doc::lit("Int#"),
+            Float => Doc::lit("Float#"),
+            Bytes => Doc::lit("Bytes#"),
             Arrow => Doc::lit("->"),
         }
     }

@@ -31,29 +31,21 @@ impl<'a> From<&'a TyConEnv> for CoreTyConEnv {
             adts: HashMap::new(),
         };
 
-        // pass 1: register all ADT skeletons so all type constructor names are known
         for adt in ty_con_env.iter_adts() {
+            let core_constructors: Vec<CoreConDef> = adt
+                .constructors
+                .iter()
+                .map(CoreConDef::from_constructor_def)
+                .collect();
+
             core_env.adts.insert(
                 adt.name.clone(),
                 CoreADTDef {
                     name: adt.name.clone(),
                     ty_params: adt.ty_params.clone(),
-                    constructors: Vec::new(),
+                    constructors: core_constructors,
                 },
             );
-        }
-
-        // pass 2: populate constructors with field types converted via core_env
-        for adt in ty_con_env.iter_adts() {
-            let core_constructors: Vec<CoreConDef> = adt
-                .constructors
-                .iter()
-                .map(|c| CoreConDef::from_constructor_def(&core_env, c))
-                .collect();
-
-            if let Some(entry) = core_env.adts.get_mut(&adt.name) {
-                entry.constructors = core_constructors;
-            }
         }
 
         core_env

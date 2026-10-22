@@ -24,6 +24,7 @@ pub(crate) trait Subst: Clone {
 pub(crate) fn subst_ty(subst: &impl Subst, ty_expr: &TyExpr) -> TyExpr {
     match ty_expr {
         TyExpr::TyVar(ty_var_name) => subst.get(ty_var_name).unwrap(),
+        TyExpr::TyCon(_) => ty_expr.clone(),
         TyExpr::TyApp(TyApplication { ty_func, ty_arg }) => TyExpr::TyApp(TyApplication {
             ty_func: Box::new(subst_ty(subst, ty_func)),
             ty_arg: Box::new(subst_ty(subst, ty_arg)),

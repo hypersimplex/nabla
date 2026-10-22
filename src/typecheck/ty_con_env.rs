@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+use crate::builtin::types;
 use crate::typecheck::adt::*;
 use crate::typecheck::ty_err::*;
+use crate::typecheck::ty_expr;
 use crate::typecheck::ty_var_name::*;
 
 pub struct TyConEnv {
@@ -19,9 +21,11 @@ pub(crate) struct ResolvedConstructor<'a> {
 
 impl TyConEnv {
     pub fn new() -> Self {
-        TyConEnv {
+        let mut env = TyConEnv {
             adts: HashMap::new(),
-        }
+        };
+        init_builtin_adts(&mut env);
+        env
     }
 
     pub fn resolve_constructor(
@@ -108,16 +112,58 @@ impl TyConEnv {
         self.adts.values()
     }
 
+    /// check whether a type name corresponds to a registered builtin ADT
+    pub fn is_builtin_adt(&self, name: &str) -> bool {
+        self.adts.get(name).map_or(false, |adt| adt.is_builtin())
+    }
+
+    /// check whether a type name is reserved (primitive or builtin ADT)
+    pub fn is_reserved_type_name(&self, name: &str) -> bool {
+        types::resolve_builtin_ty_con(name).is_some() || self.is_builtin_adt(name)
+    }
+
+    /// validate a type constructor by name and arity, returning the resolved `TyCon`
+    pub fn validate_and_resolve_ty_con(
+        &self,
+        name: &str,
+        num_args: usize,
+    ) -> Result<ty_expr::TyCon, TyError> {
+        if let Some(builtin) = types::resolve_builtin_ty_con(name) {
+            if num_args != builtin.arity() {
+                return Err(TyError::ArityMismatch {
+                    constructor: builtin.name().to_string(),
+                    expected: builtin.arity(),
+                    got: num_args,
+                    msg: Some(format!(
+                        "builtin type `{}` takes {} arguments, got {num_args}",
+                        builtin.name(),
+                        builtin.arity()
+                    )),
+                });
+            }
+            Ok(ty_expr::TyCon::Builtin(builtin))
+        } else if let Ok(adt) = self.get_adt(name) {
+            let expected = adt.ty_params.len();
+            if num_args != expected {
+                return Err(TyError::ArityMismatch {
+                    constructor: name.to_string(),
+                    expected,
+                    got: num_args,
+                    msg: Some(format!(
+                        "type constructor `{name}` takes {expected} arguments, got {num_args}"
+                    )),
+                });
+            }
+            Ok(ty_expr::TyCon::User(name.to_string()))
+        } else {
+            Err(TyError::UnknownType(name.to_string()))
+        }
+    }
+
     // register an ADT skeleton (name + parameters) without constructors
     pub fn add_adt_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
-        self.adts.insert(
-            name.clone(),
-            ADTDef {
-                name,
-                ty_params,
-                constructors: Vec::new(),
-            },
-        );
+        self.adts
+            .insert(name.clone(), ADTDef::new_user(name, ty_params, Vec::new()));
     }
 
     // overwrite constructors for an existing ADT (used by the second pass)

@@ -34,6 +34,10 @@ pub(crate) enum TyError {
     PatBinderUniqueness(String), // TODO: move this else where
     MissingFunctionDefinition(String),
     InternalError(String),
+    UnboxedLetBinding {
+        ty: TyExpr,
+        msg: Option<String>,
+    },
 }
 
 pub(crate) type TyChkResult<T> = Result<T, TyError>;
