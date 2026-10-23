@@ -14,11 +14,11 @@ use std::collections::HashMap;
 ///
 /// ```text
 /// data N {
-///   y :: f64,
+///   y :: Float64#,
 /// }
 ///
 /// data T B {
-///   v :: i64,
+///   v :: Int64#,
 ///   x :: B,
 /// }
 /// ```

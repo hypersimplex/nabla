@@ -36,46 +36,54 @@ Planned features & non-features:
 
 ```
 data Point {
-  x :: i64,
-  y :: i64,
+  x :: Int64,
+  y :: Int64,
 }
 
 data Circle {
   center :: Point,
-  radius :: i64,
+  radius :: Int64,
 }
 
+classify :: Circle -> String
 classify circle = case circle of
-  Circle { center = Point { x = 0, y = 0 }, radius = 1..10 } -> "Small and centered at (0, 0)"
-  Circle { center = Point { x = cx, y = cy }, radius = r } | r > 100 && cx == 10 && cy == 10 -> "Large and centered at (10, 10)"
-  _                                                           -> "Other"
+  Circle { center = Point { x = Int64 0, y = Int64 0 }, radius = Int64 (1..10) } -> String "Small and centered at (0, 0)"
+  Circle { center = Point { x = cx, y = cy }, radius = r } | r > Int64 100 && cx == Int64 10 && cy == Int64 10 -> String "Large and centered at (10, 10)"
+  _                                                           -> String "Other"
 
-// built-in ADTs (such as Maybe, Bool, Unit/*currently doesn't support `()`*/) are predefined
+// built-in ADTs (such as Maybe, Bool, Unit/*currently doesn't support `()`*/, Int64, Float64) are predefined
 // data Maybe T = Just T | Nothing
+// data Int64 = Int64 Int64#
+// data Float64 = Float64 Float64#
 
 scaleCircle factor circle =
-  let f :: i64 = factor
+  let f :: Int64 = factor
   in case circle of
     Circle { center, radius } -> case radius of
-      r | r > 0 -> Maybe.Just (Circle { center = center, radius = r * f })
-      _         -> Maybe.Nothing
+      r | r > Int64 0 -> Maybe.Just (Circle { center = center, radius = r * f })
+      _               -> Maybe.Nothing
 
 // data Bool = True | False
 
+isEven :: Int64 -> Bool
 isEven n = case n of
-  0 -> Bool.True
-  _ -> isOdd (n - 1)
+  Int64 0 -> Bool.True
+  _ -> isOdd (n - Int64 1)
 
-isOdd (n :: i64) = case n of
-  0 -> Bool.False
-  _ -> isEven (n - 1)
+isOdd :: Int64 -> Bool
+isOdd n = case n of
+  Int64 0 -> Bool.False
+  _ -> isEven (n - Int64 1)
 
 add x y = x + y
 
-addTen = add 10.0
+addTen = add (Float64 10.0)
+
+addFloat :: Float64 -> Float64 -> Float64
+addFloat x y = x + y
 
 // explicit annotation
-makeAdder :: i64 -> i64 -> i64
+makeAdder :: Int64 -> Int64 -> Int64
 makeAdder base =
   let adder x = add base x
   in adder
