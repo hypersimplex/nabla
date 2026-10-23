@@ -114,8 +114,8 @@ pub(crate) struct VLitNumeric {
 impl VLitNumeric {
     pub(crate) fn ty(&self) -> TyExpr {
         match self.value {
-            NumericLiteralValue::Int { .. } => mk_ty_i64(),
-            NumericLiteralValue::Float { .. } => mk_ty_f64(),
+            NumericLiteralValue::Int { .. } => mk_ty_unboxed_int64(),
+            NumericLiteralValue::Float { .. } => mk_ty_unboxed_float64(),
         }
     }
 }

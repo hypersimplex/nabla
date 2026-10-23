@@ -4,8 +4,8 @@ data Maybe a = Nothing | Just a
 
 data Unit = Unit
 
-data String = String Bytes
+data String = String Bytes#
 
-data Int64 = Int64 i64
+data Int64 = Int64 Int64#
 
-data Float64 = Float64 f64
+data Float64 = Float64 Float64#

@@ -223,8 +223,8 @@ pub(crate) enum CoreTyCon {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum CoreTyConBuiltin {
-    Int,
-    Float,
+    Int64,
+    Float64,
     Bytes,
     Arrow,
 }
@@ -233,8 +233,8 @@ impl<'a> From<&'a TyConBuiltin> for CoreTyConBuiltin {
     fn from(builtin: &'a TyConBuiltin) -> Self {
         use TyConBuiltin::*;
         match builtin {
-            I64 => CoreTyConBuiltin::Int,
-            F64 => CoreTyConBuiltin::Float,
+            Int64 => CoreTyConBuiltin::Int64,
+            Float64 => CoreTyConBuiltin::Float64,
             Bytes => CoreTyConBuiltin::Bytes,
             Arrow => CoreTyConBuiltin::Arrow,
         }
@@ -362,7 +362,7 @@ pub(crate) struct CoreLitNumericIntegral {
 
 impl CoreLitNumericIntegral {
     fn ty(&self) -> CoreTy {
-        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Int))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Int64))
     }
 }
 
@@ -375,7 +375,7 @@ pub(crate) struct CoreLitNumericFloat {
 
 impl CoreLitNumericFloat {
     fn ty(&self) -> CoreTy {
-        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Float))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Float64))
     }
 }
 
@@ -1201,8 +1201,8 @@ impl DocPrinter for CoreTyConBuiltin {
     fn to_doc(&self) -> Box<Doc> {
         use CoreTyConBuiltin::*;
         match self {
-            Int => Doc::lit("Int#"),
-            Float => Doc::lit("Float#"),
+            Int64 => Doc::lit("Int64#"),
+            Float64 => Doc::lit("Float64#"),
             Bytes => Doc::lit("Bytes#"),
             Arrow => Doc::lit("->"),
         }

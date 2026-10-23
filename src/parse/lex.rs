@@ -245,6 +245,10 @@ fn consume_identifier(cur: &mut Cur, loc: &mut Location, out: &mut Vec<ConcreteT
         content.push(cur.forward().unwrap());
     }
 
+    while let Some('#') = cur.peek_nth(1) {
+        content.push(cur.forward().unwrap());
+    }
+
     out.push(ConcreteTokenAndLoc {
         token: classify_identifier_or_keyword(content),
         loc: Location {
@@ -587,5 +591,31 @@ fn test_brackets_are_lexed() {
             ConcreteToken::BracketR,
             ConcreteToken::EndOfFile,
         ]
+    );
+}
+
+#[test]
+fn test_identifier_hash_suffix() {
+    let source = "Int64# Float64# Bytes# x# foo##";
+    let lexed = parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), source)
+        .expect("lexing identifiers with hash suffix should succeed");
+    let tokens: Vec<_> = lexed.0.into_iter().map(|t| t.token).collect();
+    assert_eq!(
+        tokens,
+        vec![
+            ConcreteToken::Iden("Int64#".into()),
+            ConcreteToken::Iden("Float64#".into()),
+            ConcreteToken::Iden("Bytes#".into()),
+            ConcreteToken::Iden("x#".into()),
+            ConcreteToken::Iden("foo##".into()),
+            ConcreteToken::EndOfFile,
+        ]
+    );
+
+    // Isolated '#' and '#' separated by space must fail with unexpected token error
+    assert!(parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), "#").is_err());
+    assert!(parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), "#foo").is_err());
+    assert!(
+        parse_content_to_concrete_tokens(std::path::Path::new("dummy_path"), "Int64 #").is_err()
     );
 }

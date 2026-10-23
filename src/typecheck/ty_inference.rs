@@ -1887,7 +1887,7 @@ pub(crate) fn ty_check_lit_numeric(
     match &vexpr.value {
         NumericLiteralValue::Int { parsed, raw } => {
             match parsed.to_owned().or_else(|| raw.parse::<i64>().ok()) {
-                Some(_) => Ok((subst_id(), mk_ty_i64())),
+                Some(_) => Ok((subst_id(), mk_ty_unboxed_int64())),
                 None => Err(TyError::Unexpected(
                     format!("type checking literal (int) failed for {:?}", vexpr).to_string(),
                 )),
@@ -1895,7 +1895,7 @@ pub(crate) fn ty_check_lit_numeric(
         }
         NumericLiteralValue::Float { parsed, raw } => {
             match parsed.to_owned().or_else(|| raw.parse::<f64>().ok()) {
-                Some(_) => Ok((subst_id(), mk_ty_f64())),
+                Some(_) => Ok((subst_id(), mk_ty_unboxed_float64())),
                 None => Err(TyError::Unexpected(
                     format!("type checking literal (float) failed for {:?}", vexpr).to_string(),
                 )),
@@ -2995,7 +2995,7 @@ mod tests {
     #[test]
     fn test_unify_type_conflicts_and_bridging() {
         let subst = subst_id();
-        let ty_int = mk_ty_i64();
+        let ty_int = mk_ty_unboxed_int64();
         let ty_bytes = mk_ty_bytes();
         let ty_user = mk_ty_user("Foo");
         let ty_user_foo = TyExpr::TyCon(TyCon::User("Foo".to_string()));
@@ -3030,8 +3030,8 @@ mod tests {
     #[test]
     fn test_unify_concrete_vs_type_app_yields_type_conflict() {
         let subst = subst_id();
-        let ty_int = mk_ty_i64();
-        let ty_app = mk_ty_arrow(mk_ty_i64(), mk_ty_i64());
+        let ty_int = mk_ty_unboxed_int64();
+        let ty_app = mk_ty_arrow(mk_ty_unboxed_int64(), mk_ty_unboxed_int64());
 
         assert!(matches!(
             unify_ty_exprs(&subst, &ty_int, &ty_app),
@@ -3053,13 +3053,13 @@ mod tests {
 
         // direct cycle: a ~ (a -> i64)
         assert!(matches!(
-            unify_ty_exprs(&subst, &ty_a, &mk_ty_arrow(ty_a.clone(), mk_ty_i64())),
+            unify_ty_exprs(&subst, &ty_a, &mk_ty_arrow(ty_a.clone(), mk_ty_unboxed_int64())),
             Err(TyError::InfiniteType { var, .. }) if var == var_a
         ));
 
         // indirect cycle: b ~ (a -> i64), then a ~ b
         let subst1 =
-            unify_ty_exprs(&subst, &ty_b, &mk_ty_arrow(ty_a.clone(), mk_ty_i64())).unwrap();
+            unify_ty_exprs(&subst, &ty_b, &mk_ty_arrow(ty_a.clone(), mk_ty_unboxed_int64())).unwrap();
         assert!(matches!(
             unify_ty_exprs(&subst1, &ty_a, &ty_b),
             Err(TyError::InfiniteType { var, .. }) if var == var_a
@@ -3073,14 +3073,14 @@ mod tests {
 
         // compatible: a -> b and b -> i64
         let s_comp1 = subst_delta(&var_a, &TyExpr::TyVar(var_b.clone()));
-        let s_comp2 = subst_delta(&var_b, &mk_ty_i64());
+        let s_comp2 = subst_delta(&var_b, &mk_ty_unboxed_int64());
         let res = unify_substs(&s_comp1, &s_comp2).unwrap();
-        let is_i64 = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::I64)));
+        let is_i64 = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Int64)));
         assert!(is_i64(&subst_ty(&res, &TyExpr::TyVar(var_a.clone()))));
         assert!(is_i64(&subst_ty(&res, &TyExpr::TyVar(var_b))));
 
         // conflict: a -> i64 vs a -> Bytes
-        let s_conf1 = subst_delta(&var_a, &mk_ty_i64());
+        let s_conf1 = subst_delta(&var_a, &mk_ty_unboxed_int64());
         let s_conf2 = subst_delta(&var_a, &mk_ty_bytes());
         assert!(matches!(
             unify_substs(&s_conf1, &s_conf2),
@@ -3094,7 +3094,7 @@ mod tests {
     fn test_unboxed_let_binding_patterns_rejected() {
         // wildcard pattern: let _ :: i64 = 42
         assert!(matches!(
-            check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_i64())),
+            check_let(VPattern::Wild, mk_lit_int(42), Some(mk_ty_unboxed_int64())),
             Err(TyError::UnboxedLetBinding { .. })
         ));
 
@@ -3108,7 +3108,7 @@ mod tests {
             },
         }));
         assert!(matches!(
-            check_let(pat_lit, mk_lit_int(10), Some(mk_ty_i64())),
+            check_let(pat_lit, mk_lit_int(10), Some(mk_ty_unboxed_int64())),
             Err(TyError::UnboxedLetBinding { .. })
         ));
     }
@@ -3151,12 +3151,12 @@ mod tests {
 
         // adt preservation: a -> Maybe a -> i64 preserves Maybe and yields 1 schematic variable
         let maybe_a = ty_app(mk_ty_user("Maybe"), mk_ty_user("a"));
-        let ty_adt = mk_ty_arrow(mk_ty_user("a"), mk_ty_arrow(maybe_a, mk_ty_i64()));
+        let ty_adt = mk_ty_arrow(mk_ty_user("a"), mk_ty_arrow(maybe_a, mk_ty_unboxed_int64()));
         let scheme_adt = build_scheme_from_ty_expr(&ty_adt, &te, &mut ns).unwrap();
         assert_eq!(scheme_adt.ty_vars_schematic.len(), 1);
 
         // monomorphic: i64 -> i64 yields 0 schematic variables
-        let ty_mono = mk_ty_arrow(mk_ty_i64(), mk_ty_i64());
+        let ty_mono = mk_ty_arrow(mk_ty_unboxed_int64(), mk_ty_unboxed_int64());
         let scheme_mono = build_scheme_from_ty_expr(&ty_mono, &te, &mut ns).unwrap();
         assert!(scheme_mono.ty_vars_schematic.is_empty());
 

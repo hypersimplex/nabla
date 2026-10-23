@@ -24,8 +24,8 @@ pub fn init_builtin_values(env: &mut EnvVVarToTyScheme, ns: &mut TyVarNameSupply
     init_v_var_ty_scheme_builtin_logical_and(env, ns);
     init_v_var_ty_scheme_builtin_logical_or(env, ns);
     init_v_var_ty_scheme_builtin_match_fail(env, ns);
-    init_v_var_ty_scheme_builtin_i64_from_f64(env, ns);
-    init_v_var_ty_scheme_builtin_f64_from_i64(env, ns);
+    init_v_var_ty_scheme_builtin_prim_int64_from_float64(env, ns);
+    init_v_var_ty_scheme_builtin_prim_float64_from_int64(env, ns);
     init_v_var_ty_scheme_builtin_int64_from_float64(env, ns);
     init_v_var_ty_scheme_builtin_float64_from_int64(env, ns);
 }
@@ -33,8 +33,8 @@ pub fn init_builtin_values(env: &mut EnvVVarToTyScheme, ns: &mut TyVarNameSupply
 /// resolve builtin function name to FnBuiltin
 pub(crate) fn resolve_builtin_fn(name: &str) -> Option<FnBuiltin> {
     match name {
-        "i64_from_f64" => Some(FnBuiltin::ConvertI64FromF64),
-        "f64_from_i64" => Some(FnBuiltin::ConvertF64FromI64),
+        "prim_int64_from_float64" => Some(FnBuiltin::PrimConvertInt64FromFloat64),
+        "prim_float64_from_int64" => Some(FnBuiltin::PrimConvertFloat64FromInt64),
         "int64_from_float64" => Some(FnBuiltin::ConvertInt64FromFloat64),
         "float64_from_int64" => Some(FnBuiltin::ConvertFloat64FromInt64),
         "match_fail" => Some(FnBuiltin::MatchFail),
@@ -380,40 +380,40 @@ pub fn init_v_var_ty_scheme_builtin_match_fail(
     );
 }
 
-// maps `i64_from_f64` to a builtin function
-pub fn init_v_var_ty_scheme_builtin_i64_from_f64(
+// maps `prim_int64_from_float64` to a builtin unboxed conversion function
+pub fn init_v_var_ty_scheme_builtin_prim_int64_from_float64(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ns: &mut TyVarNameSupply,
+    _ns: &mut TyVarNameSupply,
 ) {
     env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
-            token: concrete_token::ConcreteToken::Iden("i64_from_f64".to_string()),
+            token: concrete_token::ConcreteToken::Iden("prim_int64_from_float64".to_string()),
             loc: None,
-            builtin: Some(FnBuiltin::ConvertI64FromF64),
+            builtin: Some(FnBuiltin::PrimConvertInt64FromFloat64),
         }),
         TyScheme {
             ty_vars_schematic: Vec::new(),
-            // maps to a function type expression: f64 -> i64
-            ty_expr: Box::new(mk_ty_arrow(mk_ty_f64(), mk_ty_i64())),
+            // maps to a function type expression: Float64# -> Int64#
+            ty_expr: Box::new(mk_ty_arrow(mk_ty_unboxed_float64(), mk_ty_unboxed_int64())),
         },
     );
 }
 
-// maps `f64_from_i64` to a builtin function
-pub fn init_v_var_ty_scheme_builtin_f64_from_i64(
+// maps `prim_float64_from_int64` to a builtin unboxed conversion function
+pub fn init_v_var_ty_scheme_builtin_prim_float64_from_int64(
     env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    ns: &mut TyVarNameSupply,
+    _ns: &mut TyVarNameSupply,
 ) {
     env_v_var_to_ty_scheme.insert(
         VVar::Named(VVarName {
-            token: concrete_token::ConcreteToken::Iden("f64_from_i64".to_string()),
+            token: concrete_token::ConcreteToken::Iden("prim_float64_from_int64".to_string()),
             loc: None,
-            builtin: Some(FnBuiltin::ConvertF64FromI64),
+            builtin: Some(FnBuiltin::PrimConvertFloat64FromInt64),
         }),
         TyScheme {
             ty_vars_schematic: Vec::new(),
-            // maps to a function type expression: i64 -> f64
-            ty_expr: Box::new(mk_ty_arrow(mk_ty_i64(), mk_ty_f64())),
+            // maps to a function type expression: Int64# -> Float64#
+            ty_expr: Box::new(mk_ty_arrow(mk_ty_unboxed_int64(), mk_ty_unboxed_float64())),
         },
     );
 }
