@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use crate::builtin::types;
+use crate::parse::abstr::parse_concrete_top_level;
+use crate::parse::lex::parse_content_to_concrete_tokens;
 use crate::typecheck::adt::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr;
@@ -20,12 +22,30 @@ pub(crate) struct ResolvedConstructor<'a> {
 }
 
 impl TyConEnv {
-    pub fn new() -> Self {
-        let mut env = TyConEnv {
-            adts: HashMap::new(),
-        };
-        init_builtin_adts(&mut env);
+    /// initialize with prelude
+    pub fn new_with_prelude() -> Self {
+        let path = std::path::Path::new("prelude/prelude.nb");
+        const CONTENT_PRELUDE: &str = include_str!("../prelude/prelude.nb");
+
+        let prelude_tokens = parse_content_to_concrete_tokens(path, CONTENT_PRELUDE)
+            .expect("failed to transform prelude file to tokens");
+
+        let prelude_top_level_items =
+            parse_concrete_top_level(prelude_tokens).expect("failed to parse prelude file");
+
+        let mut env = Self::empty();
+
+        register_builtin_adt_into_type_env(&mut env, prelude_top_level_items.0.as_slice())
+            .expect("failed to register prelude ADTs into type constructor environment");
+
         env
+    }
+
+    /// initialize without prelude
+    pub fn empty() -> Self {
+        TyConEnv {
+            adts: HashMap::new(),
+        }
     }
 
     pub fn resolve_constructor(
@@ -161,9 +181,17 @@ impl TyConEnv {
     }
 
     // register an ADT skeleton (name + parameters) without constructors
-    pub fn add_adt_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
+    pub fn add_adt_user_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
         self.adts
             .insert(name.clone(), ADTDef::new_user(name, ty_params, Vec::new()));
+    }
+
+    // register an builtin ADT
+    pub fn add_adt_builtin_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
+        self.adts.insert(
+            name.clone(),
+            ADTDef::new_builtin(name, ty_params, Vec::new()),
+        );
     }
 
     // overwrite constructors for an existing ADT (used by the second pass)

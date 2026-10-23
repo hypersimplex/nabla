@@ -258,106 +258,40 @@ fn build_sum_type_definition(
     ))
 }
 
-pub(crate) fn init_builtin_adts(env: &mut TyConEnv) {
-    env.add_adt(ADTDef::new_builtin(
-        "Bool".to_string(),
-        Vec::new(),
-        vec![
-            ConstructorDef {
-                name: "True".to_string(),
-                field_types: Vec::new(),
-                field_names: None,
-            },
-            ConstructorDef {
-                name: "False".to_string(),
-                field_types: Vec::new(),
-                field_names: None,
-            },
-        ],
-    ));
-
-    let ty_var_name = mk_ty_var_name_userdef("a");
-    env.add_adt(ADTDef::new_builtin(
-        "Maybe".to_string(),
-        vec![ty_var_name.clone()],
-        vec![
-            ConstructorDef {
-                name: "Nothing".to_string(),
-                field_types: Vec::new(),
-                field_names: None,
-            },
-            ConstructorDef {
-                name: "Just".to_string(),
-                field_types: vec![TyExpr::TyVar(ty_var_name)],
-                field_names: None,
-            },
-        ],
-    ));
-
-    env.add_adt(ADTDef::new_builtin(
-        "Unit".to_string(),
-        Vec::new(),
-        vec![ConstructorDef {
-            name: "Unit".to_string(),
-            field_types: Vec::new(),
-            field_names: None,
-        }],
-    ));
-
-    env.add_adt(ADTDef::new_builtin(
-        "String".to_string(),
-        Vec::new(),
-        vec![ConstructorDef {
-            name: "String".to_string(),
-            field_types: vec![mk_ty_bytes()],
-            field_names: None,
-        }],
-    ));
-
-    env.add_adt(ADTDef::new_builtin(
-        "Int64".to_string(),
-        Vec::new(),
-        vec![ConstructorDef {
-            name: "Int64".to_string(),
-            field_types: vec![mk_ty_i64()],
-            field_names: Some(vec!["val".to_string()]),
-        }],
-    ));
-
-    env.add_adt(ADTDef::new_builtin(
-        "Float64".to_string(),
-        Vec::new(),
-        vec![ConstructorDef {
-            name: "Float64".to_string(),
-            field_types: vec![mk_ty_f64()],
-            field_names: Some(vec!["val".to_string()]),
-        }],
-    ));
-}
-
 /// add info about ADT from top level items into the type env
 ///
 /// pass 1 registers ADT names and parameters
 ///
 /// pass 2 fills constructors
 pub(crate) fn register_adt_into_type_env(
-    _ty_var_ns: &mut TyVarNameSupply,
+    env: &mut TyConEnv,
     items: &[TopLevelItem],
-) -> Result<TyConEnv, TyError> {
-    let mut env = TyConEnv::new();
-    validate_no_builtin_type_shadowing(&env, items)?;
-    validate_no_duplicate_adt_definitions(items)?;
-
+    origin_type: ADTOrigin,
+) -> Result<(), TyError> {
     // pass 1: register skeletons
     for item in items.iter() {
         match item {
             TopLevelItem::DataRecord(rec) => {
                 let params = DataParams::from_decl(&rec.identifier, &rec.params)?;
-                env.add_adt_skeleton(params.name, params.param_vars);
+                match origin_type {
+                    ADTOrigin::Builtin => {
+                        env.add_adt_builtin_skeleton(params.name, params.param_vars);
+                    }
+                    ADTOrigin::User => {
+                        env.add_adt_user_skeleton(params.name, params.param_vars);
+                    }
+                }
             }
             TopLevelItem::DataSum(sum) => {
                 let params = DataParams::from_decl(&sum.identifier, &sum.params)?;
-                env.add_adt_skeleton(params.name, params.param_vars);
+                match origin_type {
+                    ADTOrigin::Builtin => {
+                        env.add_adt_builtin_skeleton(params.name, params.param_vars);
+                    }
+                    ADTOrigin::User => {
+                        env.add_adt_user_skeleton(params.name, params.param_vars);
+                    }
+                }
             }
             _ => {}
         }
@@ -384,7 +318,31 @@ pub(crate) fn register_adt_into_type_env(
         }
     }
 
-    Ok(env)
+    Ok(())
+}
+
+/// add user defined ADTs from top level items into the type env
+pub(crate) fn register_user_defined_adt_into_type_env(
+    env: &mut TyConEnv,
+    items: &[TopLevelItem],
+) -> Result<(), TyError> {
+    // sanity checks
+    validate_no_builtin_type_shadowing(&env, items)?;
+    validate_no_duplicate_adt_definitions(items)?;
+
+    register_adt_into_type_env(env, items, ADTOrigin::User)?;
+
+    Ok(())
+}
+
+/// add builtin ADTs from top level items into the type env
+pub(crate) fn register_builtin_adt_into_type_env(
+    env: &mut TyConEnv,
+    items: &[TopLevelItem],
+) -> Result<(), TyError> {
+    register_adt_into_type_env(env, items, ADTOrigin::Builtin)?;
+
+    Ok(())
 }
 
 fn ty_expr_from_field_type(

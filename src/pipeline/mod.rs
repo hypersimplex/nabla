@@ -79,7 +79,9 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     let mut ty_var_ns = TyVarNameSupply::new();
     let mut env_v_var_to_ty_scheme = EnvVVarToTyScheme::new();
 
-    let ty_env = register_adt_into_type_env(&mut ty_var_ns, top_level.0.as_slice())?;
+    let mut ty_env = TyConEnv::new_with_prelude();
+
+    register_user_defined_adt_into_type_env(&mut ty_env, top_level.0.as_slice())?;
 
     // note: builtin name does not change
     init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);

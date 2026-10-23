@@ -48,7 +48,7 @@ f2 x y = x + y
 "###;
 
 pub(crate) fn parse_content_to_concrete_tokens(
-    file_path: &std::path::Path,
+    file_path: &std::path::Path, // [todo]: actually load from this path if it's valid, currently just save this info
     file_content: &str,
 ) -> Result<LexedTokensAndLocs, ParseError> {
     let mut loc = Location::new(file_path);

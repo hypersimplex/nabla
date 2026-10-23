@@ -2981,7 +2981,7 @@ mod tests {
         annot: Option<TyExpr>,
     ) -> Result<(Substitution, TypedVExpr), TyError> {
         let mut env = EnvVVarToTyScheme::new();
-        let ty_env = TyConEnv::new();
+        let ty_env = TyConEnv::new_with_prelude();
         let mut ns = TyVarNameSupply::new();
         let let_expr = VLetExpr {
             defs: vec![(pat, rhs, annot)],
@@ -3132,8 +3132,8 @@ mod tests {
     // - monomorphic types yield an empty quantifier list
     #[test]
     fn test_build_scheme_from_ty_expr() {
-        let mut te = TyConEnv::new();
-        te.add_adt_skeleton("Maybe".to_string(), vec![TyVarName::Auto(0)]);
+        let mut te = TyConEnv::empty();
+        te.add_adt_builtin_skeleton("Maybe".to_string(), vec![TyVarName::Auto(0)]);
         let mut ns = TyVarNameSupply::new();
 
         // deduplication: a -> a yields 1 schematic variable
