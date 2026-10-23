@@ -907,6 +907,22 @@ fn test_pipeline_let_binding_type_annotation() {
 }
 
 #[test]
+fn test_pipeline_mutual_recursion_unboxed_primitives() {
+    let content = r###"
+isEven :: Int64# -> Bool
+isEven n = case (prim_eq_int64 n 0) of
+             True  -> True
+             False -> isOdd (prim_sub_int64 n 1)
+
+isOdd :: Int64# -> Bool
+isOdd n = case (prim_eq_int64 n 0) of
+            True  -> False
+            False -> isEven (prim_sub_int64 n 1)
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
 fn test_pipeline_mutual_recursion_simple() {
     let content = r###"
 f x = g (x + 1)
