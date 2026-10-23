@@ -24,8 +24,7 @@ pub fn init_builtin_values(env: &mut EnvVVarToTyScheme, ns: &mut TyVarNameSupply
     init_v_var_ty_scheme_builtin_logical_and(env, ns);
     init_v_var_ty_scheme_builtin_logical_or(env, ns);
     init_v_var_ty_scheme_builtin_match_fail(env, ns);
-    init_v_var_ty_scheme_builtin_prim_int64_from_float64(env, ns);
-    init_v_var_ty_scheme_builtin_prim_float64_from_int64(env, ns);
+    init_unboxed_primitive_math_ops(env);
     init_v_var_ty_scheme_builtin_int64_from_float64(env, ns);
     init_v_var_ty_scheme_builtin_float64_from_int64(env, ns);
 }
@@ -35,6 +34,26 @@ pub(crate) fn resolve_builtin_fn(name: &str) -> Option<FnBuiltin> {
     match name {
         "prim_int64_from_float64" => Some(FnBuiltin::PrimConvertInt64FromFloat64),
         "prim_float64_from_int64" => Some(FnBuiltin::PrimConvertFloat64FromInt64),
+        "prim_add_int64" => Some(FnBuiltin::PrimAddInt64),
+        "prim_sub_int64" => Some(FnBuiltin::PrimSubInt64),
+        "prim_mul_int64" => Some(FnBuiltin::PrimMulInt64),
+        "prim_div_int64" => Some(FnBuiltin::PrimDivInt64),
+        "prim_neg_int64" => Some(FnBuiltin::PrimNegInt64),
+        "prim_eq_int64" => Some(FnBuiltin::PrimEqInt64),
+        "prim_lt_int64" => Some(FnBuiltin::PrimLtInt64),
+        "prim_lte_int64" => Some(FnBuiltin::PrimLteInt64),
+        "prim_gt_int64" => Some(FnBuiltin::PrimGtInt64),
+        "prim_gte_int64" => Some(FnBuiltin::PrimGteInt64),
+        "prim_add_float64" => Some(FnBuiltin::PrimAddFloat64),
+        "prim_sub_float64" => Some(FnBuiltin::PrimSubFloat64),
+        "prim_mul_float64" => Some(FnBuiltin::PrimMulFloat64),
+        "prim_div_float64" => Some(FnBuiltin::PrimDivFloat64),
+        "prim_neg_float64" => Some(FnBuiltin::PrimNegFloat64),
+        "prim_eq_float64" => Some(FnBuiltin::PrimEqFloat64),
+        "prim_lt_float64" => Some(FnBuiltin::PrimLtFloat64),
+        "prim_lte_float64" => Some(FnBuiltin::PrimLteFloat64),
+        "prim_gt_float64" => Some(FnBuiltin::PrimGtFloat64),
+        "prim_gte_float64" => Some(FnBuiltin::PrimGteFloat64),
         "int64_from_float64" => Some(FnBuiltin::ConvertInt64FromFloat64),
         "float64_from_int64" => Some(FnBuiltin::ConvertFloat64FromInt64),
         "match_fail" => Some(FnBuiltin::MatchFail),
@@ -380,41 +399,151 @@ pub fn init_v_var_ty_scheme_builtin_match_fail(
     );
 }
 
-// maps `prim_int64_from_float64` to a builtin unboxed conversion function
-pub fn init_v_var_ty_scheme_builtin_prim_int64_from_float64(
-    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    _ns: &mut TyVarNameSupply,
+fn register_unboxed_binop(
+    env: &mut EnvVVarToTyScheme,
+    name: &str,
+    builtin: FnBuiltin,
+    arg1_ty: TyExpr,
+    arg2_ty: TyExpr,
+    ret_ty: TyExpr,
 ) {
-    env_v_var_to_ty_scheme.insert(
+    env.insert(
         VVar::Named(VVarName {
-            token: concrete_token::ConcreteToken::Iden("prim_int64_from_float64".to_string()),
+            token: concrete_token::ConcreteToken::Iden(name.to_string()),
             loc: None,
-            builtin: Some(FnBuiltin::PrimConvertInt64FromFloat64),
+            builtin: Some(builtin),
         }),
         TyScheme {
             ty_vars_schematic: Vec::new(),
-            // maps to a function type expression: Float64# -> Int64#
-            ty_expr: Box::new(mk_ty_arrow(mk_ty_unboxed_float64(), mk_ty_unboxed_int64())),
+            ty_expr: Box::new(mk_ty_arrow_multi(vec![arg1_ty, arg2_ty], ret_ty)),
         },
     );
 }
 
-// maps `prim_float64_from_int64` to a builtin unboxed conversion function
-pub fn init_v_var_ty_scheme_builtin_prim_float64_from_int64(
-    env_v_var_to_ty_scheme: &mut EnvVVarToTyScheme,
-    _ns: &mut TyVarNameSupply,
+fn register_unboxed_unop(
+    env: &mut EnvVVarToTyScheme,
+    name: &str,
+    builtin: FnBuiltin,
+    arg_ty: TyExpr,
+    ret_ty: TyExpr,
 ) {
-    env_v_var_to_ty_scheme.insert(
+    env.insert(
         VVar::Named(VVarName {
-            token: concrete_token::ConcreteToken::Iden("prim_float64_from_int64".to_string()),
+            token: concrete_token::ConcreteToken::Iden(name.to_string()),
             loc: None,
-            builtin: Some(FnBuiltin::PrimConvertFloat64FromInt64),
+            builtin: Some(builtin),
         }),
         TyScheme {
             ty_vars_schematic: Vec::new(),
-            // maps to a function type expression: Int64# -> Float64#
-            ty_expr: Box::new(mk_ty_arrow(mk_ty_unboxed_int64(), mk_ty_unboxed_float64())),
+            ty_expr: Box::new(mk_ty_arrow(arg_ty, ret_ty)),
         },
+    );
+}
+
+pub fn init_unboxed_primitive_math_ops(env: &mut EnvVVarToTyScheme) {
+    let i64_ops: [(&str, FnBuiltin, fn() -> TyExpr); 9] = [
+        (
+            "prim_add_int64",
+            FnBuiltin::PrimAddInt64,
+            mk_ty_unboxed_int64,
+        ),
+        (
+            "prim_sub_int64",
+            FnBuiltin::PrimSubInt64,
+            mk_ty_unboxed_int64,
+        ),
+        (
+            "prim_mul_int64",
+            FnBuiltin::PrimMulInt64,
+            mk_ty_unboxed_int64,
+        ),
+        (
+            "prim_div_int64",
+            FnBuiltin::PrimDivInt64,
+            mk_ty_unboxed_int64,
+        ),
+        ("prim_eq_int64", FnBuiltin::PrimEqInt64, mk_ty_bool),
+        ("prim_lt_int64", FnBuiltin::PrimLtInt64, mk_ty_bool),
+        ("prim_lte_int64", FnBuiltin::PrimLteInt64, mk_ty_bool),
+        ("prim_gt_int64", FnBuiltin::PrimGtInt64, mk_ty_bool),
+        ("prim_gte_int64", FnBuiltin::PrimGteInt64, mk_ty_bool),
+    ];
+    for (name, builtin, ret_fn) in i64_ops {
+        register_unboxed_binop(
+            env,
+            name,
+            builtin,
+            mk_ty_unboxed_int64(),
+            mk_ty_unboxed_int64(),
+            ret_fn(),
+        );
+    }
+    register_unboxed_unop(
+        env,
+        "prim_neg_int64",
+        FnBuiltin::PrimNegInt64,
+        mk_ty_unboxed_int64(),
+        mk_ty_unboxed_int64(),
+    );
+
+    let f64_ops: [(&str, FnBuiltin, fn() -> TyExpr); 9] = [
+        (
+            "prim_add_float64",
+            FnBuiltin::PrimAddFloat64,
+            mk_ty_unboxed_float64,
+        ),
+        (
+            "prim_sub_float64",
+            FnBuiltin::PrimSubFloat64,
+            mk_ty_unboxed_float64,
+        ),
+        (
+            "prim_mul_float64",
+            FnBuiltin::PrimMulFloat64,
+            mk_ty_unboxed_float64,
+        ),
+        (
+            "prim_div_float64",
+            FnBuiltin::PrimDivFloat64,
+            mk_ty_unboxed_float64,
+        ),
+        ("prim_eq_float64", FnBuiltin::PrimEqFloat64, mk_ty_bool),
+        ("prim_lt_float64", FnBuiltin::PrimLtFloat64, mk_ty_bool),
+        ("prim_lte_float64", FnBuiltin::PrimLteFloat64, mk_ty_bool),
+        ("prim_gt_float64", FnBuiltin::PrimGtFloat64, mk_ty_bool),
+        ("prim_gte_float64", FnBuiltin::PrimGteFloat64, mk_ty_bool),
+    ];
+    for (name, builtin, ret_fn) in f64_ops {
+        register_unboxed_binop(
+            env,
+            name,
+            builtin,
+            mk_ty_unboxed_float64(),
+            mk_ty_unboxed_float64(),
+            ret_fn(),
+        );
+    }
+    register_unboxed_unop(
+        env,
+        "prim_neg_float64",
+        FnBuiltin::PrimNegFloat64,
+        mk_ty_unboxed_float64(),
+        mk_ty_unboxed_float64(),
+    );
+
+    register_unboxed_unop(
+        env,
+        "prim_int64_from_float64",
+        FnBuiltin::PrimConvertInt64FromFloat64,
+        mk_ty_unboxed_float64(),
+        mk_ty_unboxed_int64(),
+    );
+    register_unboxed_unop(
+        env,
+        "prim_float64_from_int64",
+        FnBuiltin::PrimConvertFloat64FromInt64,
+        mk_ty_unboxed_int64(),
+        mk_ty_unboxed_float64(),
     );
 }
 

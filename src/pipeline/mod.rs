@@ -1422,6 +1422,87 @@ f = (prim_float64_from_int64 42)
 }
 
 #[test]
+fn test_builtin_unboxed_primitive_math_int64() {
+    let content = r###"
+f_add a b = (prim_add_int64 a b)
+f_sub a b = (prim_sub_int64 a b)
+f_mul a b = (prim_mul_int64 a b)
+f_div a b = (prim_div_int64 a b)
+f_neg a = (prim_neg_int64 a)
+f_eq a b = (prim_eq_int64 a b)
+f_lt a b = (prim_lt_int64 a b)
+f_lte a b = (prim_lte_int64 a b)
+f_gt a b = (prim_gt_int64 a b)
+f_gte a b = (prim_gte_int64 a b)
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_unboxed_primitive_math_float64() {
+    let content = r###"
+f_add a b = (prim_add_float64 a b)
+f_sub a b = (prim_sub_float64 a b)
+f_mul a b = (prim_mul_float64 a b)
+f_div a b = (prim_div_float64 a b)
+f_neg a = (prim_neg_float64 a)
+f_eq a b = (prim_eq_float64 a b)
+f_lt a b = (prim_lt_float64 a b)
+f_lte a b = (prim_lte_float64 a b)
+f_gt a b = (prim_gt_float64 a b)
+f_gte a b = (prim_gte_float64 a b)
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_unboxed_primitive_math_type_conflict() {
+    // passing Float64# to prim_add_int64 fails with TypeConflict
+    let content_float = r###"
+f = (prim_add_int64 3.14 42)
+"###;
+    assert!(matches!(
+        compile(content_float),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+
+    // passing boxed Int64 to prim_add_int64 fails with TypeConflict
+    let content_boxed = r###"
+f = (prim_add_int64 (Int64 10) 42)
+"###;
+    assert!(matches!(
+        compile(content_boxed),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+#[test]
+fn test_builtin_unboxed_primitive_math_recursive_and_guards() {
+    let content = r###"
+fact :: Int64# -> Int64#
+fact n = case (prim_lte_int64 n 1) of
+           True  -> 1
+           False -> (prim_mul_int64 n (fact (prim_sub_int64 n 1)))
+
+fib :: Int64# -> Int64#
+fib n = case n of
+          _ | (prim_lte_int64 n 1) -> n
+          _ -> (prim_add_int64 (fib (prim_sub_int64 n 1)) (fib (prim_sub_int64 n 2)))
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_builtin_unboxed_primitive_math_higher_order() {
+    let content = r###"
+applyBin f a b = f a b
+add5 = prim_add_int64 5
+main = applyBin prim_add_int64 (add5 10) 20
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+#[test]
 fn test_builtin_int64_from_float64() {
     let content = r###"
 f = (int64_from_float64 (Float64 3.14))
