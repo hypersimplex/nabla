@@ -3133,7 +3133,7 @@ mod tests {
     #[test]
     fn test_build_scheme_from_ty_expr() {
         let mut te = TyConEnv::empty();
-        te.add_adt_builtin_skeleton("Maybe".to_string(), vec![TyVarName::Auto(0)]);
+        te.add_adt_skeleton("Maybe".to_string(), vec![TyVarName::Auto(0)]);
         let mut ns = TyVarNameSupply::new();
 
         // deduplication: a -> a yields 1 schematic variable

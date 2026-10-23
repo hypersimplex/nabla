@@ -1,4 +1,3 @@
-use crate::builtin::types::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
 use crate::parse::loc::*;
@@ -6,7 +5,6 @@ use crate::typecheck::ty_con_env::*;
 use crate::typecheck::ty_err::*;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_var_name::*;
-use crate::typecheck::ty_var_name_supply::*;
 use std::collections::*;
 
 /// algebraic data type definition that acts as schema metadata, stored in the
@@ -27,44 +25,14 @@ pub(crate) struct ADTDef {
     //   1 variant : product type
     //   >=2 variants : sum type
     pub constructors: Vec<ConstructorDef>,
-
-    pub origin: ADTOrigin,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ADTOrigin {
-    Builtin,
-    User,
 }
 
 impl ADTDef {
-    pub fn is_builtin(&self) -> bool {
-        self.origin == ADTOrigin::Builtin
-    }
-
-    pub fn new_builtin(
-        name: String,
-        ty_params: Vec<TyVarName>,
-        constructors: Vec<ConstructorDef>,
-    ) -> Self {
+    pub fn new(name: String, ty_params: Vec<TyVarName>, constructors: Vec<ConstructorDef>) -> Self {
         Self {
             name,
             ty_params,
             constructors,
-            origin: ADTOrigin::Builtin,
-        }
-    }
-
-    pub fn new_user(
-        name: String,
-        ty_params: Vec<TyVarName>,
-        constructors: Vec<ConstructorDef>,
-    ) -> Self {
-        Self {
-            name,
-            ty_params,
-            constructors,
-            origin: ADTOrigin::User,
         }
     }
 
@@ -210,7 +178,7 @@ fn build_record_type_definition(
         .map(|(_, ty)| ty_expr_from_field_type(env, &params.param_map, ty))
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(ADTDef::new_user(
+    Ok(ADTDef::new(
         params.name.clone(),
         params.param_vars.clone(),
         vec![ConstructorDef {
@@ -251,7 +219,7 @@ fn build_sum_type_definition(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(ADTDef::new_user(
+    Ok(ADTDef::new(
         params.name.clone(),
         params.param_vars.clone(),
         ctors,
@@ -266,32 +234,17 @@ fn build_sum_type_definition(
 pub(crate) fn register_adt_into_type_env(
     env: &mut TyConEnv,
     items: &[TopLevelItem],
-    origin_type: ADTOrigin,
 ) -> Result<(), TyError> {
     // pass 1: register skeletons
     for item in items.iter() {
         match item {
             TopLevelItem::DataRecord(rec) => {
                 let params = DataParams::from_decl(&rec.identifier, &rec.params)?;
-                match origin_type {
-                    ADTOrigin::Builtin => {
-                        env.add_adt_builtin_skeleton(params.name, params.param_vars);
-                    }
-                    ADTOrigin::User => {
-                        env.add_adt_user_skeleton(params.name, params.param_vars);
-                    }
-                }
+                env.add_adt_skeleton(params.name, params.param_vars);
             }
             TopLevelItem::DataSum(sum) => {
                 let params = DataParams::from_decl(&sum.identifier, &sum.params)?;
-                match origin_type {
-                    ADTOrigin::Builtin => {
-                        env.add_adt_builtin_skeleton(params.name, params.param_vars);
-                    }
-                    ADTOrigin::User => {
-                        env.add_adt_user_skeleton(params.name, params.param_vars);
-                    }
-                }
+                env.add_adt_skeleton(params.name, params.param_vars);
             }
             _ => {}
         }
@@ -330,7 +283,7 @@ pub(crate) fn register_user_defined_adt_into_type_env(
     validate_no_builtin_type_shadowing(&env, items)?;
     validate_no_duplicate_adt_definitions(items)?;
 
-    register_adt_into_type_env(env, items, ADTOrigin::User)?;
+    register_adt_into_type_env(env, items)?;
 
     Ok(())
 }
@@ -340,7 +293,7 @@ pub(crate) fn register_builtin_adt_into_type_env(
     env: &mut TyConEnv,
     items: &[TopLevelItem],
 ) -> Result<(), TyError> {
-    register_adt_into_type_env(env, items, ADTOrigin::Builtin)?;
+    register_adt_into_type_env(env, items)?;
 
     Ok(())
 }

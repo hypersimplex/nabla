@@ -132,14 +132,9 @@ impl TyConEnv {
         self.adts.values()
     }
 
-    /// check whether a type name corresponds to a registered builtin ADT
-    pub fn is_builtin_adt(&self, name: &str) -> bool {
-        self.adts.get(name).map_or(false, |adt| adt.is_builtin())
-    }
-
-    /// check whether a type name is reserved (primitive or builtin ADT)
+    /// check whether a type name is reserved (primitive or registered ADT)
     pub fn is_reserved_type_name(&self, name: &str) -> bool {
-        types::resolve_builtin_ty_con(name).is_some() || self.is_builtin_adt(name)
+        types::resolve_builtin_ty_con(name).is_some() || self.has_adt(name)
     }
 
     /// validate a type constructor by name and arity, returning the resolved `TyCon`
@@ -181,17 +176,9 @@ impl TyConEnv {
     }
 
     // register an ADT skeleton (name + parameters) without constructors
-    pub fn add_adt_user_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
+    pub fn add_adt_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
         self.adts
-            .insert(name.clone(), ADTDef::new_user(name, ty_params, Vec::new()));
-    }
-
-    // register an builtin ADT
-    pub fn add_adt_builtin_skeleton(&mut self, name: String, ty_params: Vec<TyVarName>) {
-        self.adts.insert(
-            name.clone(),
-            ADTDef::new_builtin(name, ty_params, Vec::new()),
-        );
+            .insert(name.clone(), ADTDef::new(name, ty_params, Vec::new()));
     }
 
     // overwrite constructors for an existing ADT (used by the second pass)
