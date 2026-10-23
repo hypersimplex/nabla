@@ -1,5 +1,5 @@
 use crate::builtin::types::*;
-use crate::builtin::values::*;
+use crate::builtin::values;
 use crate::core::core_err::*;
 use crate::core::core_ir::*;
 use crate::core::core_ty_con_env::*;
@@ -82,9 +82,10 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     let mut ty_env = TyConEnv::new_with_prelude();
 
     register_user_defined_adt_into_type_env(&mut ty_env, top_level.0.as_slice())?;
+    validate_no_builtin_function_shadowing(top_level.0.as_slice())?;
 
     // note: builtin name does not change
-    init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);
+    values::init_builtin_values(&mut env_v_var_to_ty_scheme, &mut ty_var_ns);
 
     // function name -> top-level declared signature type expressions
     let mut declared_function_signatures: BTreeMap<String, TyExpr> = BTreeMap::new();
@@ -359,6 +360,35 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     todo!("codegen from STG IR");
     // - optionally invoke runtime
 
+    Ok(())
+}
+
+fn validate_no_builtin_function_shadowing(items: &[TopLevelItem]) -> Result<(), TyError> {
+    for item in items.iter() {
+        match item {
+            TopLevelItem::FunctionDefinition(def) => {
+                if let ConcreteToken::Iden(name) = &def.name.token {
+                    if values::resolve_builtin_fn(name).is_some() {
+                        return Err(TyError::Unexpected(format!(
+                            "top level function `{name}` conflicts with builtin function at {:?}",
+                            def.name.loc
+                        )));
+                    }
+                }
+            }
+            TopLevelItem::FunctionSignature(sig) => {
+                if let ConcreteToken::Iden(name) = &sig.identifier.token {
+                    if values::resolve_builtin_fn(name).is_some() {
+                        return Err(TyError::Unexpected(format!(
+                            "function signature `{name}` conflicts with builtin function at {:?}",
+                            sig.identifier.loc
+                        )));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
     Ok(())
 }
 
@@ -1500,6 +1530,28 @@ add5 = prim_add_int64 5
 main = applyBin prim_add_int64 (add5 10) 20
 "###;
     assert_compiles_or_stg_todo(content);
+}
+
+#[test]
+fn test_pipeline_builtin_function_redefinition_rejected() {
+    let content_def = r###"
+prim_add_int64 a b = 42
+"###;
+    assert!(matches!(
+        compile(content_def),
+        Err(CompileError::Type(TyError::Unexpected(ref msg)))
+        if msg.contains("conflicts with builtin function")
+    ));
+
+    let content_sig = r###"
+prim_add_int64 :: Int64# -> Int64# -> Int64#
+prim_add_int64 a b = 42
+"###;
+    assert!(matches!(
+        compile(content_sig),
+        Err(CompileError::Type(TyError::Unexpected(ref msg)))
+        if msg.contains("conflicts with builtin function")
+    ));
 }
 
 #[test]

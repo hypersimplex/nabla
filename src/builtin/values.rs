@@ -24,7 +24,7 @@ pub fn init_builtin_values(env: &mut EnvVVarToTyScheme, ns: &mut TyVarNameSupply
     init_v_var_ty_scheme_builtin_logical_and(env, ns);
     init_v_var_ty_scheme_builtin_logical_or(env, ns);
     init_v_var_ty_scheme_builtin_match_fail(env, ns);
-    init_unboxed_primitive_math_ops(env);
+    init_unboxed_primitive_ops(env);
     init_v_var_ty_scheme_builtin_int64_from_float64(env, ns);
     init_v_var_ty_scheme_builtin_float64_from_int64(env, ns);
 }
@@ -440,7 +440,7 @@ fn register_unboxed_unop(
     );
 }
 
-pub fn init_unboxed_primitive_math_ops(env: &mut EnvVVarToTyScheme) {
+pub fn init_unboxed_primitive_ops(env: &mut EnvVVarToTyScheme) {
     let i64_ops: [(&str, FnBuiltin, fn() -> TyExpr); 9] = [
         (
             "prim_add_int64",
