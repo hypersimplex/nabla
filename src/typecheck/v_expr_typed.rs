@@ -4,7 +4,9 @@
 use crate::typecheck::ty_con_env::TyConEnv;
 use crate::typecheck::ty_expr::*;
 use crate::typecheck::ty_scheme::*;
+use crate::typecheck::ty_var_name::TyVarName;
 use crate::typecheck::v_expr::*;
+use crate::typecheck::v_var_name::VVarName;
 use crate::util::printer::*;
 
 #[derive(Clone, Debug)]
@@ -256,6 +258,28 @@ pub(crate) fn mk_var_pat(var: &VVar, ty: &TyExpr) -> TypedVPattern {
             ty_expr: Box::new(ty.clone()),
         },
     }
+}
+
+/// helper to build a typed `match_fail` expression of type `ty`.
+///
+/// `match_fail` has polymorphic scheme `forall a. a` at compile time, which
+/// downstream lowering (STG / codegen) maps to a runtime trap (panic/abort)
+/// when an unhandled pattern match or failed guard is executed.
+pub(crate) fn mk_match_fail_expr(ty: &TyExpr) -> TypedVExpr {
+    let ty_var = TyVarName::Auto(0);
+    TypedVExpr::Variable(TypedVVariable {
+        var: VVar::Named(VVarName {
+            token: crate::parse::concrete_token::ConcreteToken::Iden("match_fail".to_string()),
+            loc: None,
+            builtin: Some(FnBuiltin::MatchFail),
+        }),
+        ty: ty.clone(),
+        ty_args: vec![ty.clone()],
+        ty_schematic: TyScheme {
+            ty_vars_schematic: vec![ty_var.clone()],
+            ty_expr: Box::new(TyExpr::TyVar(ty_var)),
+        },
+    })
 }
 
 /// helper to build a boolean constructor pattern (`Bool.True` or `Bool.False`)

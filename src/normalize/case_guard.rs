@@ -53,6 +53,19 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
                         //              True  -> body
                         //              False -> case scrutinee of
                         //                         remaining_alts
+                        //
+                        // when remaining alternatives are exhausted, create a
+                        // `match_fail` which is specifically intended to
+                        // eventually map to a runtime error
+                        let fallback_body = if alts_remaining.is_empty() {
+                            mk_match_fail_expr(ty)
+                        } else {
+                            TypedVExpr::Case(TypedVCaseExpr {
+                                arg: Box::new(scrutinee.clone()),
+                                alts: alts_remaining.iter().cloned().collect(),
+                                ty: ty.clone(),
+                            })
+                        };
                         let new_body = TypedVExpr::Case(TypedVCaseExpr {
                             arg: Box::new(g),
                             alts: vec![
@@ -64,11 +77,7 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
                                 TypedVCaseAlt {
                                     pattern: mk_bool_pat(false),
                                     guard: None,
-                                    body: TypedVExpr::Case(TypedVCaseExpr {
-                                        arg: Box::new(scrutinee.clone()),
-                                        alts: alts_remaining.iter().cloned().collect(),
-                                        ty: ty.clone(),
-                                    }),
+                                    body: fallback_body,
                                 },
                             ],
                             ty: ty.clone(),

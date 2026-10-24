@@ -102,6 +102,18 @@ pub(crate) fn normalize_case_default(expr: &TypedVExpr) -> TypedVExpr {
                 }
             }
 
+            // if alternatives list is empty (e.g. from exhausted guards), synthesize
+            // a `match_fail` fallback that intends to produce a runtime error
+            if new_alts.is_empty() {
+                new_alts.push(TypedVCaseAlt {
+                    pattern: TypedVPattern::Wild {
+                        ty: arg_normalized.ty().clone(),
+                    },
+                    guard: None,
+                    body: mk_match_fail_expr(&case.ty),
+                });
+            }
+
             // further simplification: if case expression has exactly one
             // unconditional wildcard alternative, `case v of _ -> body`,
             // the case wrapper is redundant and can be replaced by `body`

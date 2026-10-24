@@ -2277,3 +2277,13 @@ fn test_pipeline_lowercase_type_name_in_data_rejected() {
         Err(CompileError::Type(TyError::AdtError(_)))
     ));
 }
+
+#[test]
+fn test_pipeline_exhausted_pattern_guard_match_fail() {
+    let content = r###"
+f :: Int64 -> Int64
+f x = case x of
+        y | y > Int64 10 -> Int64 100
+"###;
+    assert_compiles_or_stg_todo(content);
+}
