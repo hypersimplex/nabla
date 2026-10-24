@@ -242,7 +242,7 @@ fn can_fit(width_max: i32, width_remain: i32, mut stack: Vec<StackItem>) -> bool
 }
 
 static TEST_CONTENT_FOR_PRINTER: &str = r###"
-f_let a = a * 7
+f_let a = a * Int64 7
 
 f b = case b of
         2 -> 2
@@ -250,50 +250,50 @@ f b = case b of
         _ -> 100
 
 f_let a =
- let x :: u32 = 1
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
-   let b = 10
+   let b = Int64 10
        c = case b of
-             b | b>2 -> 2*x
-             _ -> 100
+             b | b>Int64 2 -> Int64 2*x
+             _ -> Int64 100
    in x + y + z + a + b * c
 
 fff x =
  let y = (
           case z of
-            "a"         -> (0 * 5)
+            "a"         -> (Int64 0 * Int64 5)
             "something" -> case x of
-                             0 -> 10
-                             1 -> 11
-                             _ -> 2 * x
-            _           -> 2
-         ) * 7
+                             Int64 0 -> Int64 10
+                             Int64 1 -> Int64 11
+                             _ -> Int64 2 * x
+            _           -> Int64 2
+         ) * Int64 7
  in y
 
 data T B { // constructor with record
-  v :: u32,
+  v :: Int64,
   x :: B,
 }
 
 // sum constructor
 data T2 A = T20 T A
-              | T21 u32
-              | T22 u32 i32
+              | T21 Int64
+              | T22 Int64 Int64
               | T23 A A
               | T24 T3
 
-data T3 = Blah u32 u32 i32
+data T3 = Blah Int64 Int64 Int64
 
 data Tree =
-  Leaf u32
+  Leaf Int64
   | Node Tree Tree
 
 //test type expressions in function signature and let expressions
 f4 :: T (A -> B) -> T2 -> T3
 
-f_test_lambda :: u32 -> u32
+f_test_lambda :: Int64 -> Int64
 f_test_lambda a b =
  (\x y -> x * y) a b
 
@@ -302,18 +302,18 @@ add_and_square x y =
   //more comments
   let z :: T2 = y * y
       ret = case z of
-             "a"         -> 0 * 5
-             "something" -> 1
-             _           -> 2
+             "a"         -> Int64 0 * Int64 5
+             "something" -> Int64 1
+             _           -> Int64 2
   in
     x + z
 
 ff x =
- let y = 1-(case z of
-             "a"         -> (0 * 5)
+ let y = Int64 1-(case z of
+             "a"         -> (Int64 0 * Int64 5)
              "something" -> x
-             _           -> 2
-           )*7
+             _           -> Int64 2
+           )*Int64 7
  in y
 
 data Option T
@@ -323,24 +323,24 @@ data Option T
 get_optional x = Option.Some(x)
 
 data Custom {
-  y :: i32,
-  x :: i32,
+  y :: Int64,
+  x :: Int64,
 }
 
 f_nested_pattern_match_sum_type x =
   case x of
-    Option.Some(Option.Some(y)) -> 0
-    _ -> 1
+    Option.Some(Option.Some(y)) -> Int64 0
+    _ -> Int64 1
 
 f_nested_pattern_match_record x =
   case x of
-    Option.Some(Custom { y, x }) -> 0
-    _ -> 1
+    Option.Some(Custom { y, x }) -> Int64 0
+    _ -> Int64 1
 
 f_nested_pattern_match_record_rest x =
   case x of
-    Option.Some(Custom { y, .. }) -> 0
-    _ -> 1
+    Option.Some(Custom { y, .. }) -> Int64 0
+    _ -> Int64 1
 
 f_unit = Unit
 

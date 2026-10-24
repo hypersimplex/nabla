@@ -350,8 +350,8 @@ impl DocPrinter for IdenExpr {
 // this provides scope for definitions to be visible to the body of letexpr
 //
 // eg:
-//  let a :: u32 = 6
-//      b :: u32 = 7
+//  let a :: Int64 = Int64 6
+//      b :: Int64 = Int64 7
 //  in
 //    a + b
 //
@@ -388,10 +388,10 @@ impl DocPrinter for LetExpr {
 }
 
 // eg:
-// let a :: u32 = 6
+// let a :: Int64 = Int64 6
 // patterns: [a]
-// type: u32
-// expr: 6
+// type: Int64
+// expr: Int64 6
 //
 // \x y z -> x + y + z
 // patterns: [x, y, z]

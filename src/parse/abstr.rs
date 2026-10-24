@@ -1183,35 +1183,35 @@ fn pattern_token(pattern: &PatternExpr) -> ConcreteTokenAndLoc {
 }
 
 static TEST_CONTENT_ABSTRACT_PARSER: &str = r###"
-// f x = 9 as f32 / ((-7*x as i32) as f32)
+// f x = 9 as f32 / ((-7*x as Int64) as f32)
 f x y z = 9 / (-7*x+y+z)
 
 f_let a =
- let x :: u32 = 1
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
-   x + (y :: u32) + z + a
+   x + (y :: Int64) + z + a
 
 f_let a =
- let x :: u32 = 1
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
-   let b = 10
+   let b = Int64 10
        c = b * b
    in x + y + z + a + b * c
 
 f_let2 a =
- let x :: u32 = 1 + a
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = 1 + a
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
    x + y + z
 
 f_let_nest a =
- let x :: u32 = 1
-     y :: u32 = 2
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
  in
    let z = x + y
    in z + a
@@ -1237,21 +1237,21 @@ fff x =
  in y
 
 data T B { // constructor with record
-  v :: u32,
+  v :: Int64,
   x :: B,
 }
 
 // sum constructor
 data T2 A = T20 T A
-              | T21 u32 
-              | T22 u32 i32
+              | T21 Int64 
+              | T22 Int64 Int64
               | T23 A A
               | T24 T3
 
-data T3 = Blah u32 u32 i32
+data T3 = Blah Int64 Int64 Int64
 
 data Tree =
-  Leaf u32
+  Leaf Int64
   | Node Tree Tree
 
 //test type expressions in function signature and let expressions
@@ -1266,7 +1266,7 @@ fg :: T A B C (D AA
                       (G H I)
 
 f3 x =
-  let a :: T u32 -> u32 = ff
+  let a :: T Int64 -> Int64 = ff
       b :: f32 = 7
   in 
   x a b
@@ -1283,7 +1283,7 @@ add_and_square x y =
   in
     x + z
 
-simple :: u32
+simple :: Int64
 simple = 77
 
 f3 :: T -> T2
@@ -1293,7 +1293,7 @@ f3 a =
   in
     let zz = 88 * f a b (c+e) (7 + 9 * 7)
         ret = case z of
-               "a"         -> ((0 :: u32) * 5)
+               "a"         -> ((0 :: Int64) * 5)
                "something" -> f2 1
                _           -> 2
     in 
@@ -1302,39 +1302,39 @@ f3 a =
 
 static TEST_CONTENT_ABSTRACT_PARSER_LETEXPR: &str = r###"
 f_let a =
- let x :: u32 -> u32 = \bb -> (1 + bb)
-     y :: u32 = 2 + 7
-     z :: u32 = 5
+ let x :: Int64 -> Int64 = \bb -> (1 + bb)
+     y :: Int64 = 2 + 7
+     z :: Int64 = Int64 5
      f (arg :: T A) = arg * a
  in
    x + y + z + a
 
 f_let a =
- let x :: u32 = 1
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
-   let b = 10
+   let b = Int64 10
        c = case b of 
              2 -> 2*x
              _ -> 100
    in x + y + z + a + b * c
 
 f_let2 a =
- let x :: u32 = 1 + a
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = 1 + a
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
    x + y + z
 "###;
 
 static TEST_CONTENT_ABSTRACT_PARSER_LETEXPR_SIMPLE: &str = r###"
 f_let a =
- let x :: u32 = 1
+ let x :: Int64 = Int64 1
  in x + a
 
 f_let_2 a =
- let x = 1 :: u32
+ let x = Int64 1 :: Int64
  in x + a
 "###;
 
@@ -1352,7 +1352,7 @@ in res
 static TEST_CONTENT_ABSTRACT_PARSER_2: &str = r###"
 f4 :: T (A -> B) -> T2 -> T3
 f3 x =
-  let a :: T u32 -> u32 = ff
+  let a :: T Int64 -> Int64 = ff
       b :: f32 = 7
   in
     x + a + b
@@ -1371,44 +1371,44 @@ f3 :: T (A -> (B -> C))
 
 static TEST_CONTENT_ABSTRACT_PARSER_TYPE_ANNOTATION: &str = r###"
 f a =
- let x :: u32 = 1
-     y :: u32 = 2
-     z :: u32 = 5
+ let x :: Int64 = Int64 1
+     y :: Int64 = Int64 2
+     z :: Int64 = Int64 5
  in
-   let b = 10
+   let b = Int64 10
        c = case b of 
-             2 -> (2 :: u32) * x
-             _ -> (100 + z) :: u32
+             2 -> (2 :: Int64) * x
+             _ -> (100 + z) :: Int64
    in x + y + z + a + b * c
 "###;
 
 static TEST_CONTENT_ABSTRACT_PARSER_LAMBDA: &str = r###"
-f :: u32 -> u32 -> u32
+f :: Int64 -> Int64 -> Int64
 f a =
  let ff = \x y -> x * y + a * z
-     z = 10
+     z = Int64 10
  in
    ff 10
 
-f_test_lambda :: u32 -> u32
+f_test_lambda :: Int64 -> Int64
 f_test_lambda a b =
  (\x y -> x * y) a b
 
 f_test_named_lambda a =
- let ff :: u32 -> u32 -> u32 = \x y -> x * y + a * z
-     z = 10
+ let ff :: Int64 -> Int64 -> Int64 = \x y -> x * y + a * z
+     z = Int64 10
  in
    ff 10
 
 f_test_named_lambda_2 a =
  let ff = \x y -> x * y + a * z
-     z = 10
+     z = Int64 10
  in
    ff 10
 "###;
 
 static TEST_CONTENT_ABSTRACT_PARSER_FUNCTION_SIMPLE: &str = r###"
-f :: u32 -> u32 -> u32
+f :: Int64 -> Int64 -> Int64
 f x y = x + y
 "###;
 

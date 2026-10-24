@@ -7,25 +7,25 @@ use super::parser::ParseError;
 
 static TEST_CONTENT_1: &str = r###"
 data T B { // constructor with record
-  v :: u32,
+  v :: Int64,
   x :: B,
 }
 
 // sum constructor
 data T2 A = T20 T A
-              | T21 u32 
-              | T22 u32 i32
+              | T21 Int64 
+              | T22 Int64 Int64
               | T23 A A
               | T23 T3
 
 // sum constructor (singleton) == product constructor
-data T3 = Blah u32 u32 i32
+data T3 = Blah Int64 Int64 Int64
 
 add_and_square :: T -> T2 -> T
 
 add_and_square x y =
 // test comments
-  let w :: u32 = 7
+  let w :: Int64 = Int64 7
   
   let z :: String = "some test string here!@#!"
 
