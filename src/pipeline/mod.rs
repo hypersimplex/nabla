@@ -2257,3 +2257,23 @@ fn test_pipeline_duplicate_constructor_in_sum_type_rejected() {
         Err(CompileError::Type(TyError::AdtError(_)))
     ));
 }
+
+// negative test: lowercase constructor names in sum type definition are rejected
+#[test]
+fn test_pipeline_lowercase_constructor_in_sum_type_rejected() {
+    let content = "data Color = red | Green\n";
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+// negative test: lowercase data type names in definition are rejected
+#[test]
+fn test_pipeline_lowercase_type_name_in_data_rejected() {
+    let content = "data color = Red | Green\n";
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}

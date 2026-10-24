@@ -1,3 +1,4 @@
+use crate::parse::abstr_pattern::*;
 use crate::parse::abstr_structures::*;
 use crate::parse::concrete_token::*;
 use crate::parse::loc::*;
@@ -216,6 +217,12 @@ fn build_sum_type_definition(
                 )));
             }
         };
+        if !is_data_constructor_name(&ctor_name) {
+            return Err(TyError::AdtError(format!(
+                "constructor `{ctor_name}` in type `{}` must start with an uppercase letter at {:?}",
+                params.name, ctor_tok.loc
+            )));
+        }
         if seen_ctors.contains(&ctor_name) {
             return Err(TyError::AdtError(format!(
                 "duplicate constructor `{ctor_name}` in type `{}` at {:?}",
@@ -390,7 +397,15 @@ fn ty_expr_from_field_type(
 
 fn get_data_type_name(identifier: &ConcreteTokenAndLoc) -> Result<String, TyError> {
     match &identifier.token {
-        ConcreteToken::Iden(s) => Ok(s.clone()),
+        ConcreteToken::Iden(s) => {
+            if !is_type_constructor_name(s) {
+                return Err(TyError::AdtError(format!(
+                    "type name `{s}` must start with an uppercase letter at {:?}",
+                    identifier.loc
+                )));
+            }
+            Ok(s.clone())
+        }
         other => Err(TyError::AdtError(format!(
             "expected data identifier, got {:?}",
             other
