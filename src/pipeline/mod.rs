@@ -1160,8 +1160,10 @@ f b = case b of
 fn test_pipeline_pattern_nested_range_in_constructor_with_guard() {
     let content = r###"
 f m = case m of
-        Just (1..5) | True -> 1
-        _                  -> 0
+        Just (1..5) | (case m of
+                         Just (1..5) -> True
+                         _           -> False) -> 1
+        _                                      -> 0
 "###;
     assert_compiles_or_stg_todo(content);
 }

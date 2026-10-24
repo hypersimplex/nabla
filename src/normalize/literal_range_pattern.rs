@@ -99,6 +99,11 @@ pub(crate) fn desugar_literal_range_pattern_case(
                     body,
                 } = x;
 
+                // guard expression may itself contain nested case expressions with literal range patterns
+                let guard = guard
+                    .as_ref()
+                    .map(|g| desugar_literal_range_pattern(ns, env_v_var_to_ty_scheme, g));
+
                 let (pattern, guard) = match &pattern {
                     TypedVPattern::Range { start, end, ty } => {
                         let simple_binder_var = {
@@ -139,17 +144,18 @@ pub(crate) fn desugar_literal_range_pattern_case(
                             &expr_cmp_end,
                         );
 
+                        // evaluate pattern predicate before user guard so short-circuit `&&` only runs guard on match
                         let guard = match guard {
                             Some(g) => Some(mk_builtin_typed_vexpr_logical_and(
                                 env_v_var_to_ty_scheme,
-                                &g,
                                 &expr_predicate,
+                                &g,
                             )),
                             _ => Some(expr_predicate),
                         };
                         (pattern, guard)
                     }
-                    _ => (pattern.clone(), guard.clone()),
+                    _ => (pattern.clone(), guard),
                 };
 
                 let body = desugar_literal_range_pattern(ns, env_v_var_to_ty_scheme, body);

@@ -87,6 +87,11 @@ pub(crate) fn desugar_literal_pattern_case(
                     body,
                 } = x;
 
+                // guard expression may itself contain nested case expressions with literal patterns
+                let guard = guard
+                    .as_ref()
+                    .map(|g| desugar_literal_pattern(ns, env_v_var_to_ty_scheme, g));
+
                 let (pattern, guard) = match &pattern {
                     TypedVPattern::Literal { literal, ty } => {
                         let simple_binder_var = {
@@ -109,17 +114,18 @@ pub(crate) fn desugar_literal_pattern_case(
                             ),
                         };
 
+                        // evaluate pattern predicate before user guard so short-circuit `&&` only runs guard on match
                         let guard_new = match guard {
                             Some(g) => Some(mk_builtin_typed_vexpr_logical_and(
                                 env_v_var_to_ty_scheme,
-                                &g,
                                 &expr_predicate,
+                                &g,
                             )),
                             _ => Some(expr_predicate),
                         };
                         (pattern_new, guard_new)
                     }
-                    _ => (pattern.clone(), guard.clone()),
+                    _ => (pattern.clone(), guard),
                 };
 
                 let body = desugar_literal_pattern(ns, env_v_var_to_ty_scheme, body);
