@@ -9,12 +9,13 @@ fn collect_pattern_binders_unique(
 ) -> TyChkResult<()> {
     match pattern {
         VPattern::Variable(var) => {
-            if !seen.insert(var.clone()) {
+            if seen.contains(var) {
                 return Err(TyError::PatBinderUniqueness(format!(
                     "duplicate pattern binder: {:?}",
                     var
                 )));
             }
+            seen.insert(var.clone());
             Ok(())
         }
         VPattern::Constructor { args, .. } => {

@@ -402,6 +402,12 @@ fn insert_declared_fun_signatures(
     for i in items.iter() {
         if let TopLevelItem::FunctionSignature(sig) = i {
             if let ConcreteToken::Iden(name) = &sig.identifier.token {
+                if declared_function_signatures.contains_key(name) {
+                    return Err(TyError::Unexpected(format!(
+                        "duplicate function signature for `{name}` at {:?}",
+                        sig.identifier.loc
+                    )));
+                }
                 let ty_expr = lower_type_annot_to_ty_expr(&sig.ty);
                 let ty_scheme = build_scheme_from_ty_expr(&ty_expr, ty_env, ty_var_ns)?;
                 declared_function_signatures.insert(name.clone(), ty_expr);
@@ -2215,5 +2221,39 @@ f x =
     assert!(matches!(
         compile(content),
         Err(CompileError::Type(TyError::UnboxedLetBinding { .. }))
+    ));
+}
+
+// negative test: duplicate top level function signatures are rejected
+#[test]
+fn test_pipeline_duplicate_function_signature_rejected() {
+    let content = r###"
+f :: Int64 -> Int64
+f :: Bool -> Bool
+f x = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::Unexpected(_)))
+    ));
+}
+
+// negative test: duplicate field names in record definition are rejected
+#[test]
+fn test_pipeline_duplicate_record_field_in_definition_rejected() {
+    let content = "data Point { x :: Int64, x :: Float64 }\n";
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
+    ));
+}
+
+// negative test: duplicate constructor names in sum type definition are rejected
+#[test]
+fn test_pipeline_duplicate_constructor_in_sum_type_rejected() {
+    let content = "data Color = Red | Red\n";
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::AdtError(_)))
     ));
 }

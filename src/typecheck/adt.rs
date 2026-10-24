@@ -160,17 +160,27 @@ fn build_record_type_definition(
     params: &DataParams,
     rec: &DataRecord,
 ) -> Result<ADTDef, TyError> {
-    let field_names: Vec<String> = rec
-        .components
-        .iter()
-        .map(|(tok, _)| match &tok.token {
-            ConcreteToken::Iden(s) => Ok(s.clone()),
-            other => Err(TyError::AdtError(format!(
-                "expected identifier for record field, got {:?}",
-                other
-            ))),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut seen_fields = HashSet::new();
+    let mut field_names = Vec::new();
+    for (tok, _) in &rec.components {
+        let name = match &tok.token {
+            ConcreteToken::Iden(s) => s.clone(),
+            other => {
+                return Err(TyError::AdtError(format!(
+                    "expected identifier for record field, got {:?}",
+                    other
+                )));
+            }
+        };
+        if seen_fields.contains(&name) {
+            return Err(TyError::AdtError(format!(
+                "duplicate field `{name}` in record `{}` at {:?}",
+                params.name, tok.loc
+            )));
+        }
+        seen_fields.insert(name.clone());
+        field_names.push(name);
+    }
 
     let field_types: Vec<TyExpr> = rec
         .components
@@ -194,30 +204,35 @@ fn build_sum_type_definition(
     params: &DataParams,
     sum: &DataSum,
 ) -> Result<ADTDef, TyError> {
-    let ctors: Vec<ConstructorDef> = sum
-        .variants
-        .iter()
-        .map(|(ctor_tok, args)| {
-            let ctor_name = match &ctor_tok.token {
-                ConcreteToken::Iden(s) => s.clone(),
-                other => {
-                    return Err(TyError::AdtError(format!(
-                        "expected constructor identifier, got {:?}",
-                        other
-                    )));
-                }
-            };
-            let field_types = args
-                .iter()
-                .map(|a| ty_expr_from_field_type(env, &params.param_map, a))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ConstructorDef {
-                name: ctor_name,
-                field_types,
-                field_names: None,
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut seen_ctors = HashSet::new();
+    let mut ctors = Vec::new();
+    for (ctor_tok, args) in &sum.variants {
+        let ctor_name = match &ctor_tok.token {
+            ConcreteToken::Iden(s) => s.clone(),
+            other => {
+                return Err(TyError::AdtError(format!(
+                    "expected constructor identifier, got {:?}",
+                    other
+                )));
+            }
+        };
+        if seen_ctors.contains(&ctor_name) {
+            return Err(TyError::AdtError(format!(
+                "duplicate constructor `{ctor_name}` in type `{}` at {:?}",
+                params.name, ctor_tok.loc
+            )));
+        }
+        seen_ctors.insert(ctor_name.clone());
+        let field_types = args
+            .iter()
+            .map(|a| ty_expr_from_field_type(env, &params.param_map, a))
+            .collect::<Result<Vec<_>, _>>()?;
+        ctors.push(ConstructorDef {
+            name: ctor_name,
+            field_types,
+            field_names: None,
+        });
+    }
 
     Ok(ADTDef::new(
         params.name.clone(),
@@ -425,12 +440,13 @@ fn validate_no_duplicate_adt_definitions(items: &[TopLevelItem]) -> Result<(), T
             _ => continue,
         };
         let name: String = get_data_type_name(identifier)?;
-        if !seen_type_names.insert(name.clone()) {
+        if seen_type_names.contains(&name) {
             return Err(TyError::AdtError(format!(
                 "duplicate definition of type `{name}` at {:?}",
                 identifier.loc
             )));
         }
+        seen_type_names.insert(name.clone());
     }
     Ok(())
 }
