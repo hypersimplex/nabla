@@ -33,7 +33,6 @@ pub(crate) struct VAbstrParam {
     // else `binder` get assigned with an auto-generated variable name
     pub binder: VVar,
     pub pattern: VPattern,
-    pub annotation: Option<TyExpr>,
 }
 
 #[derive(Clone, Debug)]

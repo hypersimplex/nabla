@@ -54,7 +54,7 @@ fn v_expr_from_abstr_expr(
     let params: Vec<VAbstrParam> = param_patterns
         .iter()
         .map(|pattern| {
-            let (vpattern, annot) = to_v_pattern_and_annot(pattern);
+            let vpattern = to_v_pattern(pattern);
             let binder = match vpattern.peel_typed() {
                 VPattern::Variable(var) => var.clone(),
                 _ => v_var_supply.generate(),
@@ -62,7 +62,6 @@ fn v_expr_from_abstr_expr(
             VAbstrParam {
                 binder,
                 pattern: vpattern,
-                annotation: annot,
             }
         })
         .collect();
@@ -280,15 +279,6 @@ fn v_expr_from_constructor_expr(
 }
 
 // helpers related to pattern
-
-fn to_v_pattern_and_annot(pattern: &abstr_structures::PatternExpr) -> (VPattern, Option<TyExpr>) {
-    match pattern {
-        abstr_structures::PatternExpr::Typed { pattern: inner, ty } => {
-            (to_v_pattern(pattern), Some(lower_type_annot_to_ty_expr(ty)))
-        }
-        other => (to_v_pattern(other), None),
-    }
-}
 
 fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
     use crate::parse::abstr_structures::AExpr;

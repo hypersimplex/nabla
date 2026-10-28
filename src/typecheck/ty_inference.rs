@@ -694,20 +694,6 @@ pub(crate) fn ty_check_abstraction_typed(
 
         env_lambda.apply_subst_to_env_in_place(&subst_params);
 
-        if let Some(param_annot) = &param.annotation {
-            let annot_inst = instantiate_rigid_and_subst_ty_expr(
-                param_annot,
-                ty_env,
-                ty_var_ns,
-                &mut scoped_ty_vars,
-            )?;
-            let annot_resolved = subst_ty(&subst_params, &annot_inst);
-            let ty_binder_substituted = subst_ty(&subst_params, &ty_binder);
-            subst_params = unify_ty_exprs(&subst_params, &ty_binder_substituted, &annot_resolved)?;
-
-            env_lambda.apply_subst_to_env_in_place(&subst_params);
-        }
-
         typed_params.push(TypedVAbstrParam {
             binder: param.binder.clone(),
             pattern: apply_subst_typed_pattern(&subst_params, typed_pattern_raw),

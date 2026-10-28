@@ -47,32 +47,22 @@ fn rename_var_unique_abstraction(
 
     let params = params
         .iter()
-        .map(
-            |VAbstrParam {
-                 binder,
-                 pattern,
-                 annotation,
-             }| {
-                let mut pattern_vars = BTreeSet::new();
-                pattern_vars.insert(binder.clone());
-                pattern.get_bound_vars(&mut pattern_vars);
+        .map(|VAbstrParam { binder, pattern }| {
+            let mut pattern_vars = BTreeSet::new();
+            pattern_vars.insert(binder.clone());
+            pattern.get_bound_vars(&mut pattern_vars);
 
-                for i in pattern_vars {
-                    vvar_unique_map.insert(i.clone(), ns.uniqify(&i));
-                }
+            for i in pattern_vars {
+                vvar_unique_map.insert(i.clone(), ns.uniqify(&i));
+            }
 
-                let binder = vvar_unique_map.get(binder).unwrap().clone();
+            let binder = vvar_unique_map.get(binder).unwrap().clone();
 
-                let mut pattern = pattern.clone();
-                pattern.subst_vars(&vvar_unique_map);
+            let mut pattern = pattern.clone();
+            pattern.subst_vars(&vvar_unique_map);
 
-                VAbstrParam {
-                    binder,
-                    pattern,
-                    annotation: annotation.clone(),
-                }
-            },
-        )
+            VAbstrParam { binder, pattern }
+        })
         .collect();
 
     let (body_v_expr, body_ty_annot) = Deref::deref(body);
