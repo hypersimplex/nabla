@@ -1837,9 +1837,58 @@ fn test_pipeline_unparenthesized_function_header_annotation_rejected() {
 #[test]
 fn test_pipeline_matching_type_annotations_accepted() {
     let content = r###"
-f (x :: Int64#) = (x :: Int64#)
+f ((Just (x :: Int64#)) :: Maybe Int64#) = case x of (y :: Int64#) -> (y :: Int64#)
 "###;
     assert_compiles_or_stg_todo(content);
+}
+
+// negative test: case pattern type annotation mismatch rejected
+#[test]
+fn test_pipeline_case_pattern_type_annotation_mismatch_rejected() {
+    let content = r###"
+f = case (Int64 42) of (y :: String) -> y
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: constructor arg pattern type annotation mismatch rejected
+#[test]
+fn test_pipeline_constructor_pattern_type_annotation_mismatch_rejected() {
+    let content = r###"
+f (Just (x :: String)) = x + (Int64 1)
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: record field pattern type annotation mismatch rejected
+#[test]
+fn test_pipeline_record_pattern_type_annotation_mismatch_rejected() {
+    let content = r###"
+data R { x :: Int64 }
+f (R { x = (v :: String) }) = v
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
+}
+
+// negative test: nested pattern type annotation mismatch rejected
+#[test]
+fn test_pipeline_nested_pattern_type_annotation_mismatch_rejected() {
+    let content = r###"
+f ((x :: String) :: Int64) = x
+"###;
+    assert!(matches!(
+        compile(content),
+        Err(CompileError::Type(TyError::TypeConflict { .. }))
+    ));
 }
 
 // positive test: nullary constructor pattern does not greedily consume subsequent parameters
