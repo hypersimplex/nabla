@@ -55,7 +55,7 @@ fn v_expr_from_abstr_expr(
         .iter()
         .map(|pattern| {
             let (vpattern, annot) = to_v_pattern_and_annot(pattern);
-            let binder = match &vpattern {
+            let binder = match vpattern.peel_typed() {
                 VPattern::Variable(var) => var.clone(),
                 _ => v_var_supply.generate(),
             };
@@ -193,11 +193,10 @@ fn v_expr_from_let_expr(
     let defs: Vec<(VPattern, VExpr, Option<TyExpr>)> = defs
         .iter()
         .map(|(pattern_expr, expr_annot)| {
-            let (v_pattern, pat_annot) = to_v_pattern_and_annot(pattern_expr);
+            let v_pattern = to_v_pattern(pattern_expr);
             let (vexpr_def, texpr_def_annot) =
                 vexpr_and_ty_annot_from_aexpr_annot(expr_annot, v_var_supply);
-            // [todo] if both pat_annot and texpr_def_annot exist then we should check equivalence
-            (v_pattern, vexpr_def, pat_annot.or(texpr_def_annot))
+            (v_pattern, vexpr_def, texpr_def_annot)
         })
         .collect();
 
@@ -285,7 +284,7 @@ fn v_expr_from_constructor_expr(
 fn to_v_pattern_and_annot(pattern: &abstr_structures::PatternExpr) -> (VPattern, Option<TyExpr>) {
     match pattern {
         abstr_structures::PatternExpr::Typed { pattern: inner, ty } => {
-            (to_v_pattern(inner), Some(lower_type_annot_to_ty_expr(ty)))
+            (to_v_pattern(pattern), Some(lower_type_annot_to_ty_expr(ty)))
         }
         other => (to_v_pattern(other), None),
     }
@@ -296,7 +295,10 @@ fn to_v_pattern(pattern: &abstr_structures::PatternExpr) -> VPattern {
     use crate::parse::abstr_structures::PatternExpr;
     match pattern {
         PatternExpr::Wild => VPattern::Wild,
-        PatternExpr::Typed { pattern, .. } => to_v_pattern(pattern),
+        PatternExpr::Typed { pattern, ty } => VPattern::Typed {
+            pattern: Box::new(to_v_pattern(pattern)),
+            ty: lower_type_annot_to_ty_expr(ty),
+        },
         PatternExpr::Variable(var) => VPattern::Variable(VVar::Named(VVarName {
             token: var.token.clone(),
             loc: Some(var.loc.clone()),

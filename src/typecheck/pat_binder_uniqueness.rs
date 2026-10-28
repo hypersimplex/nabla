@@ -30,6 +30,7 @@ fn collect_pattern_binders_unique(
             }
             Ok(())
         }
+        VPattern::Typed { pattern, .. } => collect_pattern_binders_unique(pattern, seen),
         VPattern::Wild | VPattern::Literal(_) | VPattern::Range { .. } => Ok(()),
     }
 }
