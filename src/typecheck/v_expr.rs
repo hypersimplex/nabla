@@ -181,9 +181,26 @@ pub(crate) enum VPattern {
         // true if pattern has ".." wildcard
         rest: bool,
     },
+    // this variant is here for uniformity such that
+    // it can be used anywhere a normal pattern can appear
+    Typed {
+        pattern: Box<VPattern>,
+        ty: TyExpr,
+    },
 }
 
 impl VPattern {
+    /// queries the pattern; if it's a typed pattern, query the pattern wrapped inside
+    pub(crate) fn peel_typed(&self) -> &VPattern {
+        match self {
+            // recursion
+            VPattern::Typed { pattern, .. } => pattern.peel_typed(),
+
+            // terminal case
+            other => other,
+        }
+    }
+
     pub(crate) fn get_bound_vars(&self, out: &mut BTreeSet<VVar>) {
         // collect all binders introduced by a pattern, including nested fields/args
         match self {
@@ -202,6 +219,10 @@ impl VPattern {
                 for (_, field_pat) in fields {
                     field_pat.get_bound_vars(out);
                 }
+            }
+            VPattern::Typed { pattern, .. } => {
+                // apply method to inner wrapped pattern
+                pattern.get_bound_vars(out);
             }
         }
     }
@@ -224,6 +245,10 @@ impl VPattern {
                 for (_, field_pat) in fields.iter_mut() {
                     field_pat.subst_vars(substitution);
                 }
+            }
+            VPattern::Typed { pattern, .. } => {
+                // apply method to inner wrapped pattern
+                pattern.subst_vars(substitution);
             }
         }
     }
