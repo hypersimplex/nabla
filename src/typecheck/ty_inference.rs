@@ -503,11 +503,14 @@ fn check_no_escaped_rigid_vars(
     outer_ty_vars: &BTreeMap<String, TyVarName>,
     inner_ty_vars: &BTreeMap<String, TyVarName>,
 ) -> Result<(), TyError> {
+    // new_rigid_vars = inner_ty_vars \ outer_vars
     let newly_introduced_rigid_vars: BTreeSet<&TyVarName> = inner_ty_vars
         .iter()
         .filter(|(name, _)| !outer_ty_vars.contains_key(*name))
         .map(|(_, tvn)| tvn)
         .collect();
+    // check if rigid variables escape to outside (if they coincide with free
+    // type variables present in the type environment)
     if !newly_introduced_rigid_vars.is_empty() {
         let env_after = env.apply_subst_to_env(subst);
         for tvn in free_tvns_in_ty_env(&env_after) {
@@ -527,9 +530,10 @@ fn check_no_escaped_rigid_vars(
 ///
 /// we thread `local_ty_vars` through various ty_check_* functions where
 /// `local_ty_vars` tracks user-written type variable names in lexical scope
-/// (mapped to `Rigid` type variables) so we can support scoped type type
-/// variables, detect escaping local rigid variables [1], and prevent inner `let`
-/// bindings from generalizing outer scoped type variables [2]
+/// (mapped to `Rigid` type variables only by construction) so we can support
+/// scoped type variables, detect escaping local rigid variables [1],
+/// and prevent inner `let` bindings from generalizing outer scoped type
+/// variables [2]
 ///
 /// where:
 ///   [1]: `f = \x -> (x :: a)` is not allowed since `x` has an outer Auto type
@@ -673,8 +677,13 @@ pub(crate) fn ty_check_abstraction_typed(
             },
         );
 
-        let (pattern_subst, _bound_vars, typed_pattern_raw) =
-            ty_check_pattern_typed(&mut env_lambda, ty_env, ty_var_ns, &param.pattern)?;
+        let (pattern_subst, _bound_vars, typed_pattern_raw) = ty_check_pattern_typed(
+            &mut env_lambda,
+            ty_env,
+            ty_var_ns,
+            &param.pattern,
+            &mut scoped_ty_vars,
+        )?;
         subst_params = subst_compose(&pattern_subst, &subst_params);
 
         env_lambda.apply_subst_to_env_in_place(&subst_params);
@@ -814,6 +823,19 @@ pub(crate) fn ty_check_application_typed(
     ))
 }
 
+/// helper struct used in `ty_check_case_typed`
+struct AltInfo<'a> {
+    body: &'a VExprAndTyAnnot,
+    env: EnvVVarToTyScheme,
+    typed_pattern: TypedVPattern,
+    typed_guard: Option<TypedVExpr>,
+    subst: Substitution,
+
+    // for type variable sharing between pattern, guard, body of the alternative
+    // and also detecting escaping rigid variable
+    alt_ty_vars: BTreeMap<String, TyVarName>,
+}
+
 /// type check case expression with pattern matching
 ///
 /// case e of
@@ -851,20 +873,18 @@ pub(crate) fn ty_check_case_typed(
 
     let mut env_augmented = env_var_to_ty_scheme.apply_subst_to_env(&phi);
 
-    struct AltInfo<'a> {
-        body: &'a VExprAndTyAnnot,
-        env: EnvVVarToTyScheme,
-        typed_pattern: TypedVPattern,
-        typed_guard: Option<TypedVExpr>,
-        subst: Substitution,
-    }
-
     // for each alt, get: (body expr, env, typed pattern, typed guard, substitution)
     let mut alt_infos: Vec<AltInfo<'_>> = Vec::new();
     for alt in vexpr.alts.iter() {
         let mut env_alt = env_augmented.clone();
-        let (subst_pattern, _bound_vars, typed_pattern) =
-            ty_check_pattern_typed(&mut env_alt, ty_env, ty_var_ns, &alt.pattern)?;
+        let mut alt_ty_vars = local_ty_vars.clone();
+        let (subst_pattern, _bound_vars, typed_pattern) = ty_check_pattern_typed(
+            &mut env_alt,
+            ty_env,
+            ty_var_ns,
+            &alt.pattern,
+            &mut alt_ty_vars,
+        )?;
 
         // unify typed_scrutinee with alt's pattern
         let subst_pattern_unified =
@@ -879,7 +899,7 @@ pub(crate) fn ty_check_case_typed(
                     ty_env,
                     ty_var_ns,
                     guard_expr_and_annot,
-                    local_ty_vars,
+                    &alt_ty_vars,
                 )?;
                 let mut subst_alt = subst_compose(&subst_guard, &subst_pattern_unified);
                 let typed_guard_subst = apply_subst_typed_expr(&subst_alt, typed_guard_raw);
@@ -906,6 +926,7 @@ pub(crate) fn ty_check_case_typed(
             typed_pattern,
             typed_guard,
             subst: subst_alt,
+            alt_ty_vars,
         });
     }
 
@@ -948,7 +969,7 @@ pub(crate) fn ty_check_case_typed(
                 ty_env,
                 ty_var_ns,
                 alt_info.body,
-                local_ty_vars,
+                &alt_info.alt_ty_vars,
             )?;
             subst_bodies = subst_compose(&subst_body, &subst_bodies);
             typed_bodies.push(typed_body);
@@ -971,6 +992,14 @@ pub(crate) fn ty_check_case_typed(
     // keep constraints from inside the scrutinee (e.g. applications)
     // don't drop them at the case boundary
     let subst_final = subst_compose(&subst_updated, &phi);
+    for alt_info in alt_infos.iter() {
+        check_no_escaped_rigid_vars(
+            env_var_to_ty_scheme,
+            &subst_final,
+            local_ty_vars,
+            &alt_info.alt_ty_vars,
+        )?;
+    }
     let typed_arg = apply_subst_typed_expr(&subst_final, typed_scrutinee);
     let ty_result = subst_ty(&subst_final, &first_body_ty);
     if alt_infos.len() != typed_bodies.len() {
@@ -1177,6 +1206,19 @@ pub(crate) fn ty_check_binding_group(
 
             env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env_in_place(&subst_accum);
 
+            // scoped type variables:
+            //   - instantiate free user-defined type vars in pattern
+            //     annotations and `optional_annot` as `Rigid` vars in
+            //     `def_ty_vars` before checking `def_expr`
+            //   - this allows type annotations inside `def_expr` to reference
+            //     and share the same rigid vars
+            // monomorphic recursion:
+            //   - in-group recursive calls inside `def_expr` look up binders in
+            //     `env_v_var_to_ty_scheme_binding_seed`, unifying against
+            //     their shared `TyAuto` placeholders rather than a generalized
+            //     polymorphic scheme
+            let mut def_ty_vars = local_ty_vars.clone();
+
             let (subst, bound_vvars_in_pattern, typed_binding_expr) =
                 ty_check_pattern_typed_with_seeded_binders(
                     env_v_var_to_ty_scheme_binding_seed,
@@ -1184,6 +1226,7 @@ pub(crate) fn ty_check_binding_group(
                     ty_env,
                     ty_var_ns,
                     pattern,
+                    &mut def_ty_vars,
                 )?;
             subst_accum = subst_compose(&subst, &subst_accum);
 
@@ -1193,10 +1236,6 @@ pub(crate) fn ty_check_binding_group(
             // typecheck RHS (enforcing explicit signature annotation if present)
             env_v_var_to_ty_scheme_binding_seed.apply_subst_to_env_in_place(&subst_accum);
 
-            // instantiate free user-defined type vars in `optional_annot` as `Rigid` vars in
-            // `def_ty_vars` before checking `def_expr`, so scoped annotations inside `def_expr`
-            // share the same rigid vars and recursive calls constrain the seeded SCC placeholders
-            let mut def_ty_vars = local_ty_vars.clone();
             let maybe_annot_inst = match optional_annot {
                 Some(ty_annot) => Some(instantiate_rigid_and_subst_ty_expr(
                     ty_annot,
@@ -1219,22 +1258,23 @@ pub(crate) fn ty_check_binding_group(
             if let Some(annot_inst) = maybe_annot_inst {
                 let annot_resolved = subst_ty(&subst_accum, &annot_inst);
                 subst_accum = unify_ty_exprs(&subst_accum, &annot_resolved, typed_rhs_vexpr.ty())?;
-                // check escape against `env_outer` (not `env_v_var_to_ty_scheme_binding_seed`)
-                // because in-group seeded placeholders in `env_v_var_to_ty_scheme_binding_seed`
-                // are expected to unify with signature `Rigid` vars during recursive SCC checking
-                check_no_escaped_rigid_vars(env_outer, &subst_accum, local_ty_vars, &def_ty_vars)?;
             }
 
             // unify LHS with RHS
             subst_accum =
                 unify_ty_exprs(&subst_accum, typed_binding_expr.ty(), typed_rhs_vexpr.ty())?;
 
+            // check escape against `env_outer` (not `env_v_var_to_ty_scheme_binding_seed`)
+            // because in-group seeded placeholders in `env_v_var_to_ty_scheme_binding_seed`
+            // are expected to unify with signature `Rigid` vars during recursive SCC checking
+            check_no_escaped_rigid_vars(env_outer, &subst_accum, local_ty_vars, &def_ty_vars)?;
+
             // keep the typed binding synchronized with the latest substitution
             // without this, pattern ty metadata can lag behind rhs/scheme typing
             typed_binding_expr = apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
             let typed_rhs_vexpr = apply_subst_typed_expr(&subst_accum, typed_rhs_vexpr);
 
-            match pattern {
+            match pattern.peel_typed() {
                 VPattern::Variable(_) => {
                     typed_binding_def_pairs.insert(
                         *idx,
@@ -1974,6 +2014,9 @@ pub(crate) fn ty_check_pattern_typed(
     ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     pattern: &VPattern,
+    // thread this parameter through due to use of it by some inner functions
+    // such as `instantiate_rigid_and_subst_ty_expr`
+    scoped_ty_vars: &mut BTreeMap<String, TyVarName>,
 ) -> Result<(Substitution, Vec<VVar>, TypedVPattern), TyError> {
     let original_seeded_lhs_binders: BTreeSet<VVar> = BTreeSet::new();
     ty_check_pattern_typed_with_seeded_binders(
@@ -1982,6 +2025,7 @@ pub(crate) fn ty_check_pattern_typed(
         ty_env,
         ty_var_ns,
         pattern,
+        scoped_ty_vars,
     )
 }
 
@@ -1993,6 +2037,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
     ty_env: &TyConEnv,
     ty_var_ns: &mut TyVarNameSupply,
     pattern: &VPattern,
+    scoped_ty_vars: &mut BTreeMap<String, TyVarName>,
 ) -> Result<(Substitution, Vec<VVar>, TypedVPattern), TyError> {
     match pattern {
         VPattern::Wild => {
@@ -2144,6 +2189,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                     &mut subst,
                     arg_pattern,
                     ty_field,
+                    scoped_ty_vars,
                 )?;
                 bound_vars.extend(collected);
                 typed_args.push(typed_arg);
@@ -2238,6 +2284,7 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                     &mut subst,
                     field_pattern,
                     expected_field_ty,
+                    scoped_ty_vars,
                 )?;
                 bound_vars.extend(collected);
                 typed_fields.push((field_name.clone(), typed_field));
@@ -2283,6 +2330,33 @@ pub(crate) fn ty_check_pattern_typed_with_seeded_binders(
                         ty_args: result_params,
                     },
                 ),
+            ))
+        }
+        VPattern::Typed { pattern, ty } => {
+            // recursive call to wrapped pattern
+            let (subst_pat, bound_vars, typed_pat_raw) =
+                ty_check_pattern_typed_with_seeded_binders(
+                    env,
+                    original_seeded_lhs_binders,
+                    ty_env,
+                    ty_var_ns,
+                    pattern,
+                    scoped_ty_vars,
+                )?;
+            env.apply_subst_to_env_in_place(&subst_pat);
+
+            let annot_inst =
+                instantiate_rigid_and_subst_ty_expr(ty, ty_env, ty_var_ns, scoped_ty_vars)?;
+            let annot_resolved = subst_ty(&subst_pat, &annot_inst);
+            let pat_ty_resolved = subst_ty(&subst_pat, typed_pat_raw.ty());
+            let subst_unified = unify_ty_exprs(&subst_pat, &pat_ty_resolved, &annot_resolved)?;
+
+            env.apply_subst_to_env_in_place(&subst_unified);
+
+            Ok((
+                subst_unified.clone(),
+                bound_vars,
+                apply_subst_typed_pattern(&subst_unified, typed_pat_raw),
             ))
         }
     }
@@ -2660,6 +2734,7 @@ fn unify_nested_pattern_typed(
     subst: &mut Substitution,
     pattern: &VPattern,
     ty_expected: &TyExpr,
+    scoped_ty_vars: &mut BTreeMap<String, TyVarName>,
 ) -> Result<(Vec<VVar>, TypedVPattern), TyError> {
     env.apply_subst_to_env_in_place(subst);
 
@@ -2670,6 +2745,7 @@ fn unify_nested_pattern_typed(
             type_env,
             ns,
             pattern,
+            scoped_ty_vars,
         )?;
 
     *subst = subst_compose(&pattern_subst, subst);
@@ -2712,6 +2788,10 @@ fn collect_all_pattern_variables_aux(
             for (_field_name, field_pattern) in fields.iter() {
                 collect_all_pattern_variables_aux(ret, field_pattern)?;
             }
+        }
+        VPattern::Typed { pattern, .. } => {
+            // apply method to wrapped pattern
+            collect_all_pattern_variables_aux(ret, pattern)?;
         }
         VPattern::Wild | VPattern::Literal { .. } | VPattern::Range { .. } => {}
     }
