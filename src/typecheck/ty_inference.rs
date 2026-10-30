@@ -1636,39 +1636,11 @@ fn validate_pattern_no_unboxed_vars(pat: &TypedVPattern) -> Result<(), TyError> 
                 });
             }
         }
-        TypedVPattern::Wild { ty } => {
-            if ty.is_unboxed_primitive() {
-                return Err(TyError::UnboxedLetBinding {
-                    ty: ty.clone(),
-                    msg: Some(format!(
-                        "cannot bind unboxed primitive type `{}` in wildcard pattern in let expression; use boxed ADT instead",
-                        ty.to_doc().to_string()
-                    )),
-                });
-            }
-        }
-        TypedVPattern::Literal { ty, .. } => {
-            if ty.is_unboxed_primitive() {
-                return Err(TyError::UnboxedLetBinding {
-                    ty: ty.clone(),
-                    msg: Some(format!(
-                        "cannot bind unboxed primitive type `{}` in literal pattern in let expression; use boxed ADT instead",
-                        ty.to_doc().to_string()
-                    )),
-                });
-            }
-        }
-        TypedVPattern::Range { ty, .. } => {
-            if ty.is_unboxed_primitive() {
-                return Err(TyError::UnboxedLetBinding {
-                    ty: ty.clone(),
-                    msg: Some(format!(
-                        "cannot bind unboxed primitive type `{}` in range pattern in let expression; use boxed ADT instead",
-                        ty.to_doc().to_string()
-                    )),
-                });
-            }
-        }
+        // non-variable patterns bind no variables into the environment or lazy
+        // thunks, so matching unboxed fields inside boxed constructors is ok
+        TypedVPattern::Wild { .. }
+        | TypedVPattern::Literal { .. }
+        | TypedVPattern::Range { .. } => {}
         TypedVPattern::Constructor { args, .. } => {
             for arg in args {
                 validate_pattern_no_unboxed_vars(arg)?;

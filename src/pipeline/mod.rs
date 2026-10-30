@@ -2338,3 +2338,20 @@ f x = case x of
 "###;
     assert_compiles_or_stg_todo(content);
 }
+
+#[test]
+fn test_pipeline_unboxed_let_wildcard_literal() {
+    let content_wildcard = r###"
+f =
+  let (Int64 _) = Int64 42
+  in Int64 1
+"###;
+    assert_compiles_or_stg_todo(content_wildcard);
+
+    let content_literal = r###"
+g =
+  let (Int64 42) = Int64 42
+  in Int64 1
+"###;
+    assert_compiles_or_stg_todo(content_literal);
+}
