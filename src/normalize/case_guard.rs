@@ -117,6 +117,19 @@ pub(crate) fn desugar_case_guard(ns: &mut VVarNameSupply, expr: &TypedVExpr) -> 
             };
             TypedVExpr::Let(let_expr_new)
         }
-        other => other.clone(),
+        TypedVExpr::Constructor(constructor) => {
+            let constructor_new = TypedVConstructorExpr {
+                args: constructor
+                    .args
+                    .iter()
+                    .map(|arg| desugar_case_guard(ns, arg))
+                    .collect(),
+                ..constructor.clone()
+            };
+            TypedVExpr::Constructor(constructor_new)
+        }
+        TypedVExpr::LitNumeric(_) | TypedVExpr::LitString(_) | TypedVExpr::Variable(_) => {
+            expr.clone()
+        }
     }
 }

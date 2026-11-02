@@ -2367,3 +2367,26 @@ h x = case x of
 "###;
     assert_compiles_or_stg_todo(content);
 }
+
+// expected normalized transformation:
+//   f a = R (
+//     let y = a in
+//     case y > Int64 0 of
+//       True  -> y
+//       False -> Int64 0
+//   )
+#[test]
+fn test_pipeline_constructor_with_guarded_case() {
+    let content = r###"
+data R {
+  x :: Int64,
+}
+
+f a = R {
+  x = case a of
+        y | y > Int64 0 -> y
+        _ -> Int64 0
+}
+"###;
+    assert_compiles_or_stg_todo(content);
+}
