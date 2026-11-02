@@ -1164,20 +1164,8 @@ pub(crate) fn ty_check_binding_group(
     // as we process SCC groups, accumulate solved substitutions so that it's usable for next SCC group
     let mut subst_accum = subst_id();
 
-    enum TypedLhsRhsPair {
-        // single variable bound; generalize as one scheme for this binder
-        SimpleVarBindingPair((TypedVPattern, TypedVExpr)),
-
-        // pattern binding (may bind multiple vars); collect bound vars for per-var generalization
-        NonSimpleVarBindingPair(
-            (
-                TypedVPattern,
-                Vec<VVar>, /*bound vvars in pattern*/
-                TypedVExpr,
-            ),
-        ),
-    }
-    let mut typed_binding_def_pairs: BTreeMap<usize, TypedLhsRhsPair> = BTreeMap::new();
+    let mut ordered_mutually_recursive_groups: Vec<BTreeMap<usize, TypedBindingGroupDef>> =
+        Vec::new();
     for scc in scc_groups.iter() {
         // per SCC:
         //  - type check patterns and RHSs against monomorphic placeholders, unifying as we go
@@ -1185,6 +1173,7 @@ pub(crate) fn ty_check_binding_group(
         //  - generalize each binding as free(def) \ free(env)
         //  - system f prep: build an scc scheme map, apply it to typed nodes, stamp scheme order,
         //    then backfill recursive ty_args
+        let mut scc_typed_defs: BTreeMap<usize, (TypedVPattern, TypedVExpr)> = BTreeMap::new();
 
         for idx in scc.iter() {
             let (pattern, def_expr, optional_annot): &(VPattern, VExpr, Option<TyExpr>) =
@@ -1205,7 +1194,7 @@ pub(crate) fn ty_check_binding_group(
             //     polymorphic scheme
             let mut def_ty_vars = local_ty_vars.clone();
 
-            let (subst, bound_vvars_in_pattern, typed_binding_expr) =
+            let (subst, _bound_vvars_in_pattern, typed_binding_expr) =
                 ty_check_pattern_typed_with_seeded_binders(
                     env_v_var_to_ty_scheme_binding_seed,
                     &original_seeded_lhs_binders,
@@ -1260,264 +1249,158 @@ pub(crate) fn ty_check_binding_group(
             typed_binding_expr = apply_subst_typed_pattern(&subst_accum, typed_binding_expr);
             let typed_rhs_vexpr = apply_subst_typed_expr(&subst_accum, typed_rhs_vexpr);
 
-            match pattern.peel_typed() {
-                VPattern::Variable(_) => {
-                    typed_binding_def_pairs.insert(
-                        *idx,
-                        TypedLhsRhsPair::SimpleVarBindingPair((
-                            typed_binding_expr,
-                            typed_rhs_vexpr,
-                        )),
-                    );
-                }
-                _ => {
-                    typed_binding_def_pairs.insert(
-                        *idx,
-                        TypedLhsRhsPair::NonSimpleVarBindingPair((
-                            typed_binding_expr,
-                            bound_vvars_in_pattern,
-                            typed_rhs_vexpr,
-                        )),
-                    );
-                }
-            }
+            scc_typed_defs.insert(*idx, (typed_binding_expr, typed_rhs_vexpr));
         }
 
         // synchronize all typed pairs in this SCC with the final accumulated substitution
-        for idx in scc.iter() {
-            if let Some(entry) = typed_binding_def_pairs.get_mut(idx) {
-                match entry {
-                    TypedLhsRhsPair::SimpleVarBindingPair((pat, rhs)) => {
-                        *pat = apply_subst_typed_pattern(&subst_accum, pat.clone());
-                        *rhs = apply_subst_typed_expr(&subst_accum, rhs.clone());
-                    }
-                    TypedLhsRhsPair::NonSimpleVarBindingPair((pat, _, rhs)) => {
-                        *pat = apply_subst_typed_pattern(&subst_accum, pat.clone());
-                        *rhs = apply_subst_typed_expr(&subst_accum, rhs.clone());
-                    }
-                }
+        //
+        // scc_has_non_simple_binding is used later for generalization purposes
+        let mut scc_has_non_simple_binding = false;
+        for (typed_pattern, typed_rhs) in scc_typed_defs.values_mut() {
+            if !matches!(typed_pattern, TypedVPattern::Variable { .. }) {
+                scc_has_non_simple_binding = true;
             }
+            *typed_pattern = apply_subst_typed_pattern(&subst_accum, typed_pattern.clone());
+            *typed_rhs = apply_subst_typed_expr(&subst_accum, typed_rhs.clone());
         }
 
         // generalization (per SCC)
-        // - compute free vars in each def and in the outer env
-        // - scheme vars = free(def) \ free(env)
-        // - record type scheme on simple binders for translating to core IR
-        // - update monomorphic placeholders after generalization completes
-        let free_ty_vars_in_env: BTreeSet<_> = {
-            let mut env_outer_copy = env_outer.clone();
-            env_outer_copy.apply_subst_to_env_in_place(&subst_accum);
-
-            // `free(env)` for HM generalization:
-            // type vars in scheme bodies that are not bound by the scheme,
-            // plus any rigid type variables in lexical scope (`local_ty_vars`)
-            free_tvns_in_ty_env(&env_outer_copy)
-                .into_iter()
-                .chain(local_ty_vars.values().cloned())
-                .collect()
-        };
-
-        // scc-wide map from generalized unification vars (both `Auto` and signature-introduced
-        // `Rigid` vars not in `free_ty_vars_in_env`) to canonical `Auto` scheme vars
+        // - using pattern binding policy (see SPJ 1987 book's section 9.5.2)
+        // - an SCC containing any non-simple pattern binding is restricted from generalization;
+        //   all binders in the SCC remain monomorphic (where ty_vars_schematic is empty)
+        // - unrestricted SCCs (only simple variable bindings) generalize:
+        //   scheme vars = free(def) \ free(env)
+        //
+        // SCC-wide map from generalized unification vars (both `Auto` and `Rigid` vars not
+        // in `free_ty_vars_in_env`) to canonical `Auto` scheme vars
         //
         // keeps mutually recursive binders in sync when they share a generalized var,
         // so one scc_subst can rewrite all RHSs/patterns and ty_args consistently
-        let mut scc_scheme_var_map: BTreeMap<TyVarName, TyVarName> = BTreeMap::new();
+        let scc_scheme_var_map: BTreeMap<TyVarName, TyVarName> = if scc_has_non_simple_binding {
+            // restrict from generalization
+            BTreeMap::new()
+        } else {
+            let free_ty_vars_in_env: BTreeSet<_> = {
+                let mut env_outer_copy = env_outer.clone();
+                env_outer_copy.apply_subst_to_env_in_place(&subst_accum);
 
-        // first generalization pass: collect generalizable vars and build the scc-wide scheme map ---
-        // per-binder ordering is recomputed later to avoid keeping a separate map
-        for idx in scc.iter() {
-            let entry = typed_binding_def_pairs
-                .get(idx)
-                .expect("SCC indices are drawn from binding definitions");
-            match entry {
-                TypedLhsRhsPair::SimpleVarBindingPair((_typed_binding_vexpr, typed_def_vexpr)) => {
-                    // set subtract: free type variables in def texpr \ free type variables (schematic vars) from env
+                // `free(env)` for HM generalization:
+                // type vars in scheme bodies that are not bound by the scheme,
+                // plus any rigid type variables in lexical scope (`local_ty_vars`)
+                free_tvns_in_ty_env(&env_outer_copy)
+                    .into_iter()
+                    .chain(local_ty_vars.values().cloned())
+                    .collect()
+            };
 
-                    let free_ty_vars_in_def = free_ty_vars(typed_def_vexpr.ty());
-                    let ty_vars_generalizable: Vec<_> = free_ty_vars_in_def
-                        .into_iter()
-                        .filter(|tvn| !free_ty_vars_in_env.contains(tvn))
-                        .collect();
-                    for tvn in &ty_vars_generalizable {
-                        scc_scheme_var_map
-                            .entry(tvn.clone())
-                            // generate new type variables for schematic type variables to avoid name collision
-                            .or_insert_with(|| ty_var_ns.generate());
+            let mut map = BTreeMap::new();
+            for (_typed_pattern, typed_rhs) in scc_typed_defs.values() {
+                // set subtract: free type variables in def texpr \ schematic type variables from env
+                for tvn in free_ty_vars(typed_rhs.ty()) {
+                    if !free_ty_vars_in_env.contains(&tvn) {
+                        // generate new type variables for schematic type variables to avoid name collision
+                        map.entry(tvn).or_insert_with(|| ty_var_ns.generate());
                     }
                 }
-
-                // pattern binding policy
-                // - pattern-bound variables stay monomorphic (MR-style); no scheme vars
-                TypedLhsRhsPair::NonSimpleVarBindingPair(_) => {}
             }
-        }
+            map
+        };
 
+        // create generalization substitution after 1st pass solved types for the SCC bindings
         let scc_subst_map: BTreeMap<_, _> = scc_scheme_var_map
             .iter()
             .map(|(tvn, scheme_tvn)| (tvn.clone(), TyExpr::TyVar(scheme_tvn.clone())))
             .collect();
         let scc_subst = subst_from_map(&scc_subst_map);
 
-        // second generalization pass: apply scc substitution, finalize schemes, and stamp scheme vars
-        for idx in scc.iter() {
-            let entry = typed_binding_def_pairs
-                .get_mut(idx)
-                .expect("SCC indices are drawn from binding definitions");
-            match entry {
-                TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, typed_def_vexpr)) => {
-                    let var = match &*typed_binding_vexpr {
-                        TypedVPattern::Variable { binder, .. } => binder.clone(),
-                        _ => unreachable!("simple pairs are created from variable patterns"),
+        // second generalization pass: apply scc substitution, finalize schemes, and stamp schematic type vars
+        let mut functions_in_group: BTreeMap<usize, TypedBindingGroupDef> = BTreeMap::new();
+        let mut scheme_info_for_scc: BTreeMap<VVar, TyScheme> = BTreeMap::new();
+
+        for (idx, (mut typed_pattern, typed_rhs)) in scc_typed_defs {
+            let scheme = match &mut typed_pattern {
+                // single variable bound; generalize as one scheme for this binder
+                TypedVPattern::Variable {
+                    binder,
+                    ty,
+                    ty_schematic,
+                } => {
+                    let scheme_ty_vars: Vec<_> = free_ty_vars(typed_rhs.ty())
+                        .into_iter()
+                        .filter_map(|tvn| scc_scheme_var_map.get(&tvn).cloned())
+                        .collect();
+
+                    let scheme = TyScheme {
+                        // mapped schematic type variables
+                        ty_vars_schematic: scheme_ty_vars,
+                        // apply substitution
+                        ty_expr: Box::new(subst_ty(&scc_subst, typed_rhs.ty())),
                     };
 
-                    // recompute per-binder generalized vars so the ordering stays local and fresh
-                    let ty_vars_generalizable: Vec<_> = free_ty_vars(typed_def_vexpr.ty())
-                        .into_iter()
-                        .filter(|tvn| !free_ty_vars_in_env.contains(tvn))
-                        .collect();
-                    let scheme_ty_vars: Vec<_> = ty_vars_generalizable
-                        .iter()
-                        .map(|tvn| {
-                            scc_scheme_var_map.get(tvn).cloned().ok_or_else(|| {
-                                TyError::InternalError(
-                                    format_args!("def_idx={:?} missing_tvn={:?}", idx, tvn)
-                                        .to_string(),
-                                )
-                            })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                    // note: in-place mutation of fields in `typed_pattern`:
+                    //
+                    // apply scc substitution and stamp scheme order
+                    *ty = subst_ty(&scc_subst, ty);
+                    // record generalized type scheme on the binding for
+                    // translating to core IR later
+                    *ty_schematic = scheme.clone();
 
                     // update for inferencing for remaining SCC groups
-                    let ty_scheme_updated = TyScheme {
-                        // mapped schematic type variables
-                        ty_vars_schematic: scheme_ty_vars.clone(),
-                        // apply substitution
-                        ty_expr: Box::new(subst_ty(&scc_subst, typed_def_vexpr.ty())),
-                    };
+                    env_v_var_to_ty_scheme_binding_seed.insert(binder.clone(), scheme.clone());
+                    env_outer.insert(binder.clone(), scheme.clone());
 
-                    env_v_var_to_ty_scheme_binding_seed
-                        .insert(var.clone(), ty_scheme_updated.clone());
-                    env_outer.insert(var.clone(), ty_scheme_updated.clone());
+                    // this is later used for explicit type argument filling at call sites
+                    scheme_info_for_scc.insert(binder.clone(), scheme.clone());
 
-                    // apply scc substitution and stamp scheme order
-                    let binding_after_subst =
-                        apply_subst_typed_pattern(&scc_subst, typed_binding_vexpr.clone());
-                    let rhs_after_subst =
-                        apply_subst_typed_expr(&scc_subst, typed_def_vexpr.clone());
-                    *typed_def_vexpr = rhs_after_subst;
-
-                    // record generalized type scheme on the binding for ease of
-                    // translation to core IR later
-                    *typed_binding_vexpr = set_scheme_ty_vars_for_binder_in_pattern(
-                        binding_after_subst,
-                        &var,
-                        ty_scheme_updated.clone(),
-                    );
+                    scheme
                 }
-                TypedLhsRhsPair::NonSimpleVarBindingPair((
-                    typed_pattern_vexpr,
-                    bound_vvars_in_pattern,
-                    typed_def_vexpr,
-                )) => {
-                    // pattern binding policy
-                    // - pattern-bound variables are monomorphic; do not attach scheme vars
-                    let binding_after_subst =
-                        apply_subst_typed_pattern(&scc_subst, typed_pattern_vexpr.clone());
-                    let rhs_after_subst =
-                        apply_subst_typed_expr(&scc_subst, typed_def_vexpr.clone());
-                    *typed_def_vexpr = rhs_after_subst;
+                // pattern binding (may bind multiple vars):
+                //
+                // - collect bound vars for per-var generalization
+                // - pattern-bound variables are monomorphic,
+                //   they don't have schematic type vars
+                non_simple => {
                     let mut pat_var_types: BTreeMap<VVar, TyExpr> = BTreeMap::new();
-                    collect_typed_pattern_var_types(&binding_after_subst, &mut pat_var_types);
-                    for var in bound_vvars_in_pattern.iter() {
-                        if let Some(ty_var) = pat_var_types.get(var) {
-                            let scheme = TyScheme {
-                                ty_vars_schematic: Vec::new(),
-                                ty_expr: Box::new(ty_var.clone()),
-                            };
-                            env_v_var_to_ty_scheme_binding_seed.insert(var.clone(), scheme.clone());
-                            env_outer.insert(var.clone(), scheme);
-                        }
+                    collect_typed_pattern_var_types(non_simple, &mut pat_var_types);
+                    for (var, ty_var) in pat_var_types {
+                        let var_scheme = TyScheme {
+                            ty_vars_schematic: Vec::new(), // monomorphic
+                            ty_expr: Box::new(ty_var),
+                        };
+                        env_v_var_to_ty_scheme_binding_seed.insert(var.clone(), var_scheme.clone());
+                        env_outer.insert(var, var_scheme);
                     }
-                    *typed_pattern_vexpr = binding_after_subst;
-                }
-            }
-        }
 
-        // fill recursive uses with explicit ty_args
-        //
-        // derive schemes from stamped binding patterns to keep a single source of truth
-        let scheme_info_for_scc: BTreeMap<VVar, TyScheme> = typed_binding_def_pairs
-            .values()
-            .filter_map(|entry| match entry {
-                TypedLhsRhsPair::SimpleVarBindingPair((typed_binding_vexpr, _typed_def_vexpr)) => {
-                    match typed_binding_vexpr {
-                        TypedVPattern::Variable {
-                            binder,
-                            ty_schematic,
-                            ..
-                        } => Some((binder.clone(), ty_schematic.clone())),
-                        _ => None,
-                    }
-                }
-                _ => None,
-            })
-            .collect();
-        if !scheme_info_for_scc.is_empty() {
-            for idx in scc.iter() {
-                if let Some(entry) = typed_binding_def_pairs.get_mut(idx)
-                    && let TypedLhsRhsPair::SimpleVarBindingPair((_, typed_def_vexpr)) = entry
-                {
-                    *typed_def_vexpr =
-                        fill_missing_ty_args(typed_def_vexpr.clone(), &scheme_info_for_scc)?;
-                }
-            }
-        }
-    }
-
-    let final_defs: BTreeMap<usize, TypedBindingGroupDef> = typed_binding_def_pairs
-        .into_iter()
-        .map(|(idx, pair)| {
-            let (typed_pattern, typed_rhs, scheme) = match pair {
-                TypedLhsRhsPair::SimpleVarBindingPair((pat, rhs)) => {
-                    let scheme = match &pat {
-                        TypedVPattern::Variable { ty_schematic, .. } => ty_schematic.clone(),
-                        _ => TyScheme {
-                            ty_vars_schematic: Vec::new(),
-                            ty_expr: Box::new(rhs.ty().clone()),
-                        },
-                    };
-                    (pat, rhs, scheme)
-                }
-                TypedLhsRhsPair::NonSimpleVarBindingPair((pat, _, rhs)) => {
-                    let scheme = TyScheme {
+                    TyScheme {
                         ty_vars_schematic: Vec::new(),
-                        ty_expr: Box::new(rhs.ty().clone()),
-                    };
-                    (pat, rhs, scheme)
+                        ty_expr: Box::new(typed_rhs.ty().clone()),
+                    }
                 }
             };
-            (
+
+            let typed_rhs = apply_subst_typed_expr(&scc_subst, typed_rhs);
+
+            functions_in_group.insert(
                 idx,
                 TypedBindingGroupDef {
                     typed_pattern,
                     typed_rhs,
                     scheme,
                 },
-            )
-        })
-        .collect();
+            );
+        }
 
-    let ordered_mutually_recursive_groups = scc_groups
-        .iter()
-        .map(|scc_group| {
-            let functions_in_group = scc_group
-                .iter()
-                .map(|idx| (*idx, final_defs.get(idx).unwrap().clone()))
-                .collect();
-            functions_in_group
-        })
-        .collect();
+        // fill recursive uses with explicit ty_args (only when bindings were generalized)
+        //
+        // note: scc_scheme_var_map is empty for SCC when restricted from generalization
+        if !scc_scheme_var_map.is_empty() {
+            for def in functions_in_group.values_mut() {
+                def.typed_rhs = fill_missing_ty_args(def.typed_rhs.clone(), &scheme_info_for_scc)?;
+            }
+        }
+
+        ordered_mutually_recursive_groups.push(functions_in_group);
+    }
 
     Ok((subst_accum, ordered_mutually_recursive_groups))
 }
@@ -2513,96 +2396,6 @@ pub(crate) fn fill_missing_ty_args(
                 ty_args: constructor.ty_args,
             }))
         }
-    }
-}
-
-/// intent: associate a deterministic TyLam order with the binding site so downstream System F
-/// elaboration can recover it
-///
-/// update `pattern` by attaching `scheme_ty_vars` to the binder matching `binder_target`
-/// preserve the rest of the pattern structure
-///
-/// use cases:
-/// - after generalizing a simple let binding, stamp `scheme_ty_vars` on `binder_target` so Core
-///   elaboration can insert TyLam binders in the same order
-/// - after generalizing a non-simple pattern binding, update `binder_target` inside `pattern`
-///   for the same purpose
-fn set_scheme_ty_vars_for_binder_in_pattern(
-    pattern: TypedVPattern,
-    binder_target: &VVar,
-    ty_schematic: TyScheme,
-) -> TypedVPattern {
-    // attach scheme vars to the matching binder while preserving other pattern structure
-    match pattern {
-        TypedVPattern::Variable {
-            binder: pat_binder,
-            ty,
-            ty_schematic: existing,
-        } => {
-            if &pat_binder == binder_target {
-                TypedVPattern::Variable {
-                    binder: pat_binder,
-                    ty,
-                    ty_schematic,
-                }
-            } else {
-                TypedVPattern::Variable {
-                    binder: pat_binder,
-                    ty,
-                    ty_schematic: existing,
-                }
-            }
-        }
-        TypedVPattern::Constructor {
-            ty_name,
-            constructor,
-            args,
-            ty,
-            ty_args,
-        } => TypedVPattern::Constructor {
-            ty_name,
-            constructor,
-            args: args
-                .into_iter()
-                .map(|arg| {
-                    set_scheme_ty_vars_for_binder_in_pattern(
-                        arg,
-                        binder_target,
-                        ty_schematic.clone(),
-                    )
-                })
-                .collect(),
-            ty,
-            ty_args,
-        },
-        TypedVPattern::Record {
-            ty_name,
-            constructor,
-            fields,
-            rest,
-            ty,
-            ty_args,
-        } => TypedVPattern::Record {
-            ty_name,
-            constructor,
-            fields: fields
-                .into_iter()
-                .map(|(name, pat)| {
-                    (
-                        name,
-                        set_scheme_ty_vars_for_binder_in_pattern(
-                            pat,
-                            binder_target,
-                            ty_schematic.clone(),
-                        ),
-                    )
-                })
-                .collect(),
-            rest,
-            ty,
-            ty_args,
-        },
-        other => other,
     }
 }
 
