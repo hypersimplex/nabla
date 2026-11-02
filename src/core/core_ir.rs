@@ -737,18 +737,26 @@ pub(crate) fn core_expr_from_lit_num(
     expr: &TypedVLitNumeric,
 ) -> CoreResult<CoreExpr> {
     match &expr.val.value {
-        NumericLiteralValue::Int { raw: _, parsed } => Ok(CoreExpr::Literal(
-            CoreLiteral::LitNumericIntegral(CoreLitNumericIntegral {
+        NumericLiteralValue::Int { .. } => Ok(CoreExpr::Literal(CoreLiteral::LitNumericIntegral(
+            CoreLitNumericIntegral {
                 loc: expr.val.loc.clone(),
-                value: parsed.unwrap(),
-            }),
-        )),
-        NumericLiteralValue::Float { raw: _, parsed } => Ok(CoreExpr::Literal(
-            CoreLiteral::LitNumericFloat(CoreLitNumericFloat {
+                value: expr
+                    .val
+                    .value
+                    .as_i64()
+                    .expect("integer literal must have valid value"),
+            },
+        ))),
+        NumericLiteralValue::Float { .. } => Ok(CoreExpr::Literal(CoreLiteral::LitNumericFloat(
+            CoreLitNumericFloat {
                 loc: expr.val.loc.clone(),
-                value: parsed.unwrap(),
-            }),
-        )),
+                value: expr
+                    .val
+                    .value
+                    .as_f64()
+                    .expect("float literal must have valid value"),
+            },
+        ))),
     }
 }
 
@@ -907,16 +915,22 @@ fn core_case_alt_from_pattern_and_body(
         TypedVPattern::Literal { literal, .. } => {
             let core_lit = match literal {
                 VPatternLiteral::Numeric(num) => match &num.value {
-                    NumericLiteralValue::Int { raw: _, parsed } => {
+                    NumericLiteralValue::Int { .. } => {
                         CoreLiteral::LitNumericIntegral(CoreLitNumericIntegral {
                             loc: num.loc.clone(),
-                            value: parsed.unwrap(),
+                            value: num
+                                .value
+                                .as_i64()
+                                .expect("integer literal in pattern must have valid value"),
                         })
                     }
-                    NumericLiteralValue::Float { raw: _, parsed } => {
+                    NumericLiteralValue::Float { .. } => {
                         CoreLiteral::LitNumericFloat(CoreLitNumericFloat {
                             loc: num.loc.clone(),
-                            value: parsed.unwrap(),
+                            value: num
+                                .value
+                                .as_f64()
+                                .expect("float literal in pattern must have valid value"),
                         })
                     }
                 },

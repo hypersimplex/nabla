@@ -139,6 +139,34 @@ pub(crate) enum NumericLiteralValue {
     Float { raw: String, parsed: Option<f64> },
 }
 
+impl NumericLiteralValue {
+    pub(crate) fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Int { raw, parsed } => parsed.or_else(|| {
+                if raw.contains('_') {
+                    raw.replace('_', "").parse::<i64>().ok()
+                } else {
+                    raw.parse::<i64>().ok()
+                }
+            }),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Float { raw, parsed } => parsed.or_else(|| {
+                if raw.contains('_') {
+                    raw.replace('_', "").parse::<f64>().ok()
+                } else {
+                    raw.parse::<f64>().ok()
+                }
+            }),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum RangeBound<T> {
     Inclusive(T),
@@ -281,15 +309,20 @@ pub(crate) fn classify_numeric_literal(
         );
     };
     // for simplicity, assume that parser checked validity of these
+    let sanitized = if raw.contains('_') {
+        raw.replace('_', "")
+    } else {
+        raw.clone()
+    };
     if raw.contains('.') || raw.contains('e') || raw.contains('E') {
         NumericLiteralValue::Float {
             raw: raw.clone(),
-            parsed: raw.parse::<f64>().ok(), // parse now to avoid repeated parsing downstream
+            parsed: sanitized.parse::<f64>().ok(), // parse now to avoid repeated parsing downstream
         }
     } else {
         NumericLiteralValue::Int {
             raw: raw.clone(),
-            parsed: raw.parse::<i64>().ok(),
+            parsed: sanitized.parse::<i64>().ok(),
         }
     }
 }
@@ -423,8 +456,14 @@ impl DocPrinter for NumericLiteralValue {
     fn to_doc(&self) -> Box<Doc> {
         use NumericLiteralValue::*;
         match self {
-            Int { parsed, .. } => Doc::lit(&format!("{}", parsed.as_ref().unwrap())),
-            Float { parsed, .. } => Doc::lit(&format!("{}", parsed.as_ref().unwrap())),
+            Int { parsed, raw } => match parsed {
+                Some(val) => Doc::lit(&format!("{}", val)),
+                None => Doc::lit(raw),
+            },
+            Float { parsed, raw } => match parsed {
+                Some(val) => Doc::lit(&format!("{}", val)),
+                None => Doc::lit(raw),
+            },
         }
     }
 }

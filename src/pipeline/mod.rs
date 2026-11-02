@@ -2355,3 +2355,15 @@ g =
 "###;
     assert_compiles_or_stg_todo(content_literal);
 }
+
+#[test]
+fn test_pipeline_numeric_literal_underscores() {
+    let content = r###"
+f x = 1_000
+g x = 3.141_592
+h x = case x of
+        1_000 -> 2_000
+        _ -> 0
+"###;
+    assert_compiles_or_stg_todo(content);
+}

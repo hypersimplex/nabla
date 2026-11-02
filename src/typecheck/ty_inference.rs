@@ -1883,22 +1883,18 @@ pub(crate) fn ty_check_lit_numeric(
     vexpr: &VLitNumeric,
 ) -> Result<(Substitution, TyExpr), TyError> {
     match &vexpr.value {
-        NumericLiteralValue::Int { parsed, raw } => {
-            match parsed.to_owned().or_else(|| raw.parse::<i64>().ok()) {
-                Some(_) => Ok((subst_id(), mk_ty_unboxed_int64())),
-                None => Err(TyError::Unexpected(
-                    format!("type checking literal (int) failed for {:?}", vexpr).to_string(),
-                )),
-            }
-        }
-        NumericLiteralValue::Float { parsed, raw } => {
-            match parsed.to_owned().or_else(|| raw.parse::<f64>().ok()) {
-                Some(_) => Ok((subst_id(), mk_ty_unboxed_float64())),
-                None => Err(TyError::Unexpected(
-                    format!("type checking literal (float) failed for {:?}", vexpr).to_string(),
-                )),
-            }
-        }
+        NumericLiteralValue::Int { .. } => match vexpr.value.as_i64() {
+            Some(_) => Ok((subst_id(), mk_ty_unboxed_int64())),
+            None => Err(TyError::Unexpected(
+                format!("type checking literal (int) failed for {:?}", vexpr).to_string(),
+            )),
+        },
+        NumericLiteralValue::Float { .. } => match vexpr.value.as_f64() {
+            Some(_) => Ok((subst_id(), mk_ty_unboxed_float64())),
+            None => Err(TyError::Unexpected(
+                format!("type checking literal (float) failed for {:?}", vexpr).to_string(),
+            )),
+        },
     }
 }
 
