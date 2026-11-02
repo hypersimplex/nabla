@@ -2416,3 +2416,30 @@ f a = R {
 "###;
     assert_compiles_or_stg_todo(content);
 }
+
+// negative test
+//
+// mutually recursive let bindings mixing a pattern binding (`Just m = Just k`)
+// and a simple binding (`k = m`)
+//
+// `m` stays monomorphic, `k` cannot generalize over shared type variable:
+//   1. `Just m = Just k` and `k = m` => `m` unify with `k` to a monomorphic type `t`
+//   2. `m 1` unifies: `t` ~ `Int64# -> t_ret1`, then it propagates to:
+//      `k` ~ `Int64# -> t_ret1`
+//   3. `k "a"` tries to unify `k`'s domain `Int64#` with `Bytes#`, and should
+//      fail with TypeConflict
+#[test]
+fn test_pipeline_mixed_pattern_simple_binding_scc_unsound_polymorphism_rejected() {
+    let content = r###"
+f =
+  let Just m = Just k
+      k = m
+  in m 1 (k "a")
+"###;
+    let res = compile(content);
+    assert!(
+        matches!(res, Err(CompileError::Type(TyError::TypeConflict { .. }))),
+        "expected TypeConflict for mixed SCC with monomorphic pattern binding, got {:?}",
+        res
+    );
+}
