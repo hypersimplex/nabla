@@ -7,9 +7,9 @@ use crate::typecheck::ty_var_name::*;
 /// resolve a builtin primitive type name to its type constructor
 pub(crate) fn resolve_builtin_ty_con(name: &str) -> Option<TyConBuiltin> {
     match name {
-        "Int64#" => Some(TyConBuiltin::Int64),
-        "Float64#" => Some(TyConBuiltin::Float64),
-        "Bytes#" => Some(TyConBuiltin::Bytes),
+        "Int64#" => Some(TyConBuiltin::PrimInt64),
+        "Float64#" => Some(TyConBuiltin::PrimFloat64),
+        "Bytes#" => Some(TyConBuiltin::PrimBytes),
         "->" => Some(TyConBuiltin::Arrow),
         _ => None,
     }

@@ -3113,7 +3113,8 @@ mod tests {
         let s_comp1 = subst_delta(&var_a, &TyExpr::TyVar(var_b.clone()));
         let s_comp2 = subst_delta(&var_b, &mk_ty_unboxed_int64());
         let res = unify_substs(&s_comp1, &s_comp2).unwrap();
-        let is_int64 = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Int64)));
+        let is_int64 =
+            |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimInt64)));
         assert!(is_int64(&subst_ty(&res, &TyExpr::TyVar(var_a.clone()))));
         assert!(is_int64(&subst_ty(&res, &TyExpr::TyVar(var_b))));
 

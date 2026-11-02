@@ -35,27 +35,27 @@ impl TyCon {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum TyConBuiltin {
-    Int64,
-    Float64,
-    Bytes,
+    PrimInt64,
+    PrimFloat64,
+    PrimBytes,
     Arrow,
 }
 
 impl TyConBuiltin {
     pub(crate) fn arity(&self) -> usize {
         match self {
-            TyConBuiltin::Int64 => 0,
-            TyConBuiltin::Float64 => 0,
-            TyConBuiltin::Bytes => 0,
+            TyConBuiltin::PrimInt64 => 0,
+            TyConBuiltin::PrimFloat64 => 0,
+            TyConBuiltin::PrimBytes => 0,
             TyConBuiltin::Arrow => 2,
         }
     }
 
     pub(crate) fn name(&self) -> &'static str {
         match self {
-            TyConBuiltin::Int64 => "Int64#",
-            TyConBuiltin::Float64 => "Float64#",
-            TyConBuiltin::Bytes => "Bytes#",
+            TyConBuiltin::PrimInt64 => "Int64#",
+            TyConBuiltin::PrimFloat64 => "Float64#",
+            TyConBuiltin::PrimBytes => "Bytes#",
             TyConBuiltin::Arrow => "->",
         }
     }
@@ -63,7 +63,7 @@ impl TyConBuiltin {
     pub(crate) fn is_unboxed(&self) -> bool {
         matches!(
             self,
-            TyConBuiltin::Int64 | TyConBuiltin::Float64 | TyConBuiltin::Bytes
+            TyConBuiltin::PrimInt64 | TyConBuiltin::PrimFloat64 | TyConBuiltin::PrimBytes
         )
     }
 }
@@ -197,17 +197,17 @@ pub(crate) fn mk_ty_arrow_multi(args: Vec<TyExpr>, ret: TyExpr) -> TyExpr {
 
 /// build the unboxed Int64# primitive type
 pub(crate) fn mk_ty_unboxed_int64() -> TyExpr {
-    TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Int64))
+    TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimInt64))
 }
 
 /// build the unboxed Float64# primitive type
 pub(crate) fn mk_ty_unboxed_float64() -> TyExpr {
-    TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Float64))
+    TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimFloat64))
 }
 
 /// build the Bytes primitive type
 pub(crate) fn mk_ty_bytes() -> TyExpr {
-    TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Bytes))
+    TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimBytes))
 }
 
 /// build the Int64 boxed type

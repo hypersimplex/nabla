@@ -949,7 +949,7 @@ bad = f 0
     match res {
         Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
             let is_str = matches!(ty1, TyExpr::TyCon(TyCon::User(ref s)) if s == "String");
-            let is_int = matches!(ty2, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Int64)));
+            let is_int = matches!(ty2, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimInt64)));
             assert!(is_str && is_int);
         }
         other => panic!(
@@ -1242,7 +1242,7 @@ f z = case 0 of
     match res {
         Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
             let is_int =
-                |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Int64)));
+                |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimInt64)));
             let is_str = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::User(s)) if s == "String");
             let is_int_and_str = (is_int(&ty1) && is_str(&ty2)) || (is_str(&ty1) && is_int(&ty2));
             assert!(
@@ -2220,7 +2220,7 @@ bad = f "hello"
     match res {
         Err(CompileError::Type(TyError::TypeConflict { ty1, ty2, .. })) => {
             let is_bytes =
-                |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::Bytes)));
+                |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::Builtin(TyConBuiltin::PrimBytes)));
             let is_str = |t: &TyExpr| matches!(t, TyExpr::TyCon(TyCon::User(s)) if s == "String");
             assert!((is_str(&ty1) && is_bytes(&ty2)) || (is_bytes(&ty1) && is_str(&ty2)));
         }

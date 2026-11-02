@@ -223,9 +223,9 @@ pub(crate) enum CoreTyCon {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum CoreTyConBuiltin {
-    Int64,
-    Float64,
-    Bytes,
+    PrimInt64,
+    PrimFloat64,
+    PrimBytes,
     Arrow,
 }
 
@@ -233,9 +233,9 @@ impl<'a> From<&'a TyConBuiltin> for CoreTyConBuiltin {
     fn from(builtin: &'a TyConBuiltin) -> Self {
         use TyConBuiltin::*;
         match builtin {
-            Int64 => CoreTyConBuiltin::Int64,
-            Float64 => CoreTyConBuiltin::Float64,
-            Bytes => CoreTyConBuiltin::Bytes,
+            PrimInt64 => CoreTyConBuiltin::PrimInt64,
+            PrimFloat64 => CoreTyConBuiltin::PrimFloat64,
+            PrimBytes => CoreTyConBuiltin::PrimBytes,
             Arrow => CoreTyConBuiltin::Arrow,
         }
     }
@@ -362,7 +362,7 @@ pub(crate) struct CoreLitNumericIntegral {
 
 impl CoreLitNumericIntegral {
     fn ty(&self) -> CoreTy {
-        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Int64))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::PrimInt64))
     }
 }
 
@@ -375,7 +375,7 @@ pub(crate) struct CoreLitNumericFloat {
 
 impl CoreLitNumericFloat {
     fn ty(&self) -> CoreTy {
-        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Float64))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::PrimFloat64))
     }
 }
 
@@ -388,7 +388,7 @@ pub(crate) struct CoreLitString {
 
 impl CoreLitString {
     fn ty(&self) -> CoreTy {
-        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::Bytes))
+        CoreTy::TyConstructor(CoreTyCon::Builtin(CoreTyConBuiltin::PrimBytes))
     }
 }
 
@@ -1215,9 +1215,9 @@ impl DocPrinter for CoreTyConBuiltin {
     fn to_doc(&self) -> Box<Doc> {
         use CoreTyConBuiltin::*;
         match self {
-            Int64 => Doc::lit("Int64#"),
-            Float64 => Doc::lit("Float64#"),
-            Bytes => Doc::lit("Bytes#"),
+            PrimInt64 => Doc::lit("Int64#"),
+            PrimFloat64 => Doc::lit("Float64#"),
+            PrimBytes => Doc::lit("Bytes#"),
             Arrow => Doc::lit("->"),
         }
     }
