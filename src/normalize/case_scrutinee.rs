@@ -103,6 +103,19 @@ pub(crate) fn normalize_case_scrutinee(ns: &mut VVarNameSupply, expr: &TypedVExp
             };
             TypedVExpr::Let(let_expr_new)
         }
-        other => other.clone(),
+        TypedVExpr::Constructor(constructor) => {
+            let constructor_new = TypedVConstructorExpr {
+                args: constructor
+                    .args
+                    .iter()
+                    .map(|arg| normalize_case_scrutinee(ns, arg))
+                    .collect(),
+                ..constructor.clone()
+            };
+            TypedVExpr::Constructor(constructor_new)
+        }
+        TypedVExpr::LitNumeric(_) | TypedVExpr::LitString(_) | TypedVExpr::Variable(_) => {
+            expr.clone()
+        }
     }
 }

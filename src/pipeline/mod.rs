@@ -2370,8 +2370,9 @@ h x = case x of
 
 // expected normalized transformation:
 //   f a = R (
-//     let y = a in
-//     case y > Int64 0 of
+//     let y  = a in
+//     let v2 = y > Int64 0 in
+//     case v2 of
 //       True  -> y
 //       False -> Int64 0
 //   )
@@ -2386,6 +2387,31 @@ f a = R {
   x = case a of
         y | y > Int64 0 -> y
         _ -> Int64 0
+}
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
+// expected normalized transformation:
+//   f a = R (
+//     let v1 = g a in
+//     case v1 of
+//       Maybe.Just v  -> v
+//       Maybe.Nothing -> Int64 0
+//   )
+#[test]
+fn test_pipeline_constructor_case_scrutinee_normalization() {
+    let content = r###"
+data R {
+  x :: Int64,
+}
+
+g x = Maybe.Just x
+
+f a = R {
+  x = case g a of
+        Maybe.Just v  -> v
+        Maybe.Nothing -> Int64 0
 }
 "###;
     assert_compiles_or_stg_todo(content);
