@@ -1879,6 +1879,16 @@ f (R { x = (v :: String) }) = v
     ));
 }
 
+// positive test: local binder named after builtin shadows global builtin
+#[test]
+fn test_pipeline_local_binder_named_after_builtin() {
+    let content = r###"
+f :: a -> a
+f prim_add_int64 = prim_add_int64
+"###;
+    assert_compiles_or_stg_todo(content);
+}
+
 // negative test: nested pattern type annotation mismatch rejected
 #[test]
 fn test_pipeline_nested_pattern_type_annotation_mismatch_rejected() {
