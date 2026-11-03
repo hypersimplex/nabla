@@ -627,7 +627,7 @@ pub(crate) fn mk_builtin_var_eq() -> VVar {
 
 pub(crate) fn mk_builtin_var_and() -> VVar {
     VVar::Named(VVarName {
-        token: concrete_token::ConcreteToken::And,
+        token: concrete_token::ConcreteToken::BinaryAnd,
         loc: None,
         builtin: Some(FnBuiltin::LogicalAnd),
     })
