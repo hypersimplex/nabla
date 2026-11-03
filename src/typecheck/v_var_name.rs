@@ -15,24 +15,15 @@ pub(crate) struct VVarName {
 }
 impl PartialEq for VVarName {
     fn eq(&self, other: &Self) -> bool {
-        match (self.builtin, other.builtin) {
-            (Some(x), Some(y)) => return x.eq(&y),
-            (Some(_x), None) => return false,
-            (None, Some(_y)) => return false,
-            _ => {}
-        }
+        // compare strictly by token identity so local binders (builtin: None)
+        // properly shadow global builtins (builtin: Some)
         self.token.eq(&other.token)
     }
 }
 
 impl Ord for VVarName {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match (self.builtin, other.builtin) {
-            (Some(x), Some(y)) => return x.cmp(&y),
-            (Some(_x), None) => return std::cmp::Ordering::Greater,
-            (None, Some(_y)) => return std::cmp::Ordering::Less,
-            _ => {}
-        }
+        // order strictly by token identity, consistent with PartialEq
         self.token.cmp(&other.token)
     }
 }
