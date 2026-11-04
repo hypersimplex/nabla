@@ -2,7 +2,6 @@ pub mod case_constructor_unnest;
 pub mod case_constructor_wildcard;
 pub mod case_default;
 pub mod case_guard;
-pub mod case_scrutinee;
 pub mod literal_pattern;
 pub mod literal_range_pattern;
 pub mod pattern;

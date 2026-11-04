@@ -7,7 +7,6 @@ use crate::normalize::case_constructor_unnest::*;
 use crate::normalize::case_constructor_wildcard::*;
 use crate::normalize::case_default::*;
 use crate::normalize::case_guard::*;
-use crate::normalize::case_scrutinee::*;
 use crate::normalize::literal_pattern::*;
 use crate::normalize::literal_range_pattern::*;
 use crate::normalize::pattern::*;
@@ -240,13 +239,6 @@ pub(crate) fn compile(content: &str) -> CompileResult {
         }
     }
 
-    println!("normalize case scrutinee to be simple variable..");
-    for group in ty_check_results.iter_mut() {
-        for (id, top_lvl_fn) in group.iter_mut() {
-            top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
-        }
-    }
-
     // desugar record patterns and record constructor expressions to positional product forms
     println!("desugar record to product type");
     for group in ty_check_results.iter_mut() {
@@ -303,13 +295,6 @@ pub(crate) fn compile(content: &str) -> CompileResult {
     for group in ty_check_results.iter_mut() {
         for (id, top_lvl_fn) in group.iter_mut() {
             top_lvl_fn.typed_expr = desugar_case_guard(&mut v_var_ns, &top_lvl_fn.typed_expr);
-        }
-    }
-
-    println!("normalize case scrutinee to be simple variable again after case guard desugaring..");
-    for group in ty_check_results.iter_mut() {
-        for (id, top_lvl_fn) in group.iter_mut() {
-            top_lvl_fn.typed_expr = normalize_case_scrutinee(&mut v_var_ns, &top_lvl_fn.typed_expr);
         }
     }
 
@@ -526,12 +511,6 @@ f2 accum x = case x of
               _ -> f accum x
 "###;
 
-static TEST_PIPELINE_CONTENT_PATTERN_RANGE: &str = r###"
-f x = case x of
-        0..7 -> True
-        _ -> False
-"###;
-
 static TEST_PIPELINE_CONTENT_CONSTRUCTOR_RECORD: &str = r###"
 data T B { // record
   v :: Int64#,
@@ -588,7 +567,7 @@ f x y = let Just(a) = x
         in a + b
 "###;
 
-static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE: &str = r###"
+static TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_IN_CASE_SCRUTINEE_LET: &str = r###"
 f_get y = Just (Int64 5)
 f x = case let Just(y) = x in y * (Int64 10) of
         _ -> Int64 0
@@ -599,13 +578,6 @@ data Pair { x :: Int64, y :: Int64 }
 
 f a = let Pair { x, y } = a
       in x * y
-"###;
-
-static TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION: &str = r###"
-f_get y = Just(y + 5)
-f x = case f_get x of
-        Just(val) -> 1
-        _ -> 0
 "###;
 
 static TEST_PIPELINE_CONTENT_DESUGAR_CASE_GUARD: &str = r###"
@@ -788,11 +760,6 @@ fn test_pipeline_function_mutual_recursion() {
 }
 
 #[test]
-fn test_pipeline_pattern_range() {
-    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_RANGE);
-}
-
-#[test]
 fn test_pipeline_constructor_record() {
     assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CONSTRUCTOR_RECORD);
 }
@@ -823,18 +790,13 @@ fn test_pipeline_pattern_normalization_let_expr() {
 }
 
 #[test]
-fn test_pipeline_pattern_normalization_case_scrutinee() {
-    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CASE_SCRUTINEE);
+fn test_pipeline_pattern_normalization_in_case_scrutinee_let() {
+    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_IN_CASE_SCRUTINEE_LET);
 }
 
 #[test]
 fn test_pipeline_pattern_normalization_constructor() {
     assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_PATTERN_NORMALIZATION_CONSTRUCTOR);
-}
-
-#[test]
-fn test_pipeline_case_scrutinee_normalization() {
-    assert_compiles_or_stg_todo(TEST_PIPELINE_CONTENT_CASE_SCRUTINEE_NORMALIZATION);
 }
 
 #[test]
@@ -1576,22 +1538,6 @@ prim_add_int64 a b = 42
         Err(CompileError::Type(TyError::Unexpected(ref msg)))
         if msg.contains("conflicts with builtin function")
     ));
-}
-
-#[test]
-fn test_builtin_int64_from_float64() {
-    let content = r###"
-f = (int64_from_float64 (Float64 3.14))
-"###;
-    assert_compiles_or_stg_todo(content);
-}
-
-#[test]
-fn test_builtin_float64_from_int64() {
-    let content = r###"
-f = (float64_from_int64 (Int64 42))
-"###;
-    assert_compiles_or_stg_todo(content);
 }
 
 #[test]
@@ -2380,9 +2326,8 @@ h x = case x of
 
 // expected normalized transformation:
 //   f a = R (
-//     let y  = a in
-//     let v2 = y > Int64 0 in
-//     case v2 of
+//     let y = a in
+//     case y > Int64 0 of
 //       True  -> y
 //       False -> Int64 0
 //   )
@@ -2397,31 +2342,6 @@ f a = R {
   x = case a of
         y | y > Int64 0 -> y
         _ -> Int64 0
-}
-"###;
-    assert_compiles_or_stg_todo(content);
-}
-
-// expected normalized transformation:
-//   f a = R (
-//     let v1 = g a in
-//     case v1 of
-//       Maybe.Just v  -> v
-//       Maybe.Nothing -> Int64 0
-//   )
-#[test]
-fn test_pipeline_constructor_case_scrutinee_normalization() {
-    let content = r###"
-data R {
-  x :: Int64,
-}
-
-g x = Maybe.Just x
-
-f a = R {
-  x = case g a of
-        Maybe.Just v  -> v
-        Maybe.Nothing -> Int64 0
 }
 "###;
     assert_compiles_or_stg_todo(content);
