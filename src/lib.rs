@@ -3,5 +3,7 @@ pub mod core;
 pub mod normalize;
 pub mod parse;
 pub mod pipeline;
+pub mod runtime;
+pub mod stg;
 pub mod typecheck;
 pub mod util;
