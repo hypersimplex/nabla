@@ -558,7 +558,8 @@
 
       uf $\equiv$ update frame associated with the thunk a
 
-      $\rho$[vs $\mapsto$ free_vars] $\equiv$ captured free_vars needed by the thunk
+      // local env binding captured free_vars needed by the thunk
+      $\rho$ = {vs $\mapsto$ free_vars}
 
       // temporarily update thunk's info pointer to blackhole, but keep payload
       h' = h[a $\mapsto$ blackhole_with_payload(free_vars)]
