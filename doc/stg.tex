@@ -439,6 +439,8 @@
 
       a $\equiv$ address of functional type that has already been evaluated to weak head normal form
 
+      arity(a) $\equiv$ expected arg count from a's info table (or remaining arg count from PAP header for ReturnPAP)
+
       af $\equiv$ application frame
 
       xs $\equiv$ arguments associated with the application frame
@@ -446,20 +448,20 @@
     $\implies$
 
     // exact arguments saturation
-    if arity(f) = len(xs):
+    if arity(a) = len(xs):
     
     enter a with xs, s, h, $\sigma$  
 
     ---
 
     // over-saturation of arguments
-    if arity(f) < len(xs):
+    if arity(a) < len(xs):
 
     enter a with xs1, (af':xs2)++s, h, $\sigma$
 
       where:
 
-        xs1++xs2 = xs, len(xs1) = arity(f)
+        xs1++xs2 = xs, len(xs1) = arity(a)
 
         af' $\equiv$ adjusted application frame describing over-saturated/remaining arguments 'xs2'
 
@@ -471,7 +473,7 @@
   \begin{lstlisting}
     ---
     // under-saturation of arguments
-    if arity(f) > len(xs):
+    if arity(a) > len(xs):
 
     // pop application frame off the stack
     //
@@ -488,8 +490,8 @@
         // 'xs' are originally arguments on the stack but transferred in as free variables in the closure's payload
         len(xs) = len(vs1)
 
-        // 'vs2' are the remaining arguments for function f
-        len(vs1) + len(vs2) = arity(f)
+        // 'vs2' are the remaining arguments for closure a
+        len(vs1) + len(vs2) = arity(a)
   \end{lstlisting}
 
   \section{State Transition: enter non-updatable closure}
