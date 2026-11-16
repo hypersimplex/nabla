@@ -54,8 +54,6 @@
 \DeclareMathOperator*{\argmin}{argmin}
 \newcommand*{\argminl}{\argmin\limits}
 
-\usepackage[small]{titlesec}
-
 % \newcommand{\mathleft}{\@fleqntrue\@mathmargin0pt}
 % \newcommand{\R}{\mathbb{R}}
 % \newcommand{\Z}{\mathbb{Z}} 
@@ -91,7 +89,7 @@
 
   \section{Frame Types}
   
-  Using one unified stack by marking boundaries of parts of the stack by frames means no standalone items (such as arguments) will exist on its own in the stack; instead they will be described by frame headers. When accessing the stack, we will always be able to inspect a frame header that is present on top of the stack before manipulating the stack. The variants of frame are:
+  Using one unified stack by marking boundaries of parts of the stack by frames means no standalone items (such as arguments) will exist on their own in the stack; instead they will be described by frame headers. When accessing the stack, we will always be able to inspect a frame header that is present on top of the stack before manipulating the stack. The variants of frame are:
 
   \begin{itemize}
   \item Continuation Frame
@@ -108,8 +106,8 @@
   generic and uniform layout for all closures:
   \begin{itemize}
   \item info pointer
-  \item continugous section of pointers
-  \item continugous section of non-pointers
+  \item contiguous section of pointers
+  \item contiguous section of non-pointers
   \end{itemize}
   
   where info pointer points to a data structure containing:
@@ -130,7 +128,7 @@
 
   \subsection{actions to the stack}
 
-  push each local env variable that are live across the continuation
+  push each local env variable that is live across the continuation
 
   push a Continuation Frame that is embedded with:
 
@@ -158,16 +156,16 @@
 
   \subsection{actions to the stack}
 
-  push each argument into the stack
+  push each argument onto the stack
 
-  push an Application Frame that also embedded with:
+  push an Application Frame that is also embedded with:
   \begin{itemize}
   \item stack frame info for previously inserted items onto the stack
   \end{itemize}
 
   \subsection{consumed by}
 
-  before an enter of a closure/function, an arity check is run using the application frame info that already encodes available arguments on the stack
+  before an enter of a closure/function, an arity check is run using the application frame info that encodes available arguments on the stack
 
   different scenarios to consider:
 
@@ -175,7 +173,7 @@
   
   copy and remove the function's required arguments off the stack and adjust the application frame to encode the remaining arguments on the stack, before jumping to the function's entry code with the arguments (eg: a possible calling convention could be leaving those arguments on the stack)
     
-  2) if the closure finds exact number of arguments avaialable from the application frame:
+  2) if the closure finds exact number of arguments available from the application frame:
 
   pop the application frame off the stack, copy and pop all the arguments (associated with the application frame) off the stack, then jump to the function's entry code with the arguments
 
@@ -192,11 +190,11 @@
 
   when thunk / updatable closure is entered for the first time, where entry code of the thunk does the push of an Update Frame onto the stack
 
-  note: a thunk is created by at a let/letrec binding (includes saving the free variables into the payload of the thunk on the heap)
+  note: a thunk is created at a let/letrec binding (includes saving the free variables into the payload of the thunk on the heap)
 
   \subsection{actions to the stack}
 
-  push an Update Frame that also embedded with:
+  push an Update Frame that is also embedded with:
   \begin{itemize}
   \item stack frame info
   \item address of the thunk / updatable closure in the heap
@@ -221,7 +219,7 @@
   \item entry code that jumps to the target closure (its entry code)
   \end{itemize}
 
-  this means a thunk / any closure needs to be atleast 2 words in size (1 payload field + a pointer to its entry code)
+  this means a thunk / any closure needs to be at least 2 words in size (1 payload field + a pointer to its entry code)
 
   the indirection closure can be removed during a GC sweep since we can use the target closure pointer and remove the intermediate indirection
 
@@ -241,7 +239,7 @@
 
   \section{State Transition: eval case expression}
 
-  we enqueue live local variables into the stack along with a continuation frame
+  we enqueue live local variables onto the stack along with a continuation frame
   
   \begin{lstlisting}
     eval (case e of alts) $\rho$, s, h, $\sigma$
@@ -294,14 +292,14 @@
 
   \section{State Transition: eval constructor}
 
-  largely the same transition as descrbied in the 1992 reference \cite{peyton1992}
+  largely the same transition as described in the 1992 reference \cite{peyton1992}
 
   \begin{lstlisting}
     eval (c xs) $\rho$, s, h, $\sigma$
 
     $\implies$
 
-    ReturnCon c xs (val $\rho$ $\sigma$ xs), s, h, $\sigma$
+    ReturnCon c (val $\rho$ $\sigma$ xs), s, h, $\sigma$
   \end{lstlisting}
 
   \vfill\null
@@ -322,7 +320,7 @@
     eval e $\rho$', s, h, $\sigma$
 
     where:
-      e = expression to eval after jump to continuation (eg: jump to fr.return_vector[offset])
+      e = expression to eval after jump to continuation (eg: jump to cf.return_vector[offset])
 
       offset = computable based on constructor variant 'c' (or tag depending on convention)
 
@@ -407,7 +405,7 @@
 
   \section{State Transition: ReturnPAP with Continuation Frame on top of the stack}
 
-  this is disallowed since case scrutinee needs to be a ADT or primitive literal
+  this is disallowed since case scrutinee needs to be an ADT or primitive literal
 
   \vfill\null
   \columnbreak
@@ -532,7 +530,7 @@
 
   pushes an Update Frame onto the stack
 
-  overwrite its own info table to point to a blackhole (indicating that the thunk has entered but has not evaluated to completion; possible use this to detect cycle and/or for queuing for multi-threaded runtime)
+  overwrite its own info table to point to a blackhole (indicating that the thunk has been entered but has not evaluated to completion; possibly use this to detect cycles and/or for queuing for multi-threaded runtime)
 
   \begin{lstlisting}
     enter a,
@@ -559,7 +557,7 @@
       $\rho$[vs $\mapsto$ free_vars] $\equiv$ captured free_vars needed by the thunk
 
       // temporarily update thunk's info pointer to blackhole, but keep payload
-      h' = h[a_thunk $\mapsto$ blackhole_with_payload(free_vars)]
+      h' = h[a $\mapsto$ blackhole_with_payload(free_vars)]
 
   \end{lstlisting}
 
@@ -623,7 +621,7 @@
 
   \section{State Transition: ReturnInt with Update Frame on top of the stack}
 
-  [todo] we should really disallow / optimized this scenario as much as possible (repeated boxing and unboxing of primitves)
+  [todo] we should really disallow / optimize this scenario as much as possible (repeated boxing and unboxing of primitives)
 
   \begin{lstlisting}
     ReturnInt k, (uf:s), h, $\sigma$
@@ -650,17 +648,17 @@
 
   \subsection{evacuation code}
 
-  copy closure to to-space, overwrite from-space copy with a forwarding pointer, and returns the new address in to-space
+  copy closure to to-space, overwrite from-space copy with a forwarding pointer, and return the new address in to-space
 
-  forwarding pointer implementable with a closure (with destination pointer as the closure payload) with its evacuation code that returns the to-space destination address $\implies$ using uniform representation of closure, all closures need to have space to store atleast 1 word in payload
+  forwarding pointer implementable with a closure (with destination pointer as the closure payload) with its evacuation code that returns the to-space destination address $\implies$ using uniform representation of closure, all closures need to have space to store at least 1 word in payload
 
   \subsection{scavenge code}
 
   once a closure's evacuation code is complete, run scavenge code on the closure in the to-space
 
-  purpose: recursively run evacuation code on all items in its payloadthat are pointers which also returns the new address of the evacuated object in to-space, then update the pointers in the payload with the updated addresses in to-space
+  purpose: recursively run evacuation code on all items in its payload that are pointers which also returns the new address of the evacuated object in to-space, then update the pointers in the payload with the updated addresses in to-space
 
-  note: these compiled codes can be made layout-aware of its payload and not require extra runtime assistance/interpretation
+  note: these compiled codes can be made layout-aware of their payload and not require extra runtime assistance/interpretation
 
   \subsection{indirection closure}
 
