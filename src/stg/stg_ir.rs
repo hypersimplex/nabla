@@ -2,16 +2,28 @@
 //!
 //! the runtime portion to support this is at `src/runtime/` directory
 
+use std::collections::*;
+use std::sync::Arc;
+
 /// top-level bindings
 #[derive(Clone, Debug)]
-pub(crate) struct StgTopLevel(pub Vec<StgBind>);
+pub(crate) struct StgTopLevel {
+    pub ty_cons: BTreeMap<u64, Arc<StgTyCon>>,
+    pub bindings: Vec<StgBind>,
+}
+
+impl StgTopLevel {
+    pub fn get_ty_con(&self, id_ty_con: u64) -> &StgTyCon {
+        self.ty_cons.get(&id_ty_con).unwrap()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) enum StgExpr {
     // function application or entering the closure
     AppFn(StgAppFn),
 
-    // apply constructor
+    // constructor application
     AppCon(StgAppCon),
 
     // primitive function/op application
@@ -53,7 +65,7 @@ pub(crate) struct StgAppFn {
 /// at STG level, application is fully saturating
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct StgAppCon {
-    pub constructor: StgCon,
+    pub constructor: Arc<StgCon>,
 
     // flattened arguments
     pub args: Vec<StgArg>,
@@ -158,8 +170,14 @@ pub(crate) struct StgBind {
 #[derive(Clone, Debug)]
 pub(crate) struct StgClosure {
     pub free_vars: Vec<StgVar>,
+
+    // whether it is a thunk or not
+    //
+    // if true, then first time of entering the code constructs an update frame
     pub updatable: bool,
+
     pub params: Vec<StgVar>,
+
     pub body: StgExpr,
 }
 
@@ -180,7 +198,7 @@ pub(crate) enum StgAltCon {
     Default,
 
     /// matches ADT constructor
-    Data(StgCon),
+    Data(Arc<StgCon>),
 
     /// matches unboxed primitive literal
     Lit(StgLit),
@@ -200,9 +218,40 @@ pub(crate) struct StgAlt {
 /// data constructor
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct StgCon {
-    pub ty_name: String,          // ADT name
-    pub constructor_name: String, // constructor variant
-    pub discriminant: u64,        // for runtime jump offset
-    pub arity: u64,
+    // uniquely assigned 0-based index within its associated `StgTyCon`,
+    // indexing into `constructors` of `StgTyCon`
+    pub id: u64,
+
+    // same as `id` in its associated `StgTyCon`
+    pub id_ty_con: u64,
+
+    // constructor name for debugging
+    pub constructor_name: String,
+
     pub fields: Vec<StgReprRt>,
+}
+
+impl StgCon {
+    pub fn arity(&self) -> u64 {
+        self.fields.len() as u64
+    }
+}
+
+/// type constructor
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct StgTyCon {
+    // uniquely assigned in a program
+    pub id: u64,
+
+    // ADT name, for debugging
+    pub ty_name: String,
+
+    // variants of constructors for the current ADT
+    pub constructors: Vec<Arc<StgCon>>,
+}
+
+impl StgTyCon {
+    pub fn len_constructors(&self) -> u64 {
+        self.constructors.len() as u64
+    }
 }
